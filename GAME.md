@@ -208,10 +208,10 @@ None.
 - **References:** Ratty Catty, Untitled Goose Game, Totally Accurate Battle Simulator.
 - **Palette:** warm, homey colors. Ukrainian domestic details: embroidered cloth on furniture, rugs on walls, grandma's china cabinet.
 - **UI mood:** chunky, playful, readable at a glance.
-- **Pipeline:**
-  1. An AI design agent sketches the concepts.
-  2. A procedural-geometry skeleton is built in code from the sketches.
-  3. AI-generated detail is added on top of the skeleton, normalized to the shared palette.
+- **Pipeline** (no image model anywhere: the studio's workers generate no raster):
+  1. A design agent writes the concept: silhouette, proportions, palette slots, one signature detail per character or prop, and an SVG sketch where a picture helps.
+  2. A procedural-geometry skeleton is built in code from the concept.
+  3. Detail is added by code: flat palette shaders, procedural patterns (embroidery, rugs, tiles) generated in shaders or on a canvas, SVG decals, and Blender renders through MCP where assembly needs a tool. Everything is normalized to the shared palette.
 
 ### Audio Direction
 
@@ -290,7 +290,7 @@ Distribution: a private link on a self-hosted domain; friends join by room code.
   - Rapier (WASM) for physics.
   - A lightweight ECS: bitecs or miniplex (TBD).
   - A WebSocket room relay: PartyKit or Cloudflare Durable Objects (TBD).
-- **Version control & asset pipeline:** Git. Models are glTF produced by the design-agent → procedural → AI-detail pipeline. Audio is generated at runtime.
+- **Version control & asset pipeline:** Git. Models are glTF produced by the concept → procedural skeleton → code-detail pipeline; no image model. Audio is generated at runtime.
 - **Development:** built by a multi-agent AI system. Text-based formats and clear module boundaries are required.
 
 ### Technical Constraints
@@ -369,7 +369,7 @@ Dates are TBD. Progress is measured by readiness, not by calendar. From Vertical
 | Kennel camping and snowballing (one capture leads to the next). | M | Instant rescue, solo dig-out that exits outside the fence, spectating; tune the dig-out time. |
 | A cat rush at round start beats the defense before mines matter. | M | Fish sit in storages with access costs; carrying slows cats; exits are chokepoints. Tune in Vertical Slice. |
 | 10+ min rounds feel long for captured or idle players. | M | Kennel rescue and dig-out keep captured cats involved; tune the timer in playtests. |
-| AI-generated art is inconsistent across characters and maps. | M | Lock the palette and style guide early; procedural skeletons enforce proportions. |
+| Procedural art reads as bland or samey across characters and maps. | M | Lock the palette and style guide early; one signature detail per character in the concept; procedural skeletons enforce proportions. |
 | Procedural audio sounds cheap or repetitive. | M | Prototype the key SFX (impacts, mines) early; keep a fallback to CC0 samples. |
 | Third-person camera lets players peek through walls and over fences. | L | Tight camera collision; peek view in hiding spots; accept the rest as party-game slack. |
 | Fish thrown over the fence bypass the exits. | L | Toss range is ~3 m; keep every fence taller than the toss arc. |
@@ -410,3 +410,4 @@ Dates are TBD. Progress is measured by readiness, not by calendar. From Vertical
 | 2026-09-23 | A defused mine is gone for good; Bark stays a perk and flushes hiders instead of stunning; cats open doors slowly and loudly, dogs instantly; MVP is one map, the high-rise moves to Beta. | Keeps demining simple, keeps hiding meaningful, keeps cat routes the quiet way in, and proves the loop before generalizing the map anatomy. |
 | 2026-09-23 | Review pass: overtime covers every held fish; noise pings are events from the causing client even for local-only debris; room (the group behind a code) vs lobby (its screen); one mine and one trap type in MVP; the success criterion counts matches; exits always outnumber dogs. | Removes contradictions between sections and closes gaps a first playtest would hit. |
 | 2026-09-23 | Nobody climbs the fence: exits are the only way in or out for cats, with or without a fish. A trap is set off by hand by the cat that planted it, one trap in play per cat, same button as planting. Only cats carry and throw props; dogs push, barge and carry grabbed cats. | Mines matter on the way in as well as out, the trap is a real distraction rather than an alarm, and the sides stay distinct in how they touch the world. |
+| 2026-09-24 | Art pipeline without an image model: concept (text and SVG) → procedural skeleton → detail by code (palette shaders, procedural patterns, SVG decals, Blender renders). | The studio runs on Claude models only, which generate no raster; flat-shaded low-poly needs none. |

@@ -12,7 +12,7 @@
 # is read as a diff before merging. Empty means gates and screenshots are enough.
 #
 # Usage:
-#   gamestudio/ui-diff-check.sh <branch> [base]
+#   gamestudio/ui-diff-check.sh <branch> [base]      # base defaults to trunk
 #
 # The zones are taken from `.studio/zones.conf` if it exists; otherwise they are
 # derived from the project's engine. The config file is two lines of shell
@@ -24,8 +24,13 @@
 set -u
 
 BRANCH="${1:?branch required}"
-BASE="${2:-main}"
 ROOT="$(git rev-parse --show-toplevel)"
+# shellcheck disable=SC1091
+[ -f "$ROOT/.studio/project.conf" ] && . "$ROOT/.studio/project.conf"
+# Trunk: from the profile (TRUNK), else the remote's default branch, else main.
+TRUNK="${TRUNK:-$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')}"
+TRUNK="${TRUNK:-main}"
+BASE="${2:-$TRUNK}"
 CONF="$ROOT/.studio/zones.conf"
 
 if [ -f "$CONF" ]; then

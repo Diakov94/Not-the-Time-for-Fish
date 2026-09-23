@@ -2,7 +2,7 @@
 
 A process for developing a game with a team of AI agents.
 
-> Translator's note: this is an English translation of [studioigor/gamestudio](https://github.com/studioigor/gamestudio) (commit `bb9aef7`, 14 August 2026). The numbers and dates below were measured on that project's pilot game, not on this one.
+> Translator's note: this is an English translation of [studioigor/gamestudio](https://github.com/studioigor/gamestudio) (commit `bb9aef7`, 14 August 2026). The numbers and dates below were measured on that project's pilot game unless marked *This machine*.
 
 This is not a framework and not a library. It is a **production process**: the rules, roles and instruments by which one human coordinator and several parallel AI workers make a game, rather than documents about how to make a game.
 
@@ -10,7 +10,7 @@ Everything here was earned through mistakes and confirmed by measurement. Every 
 
 ## Where the numbers come from
 
-The process was proven on a game the texts call **Pilot** (web, TypeScript). The specific paths, file names and models in the examples belong to it and are given as EVIDENCE, not as a template: on another engine they change, the rule does not.
+The process was proven on a game the texts call **Pilot** (web, TypeScript). The specific paths and file names in the examples belong to it and are given as EVIDENCE, not as a template: on another engine they change, the rule does not. The models are this project's own (`agents.md`), and numbers marked *This machine* were measured here.
 
 The tidying went like this:
 
@@ -50,12 +50,12 @@ The instruments are four shell scripts. Each answers one question that the coord
 
 ## How to port it to your project
 
-The folder is copied whole and knows nothing about the engine. Everything that depends on the stack lives **outside** it, in two project files:
+The folder is copied whole and knows nothing about the engine. Everything that depends on the stack lives **outside** it, in `.studio/` and the project root:
 
-- `.studio/project.conf`: the install command, the gates command, the screenshot command, source zones, the logical screen size;
+- `.studio/project.conf`: the install command, the gates command, the screenshot command, source zones, the logical screen size, the trunk branch (`TRUNK`);
 - `.studio/zones.conf`: what counts as logic and what counts as the UI zone (for `ui-diff-check.sh`);
 - `GAME.md` in the project root: the game itself: what we make, for whom, what we do not make;
-- `CLAUDE.md` in the project root: the working rules every Claude Code worker loads by itself (assumptions first, simplicity, surgical changes, verifiable goals).
+- `CLAUDE.md` in the project root: the working rules every Claude Code worker loads by itself (assumptions first, simplicity, surgical changes, verifiable goals, the studio's mechanics). Copied, not filled in.
 
 The details, and the list of what has to be measured again on your own machine, are in `PORTING.md`.
 

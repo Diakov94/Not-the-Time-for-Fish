@@ -5,7 +5,7 @@ model: claude-fable-5-1
 effort: xhigh
 ---
 
-`claude-fable-5-1` draws on its own weekly window (`gamestudio/agents.md`) and is sometimes unavailable for lack of credits: then `claude-opus-5-5` with the same effort.
+`claude-fable-5-1` draws on its own weekly window (`fableWeekly`, `gamestudio/agents.md`). Below the 15 % reserve on that window the role launches on `claude-opus-5-5` with the same effort; a Fable limit line in the tail mid-task is cured by the Producer with `/model claude-opus-5-5` sent into the terminal with Enter, then `continue`. Write the ADR draft to disk before the analysis, so that a stop loses nothing.
 
 **Common to all roles: `gamestudio/roles/_common.md`.**
 
