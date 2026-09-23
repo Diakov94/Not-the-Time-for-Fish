@@ -1,12 +1,19 @@
-# Providers
+# Models
 
-| `--agent` | models | can do | known failure |
-|---|---|---|---|
-| `codex` | `gpt-5.6-sol` (frontier), `gpt-5.6-terra`, `gpt-5.6-luna` (cheap, `effort` up to `high`) | raster images via `image_gen`, built-in browser, `computer-use`, MCP | `400 … not supported when using Codex with a ChatGPT account` is a **lapsed subscription**, not a withdrawn model: look at `codex debug models` and tell the owner. `Selected model is at capacity`: take the neighbouring model |
-| `claude` | `claude-opus-5` (code, review, 3D), `claude-sonnet-5` (bulk work), `claude-haiku-4-5` (trivial) | MCP blender and elevenlabs, the Orca browser. **Does not generate raster images** | the spec is pasted into the prompt and not sent: the sign is `[Pasted text #N +M lines]` before an empty prompt, cured by one Enter |
-| `kimi` | `kimi-code/k3` | **code and tests only**: no raster, no browser, no MCP. Its own limit window | `--model` and `--effort` are rejected; the spec does not arrive, send it as text into the terminal |
+One provider, `claude` (Claude Code launched through Orca), on one subscription. The pilot also ran `codex` and `kimi`; its anecdotes about them (`ORCA.md`, `STUDIO.md`) stay as evidence, and nothing here is launched on them.
 
-**Only `codex` can do raster images.** A role that needs images must be there.
+| model | used for | notes |
+|---|---|---|
+| `claude-fable-5-1` | architecture | its own weekly window; when its credits run out, `claude-opus-5-5` at the same effort |
+| `claude-opus-5-5` | code, the interface, review, 3D | its default effort is `medium`, one step below Opus 5: `--effort` is always passed |
+| `claude-sonnet-5` | bulk work | |
+| `claude-haiku-4-5` | trivial work and playtests | the cheapest on the shared window; it has no effort levels, so `--effort` is not passed |
+
+Every model can use MCP (blender, elevenlabs) and the Orca browser. **None of them generates raster images.** Icons and assets are vector or procedural (SVG, CSS, geometry rendered by the engine), which is how `GAME.md` plans the art anyway (sketches → procedural skeleton → AI detail); a card that needs a raster file goes back to the owner as an asset card, not to a worker.
+
+**Windows.** One subscription, three windows in `orca account list --json`: `session` (5 h), `weekly` (Opus, Sonnet and Haiku share it) and `fableWeekly` (Fable alone). *This machine, 24 September 2026:* session 22 %, weekly 9 %, Fable weekly 16 %. So Fable's window is for the Architect, not for a spare developer, and the wave is set by the shared weekly window; `usage-snapshot.sh` reads all three.
+
+**The `claude` binary on PATH must be newer than the model.** `400 Claude Code X does not support this model; version Y or newer is required` means the worker is `dispatched` and dead, not that the model was withdrawn: `claude update`, then repeat the launch. *This machine, 24 September 2026:* 2.1.221 refused `claude-opus-5-5` (needs 2.1.280) and `claude-fable-5-1` (needs 2.1.251) while Opus 5, Fable 5, Sonnet 5 and Haiku 4.5 answered; after `claude update` to 2.1.281 all six answered. The desktop app carries its own newer copy; Orca launches the one at `~/.local/bin/claude`.
 
 ## How to launch
 
@@ -14,7 +21,7 @@
 orca orchestration task-create --spec "<spec>" --task-title "<...>" --display-name "<...>" --json
 orca orchestration worker-start --task <FULL id from the task-create response> \
   --worktree "<Orca project id>::<root>/.worktrees/<name>" \
-  --agent codex --model gpt-5.6-sol --effort high --json
+  --agent claude --model claude-opus-5-5 --effort xhigh --json
 ```
 
 `<Orca project id>` is the UUID of the registered project; it is taken once from `orca worktree list` (or `orca project list`) and then substituted into every launch.
@@ -25,20 +32,18 @@ After `git worktree add` Orca registers the worktree with a delay: the first `wo
 
 **A "done" report does not mean "committed".** Before removing a worktree: is `git -C <worktree> status --short` empty? `git -C <worktree> log --oneline -2`: is the tip the worker's commit and not the Producer's spec? If the work is not committed, save it yourself, naming in the message whose it is.
 
-## Roles and who holds them, after 11 August 2026
+## Roles and who holds them
 
-| role | provider | why this one |
+| role | model | why this one |
 |---|---|---|
-| Developer | `claude` / `claude-opus-5` | code and the game's rules |
-| UI Developer | `codex` / `gpt-5.6-sol` | the interface AND RASTER IMAGES: only codex can generate icons |
-| QA / Tester | `codex` / `gpt-5.6-luna` | browser and game; cheap, and five playtests are needed at once |
-| Architect | `claude` / `claude-fable-5` | decisions; when short on credits, `claude-opus-5` |
+| Developer | `claude-opus-5-5`, effort `xhigh` | code and the game's rules |
+| UI Developer | `claude-opus-5-5`, effort `high` | the interface and the vector assets; a card that reaches into the rules goes to the Developer even so |
+| QA / Tester | `claude-haiku-4-5` | the browser and the game; the cheapest model on the shared window, and five playtests are needed at once |
+| Architect | `claude-fable-5-1`, effort `xhigh` | decisions; its own window; when short on Fable credits, `claude-opus-5-5` |
 
 **The Integrator and Code Reviewer roles no longer exist**: an owner's decision from 11 August 2026, based on the results of the shift. Merging and reading the diff are done by the Producer personally (§4 of `STUDIO.md`, where the review checklist has been moved). The reason, in numbers: both roles stood idle for the whole project, while the Producer in one shift landed eight branches on trunk with the full gate run before each landing. The Integrator could not complete a merge at all anyway: trunk is checked out in the Producer's worktree, and git does not let another worker switch to a busy branch.
 
-**An owner's directive, in force:** do not trust code from the UI provider; it is given the interface only. So a card that reaches into the game's rules goes to opus even if it looks like interface: the silent refusal in the city was fixed by opus, and the layout of the same panel by sol.
-
-**The irreplaceable provider is spent last.** Only codex can do raster images and the browser; if its window is running out, first give it what nobody else can do.
+**An owner's directive, in force:** the UI Developer is given the interface only, and a card that reaches into the game's rules goes to the Developer even if it looks like interface. In the pilot the reason was the model: the silent refusal in the city was fixed by opus, and the layout of the same panel by `gpt-5.6-sol`, whose code the owner did not trust. Here both roles run on the same model, and the reason is that every fact has one owner: the rules zone is the Developer's, so logic outside the UI zone in a UI delivery is read by eye before merging (§3 and §4 of `STUDIO.md`).
 
 ## Three launch failures that cost time every day
 

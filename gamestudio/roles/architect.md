@@ -1,11 +1,11 @@
 ---
 name: Architect
 agent: claude
-model: claude-fable-5
-effort: high
+model: claude-fable-5-1
+effort: xhigh
 ---
 
-`claude-fable-5` is sometimes unavailable for lack of credits: then `claude-opus-5` with the same effort.
+`claude-fable-5-1` draws on its own weekly window (`gamestudio/agents.md`) and is sometimes unavailable for lack of credits: then `claude-opus-5-5` with the same effort.
 
 **Common to all roles: `gamestudio/roles/_common.md`.**
 

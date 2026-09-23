@@ -98,7 +98,7 @@ Otherwise the requirement "gates red: leave trunk as it was" cannot be met: the 
 - **the test goes red without the fix.** Remove the fix, confirm the test is red, put it back. Checked this way on 11 August: the stuck-turn guard went red on exactly two of its three assertions;
 - **instrument lines per game line.** A cheap measure that shows at once where the money went: 630 lines of throwaway test for a 52-line fix is twenty to one, and the instruments were thrown away whole.
 
-**Code from `gpt-5.6-sol` is read by eye, and green gates do not replace that.** An owner's concern from 11 August, confirmed by fact: in the delivery about intros, sol touched `src/app/session.ts`, the owner of saves, and the Producer landed the branch having checked only the gates and the "was `core` touched" boundary, which `src/app` was not part of. The change turned out to be correct, but it was read AFTER the merge.
+**Logic outside the UI zone in a UI Developer's delivery is read by eye, and green gates do not replace that.** An owner's concern from 11 August, confirmed by fact: in the delivery about intros, the UI worker (`gpt-5.6-sol` in the pilot) touched `src/app/session.ts`, the owner of saves, and the Producer landed the branch having checked only the gates and the "was `core` touched" boundary, which `src/app` was not part of. The change turned out to be correct, but it was read AFTER the merge.
 
 The rule is mechanical, not "be more careful":
 
@@ -110,7 +110,7 @@ It prints the files WITH LOGIC OUTSIDE THE UI ZONE. The zones are not hard-coded
 
 The price of the rule was measured on the same day: of three sol deliveries, two gave an empty list (pure CSS and nine lines in `src/ui`), the third gave five files. So the reading is cheap and rarely kicks in, but it kicks in exactly where the risk is.
 
-Sol's zone is the look, the layout, the texts and the raster images. A `.ts` with logic in its delivery is not necessarily a mistake, but it is always a reason to read: the owner's directive is that it can be trusted with the interface only.
+The UI Developer's zone is the look, the layout, the texts and the vector assets. A `.ts` with logic in its delivery is not necessarily a mistake, but it is always a reason to read: the owner's directive is that the role is given the interface only, whatever model it runs on (`gamestudio/agents.md`).
 
 **With your own run, not theirs.** A "gates green" report is checked by your own gate run on the branch with trunk merged into it. On 11 August a worker honestly reported green on ITS OWN branch, and after merging with trunk the suite went red: that step exists for exactly this.
 
@@ -186,13 +186,13 @@ In one line: **20 weights of XS/S/M is fine; 20 weights of L and XL is not.**
 
 ## Batch sizes: an owner's directive, in numbers
 
-| stage | size of one batch | how many in parallel | provider |
+| stage | size of one batch | how many in parallel | model |
 |---|---|---|---|
-| development | **15–20 weights of one zone**, no more than one XL and two L | by the number of zones, 6–10 | opus (code), sol (interface) |
-| integration | **all ready branches into one** | **1** | opus |
-| playtest | **one scenario and seed per worker** | **5** | luna |
-| fixing playtest bugs | **ALL bugs of one zone at once**, however many | 4–6 | opus / sol |
-| debt and ideas | **15–20 weights**, grouped by meaning; XS and S can be many | 2–3 | opus / sonnet |
+| development | **15–20 weights of one zone**, no more than one XL and two L | by the number of zones, 6–10 | opus 5.5 (code and interface) |
+| integration | **all ready branches into one** | **1** | opus 5.5 |
+| playtest | **one scenario and seed per worker** | **5** | haiku 4.5 |
+| fixing playtest bugs | **ALL bugs of one zone at once**, however many | 4–6 | opus 5.5 |
+| debt and ideas | **15–20 weights**, grouped by meaning; XS and S can be many | 2–3 | opus 5.5 / sonnet 5 |
 
 **An owner's directive: make the sizes BIGGER.** When in doubt between "split into two batches" and "hand out as one", hand out as one, until the sum of weights passes 20. There is one limit, the worker's context, and it shows itself (`% until auto-compact` in the tail). Until it shows, the batch is small.
 
@@ -209,7 +209,7 @@ orca terminal list --json     # against worker-list --json (dispatchStatus == di
 git worktree list; git branch --merged main
 ```
 
-**Playtests run five at a time on `gpt-5.6-luna`**: an owner's directive: the model is almost free against the weekly window, and acceptance by play is the only stage that caught what no green test saw. Five passes give five different scenarios for the price of one opus worker.
+**Playtests run five at a time on `claude-haiku-4-5`**: an owner's directive: the cheapest model on the shared weekly window, and acceptance by play is the only stage that caught what no green test saw. In the pilot, on `gpt-5.6-luna` and another provider's window, five passes cost about one opus worker; here they draw on the same window as the developers, so their price is measured again with `usage-snapshot.sh`, as `PORTING.md` demands.
 
 Every playtest gets **its own scenario and its own seed**, otherwise five workers find the same bug. The cut, proven in practice: the first ten minutes with no explanations; a playthrough to the ending; a battle from start to the result screen; the city, hiring and the army; the map, the camera, the quest book and the touch layout.
 
@@ -233,7 +233,7 @@ Closed it: delete the file and add a line to `tasks/DONE.md`. Never silently del
 
 **All checks: no more than 3 minutes, ideally a minute.** If it grows, that is a cycle blocker.
 
-**The provider is pinned to the role by the owner's directive, not chosen by price:** code `claude-opus-5`, interface `gpt-5.6-sol`, architecture `claude-fable-5`, review `claude-opus-5`, acceptance `gpt-5.6-luna`. Savings come from **fewer starts**, not from a weaker model: on 11 August code from `gpt-5.6-sol` did not satisfy the owner, and that decision is not revisited for the sake of limits.
+**The model is pinned to the role by the owner's directive, not chosen by price:** code `claude-opus-5-5`, interface `claude-opus-5-5`, architecture `claude-fable-5-1`, review `claude-opus-5-5`, acceptance `claude-haiku-4-5` (`gamestudio/agents.md`). Savings come from **fewer starts**, not from a weaker model: in the pilot, on 11 August, code from the cheaper interface model (`gpt-5.6-sol`) did not satisfy the owner, and that decision is not revisited for the sake of limits. That is why the interface here runs on the same model as the code.
 
 **There is one measure of efficiency: worker launches per closed task.** It was nine. The target is no more than two: the batch and the acceptance. Counted by `worker-list` against the lines in `DONE.md`.
 

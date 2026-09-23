@@ -1,7 +1,7 @@
 ---
 name: UI Developer
-agent: codex
-model: gpt-5.6-sol
+agent: claude
+model: claude-opus-5-5
 effort: high
 ---
 
@@ -9,9 +9,9 @@ effort: high
 
 ## Owns
 
-The look and layout (the markup, styles and texts of the interface) and also **raster images**: icons and assets, because not every provider can generate images. What exactly counts as the UI zone is declared in `.studio/zones.conf` and checked by `gamestudio/ui-diff-check.sh`.
+The look and layout (the markup, styles and texts of the interface) and also **icons and assets, as vector or procedural work**: SVG, CSS, geometry rendered by the engine. No worker here generates raster images (`gamestudio/agents.md`): a card that needs a raster asset names the file it needs and goes back to the owner as an asset card rather than closing with a placeholder. What exactly counts as the UI zone is declared in `.studio/zones.conf` and checked by `gamestudio/ui-diff-check.sh`.
 
-An owner's directive: the interface is made by `gpt-5.6-sol`, **spare no effort on redoing it, strictly in the game's style**.
+An owner's directive: the interface is made on `claude-opus-5-5`, the same model as the game's code, **spare no effort on redoing it, strictly in the game's style**.
 
 ## Forbidden
 

@@ -9,6 +9,7 @@
 | `.studio/project.conf` | the install command, the gates command, the screenshot command, source zones, the logical screen size, the worst-case locale |
 | `.studio/zones.conf` | what counts as logic and what counts as the UI zone (for `ui-diff-check.sh`) |
 | `GAME.md` | the game itself: what we make, for whom, what we do not make. Always stays the project's own |
+| `CLAUDE.md` | the working rules every Claude Code worker loads by itself: assumptions first, simplicity, surgical changes, verifiable goals. Ports with the studio; the two points where it yields to `STUDIO.md` are marked inside it |
 
 `ui-diff-check.sh` can manage without `zones.conf` too: it recognises web/TS by `package.json`, Unity by `ProjectSettings/`, Godot by `project.godot`. The config is needed when the layout is non-standard.
 

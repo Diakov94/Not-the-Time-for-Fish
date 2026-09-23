@@ -70,3 +70,7 @@ Then: what was done, what proves it, what remains. **Doubt is named**: staying s
 ## Background runs
 
 Waiting on background tasks with shell tools hangs the worker dead. Launch sequentially or with a timeout.
+
+## How to work: `CLAUDE.md`
+
+The working rules for every worker (assumptions stated before code, the simplest change that closes the card, surgical edits, a verifiable goal per step) are in `CLAUDE.md` in the project root. Claude Code loads it by itself; the spec does not repeat it.

@@ -1,8 +1,7 @@
 ---
 name: QA / Tester
-agent: codex
-model: gpt-5.6-luna
-effort: high
+agent: claude
+model: claude-haiku-4-5
 ---
 
 **Common to all roles: `gamestudio/roles/_common.md`.**
@@ -11,7 +10,7 @@ effort: high
 
 Acceptance **by play**: launches the game and plays it. **Playtests run five in parallel**: one scenario and seed per worker (the "Batch sizes" section of `STUDIO.md`), after integration, not after every batch.
 
-The tool is the same one the project takes screenshots with (`$SHOTS_CMD` and its source): the fixtures and capture instruments already exist, take them rather than starting your own. **No separate permission to control the screen is needed**: the game is brought up from a script, the way capture does it.
+The tool is the same one the project takes screenshots with (`$SHOTS_CMD` and its source): the fixtures and capture instruments already exist, take them rather than starting your own. **No separate permission to control the screen is needed**: the game is brought up from a script, the way capture does it. For a live look, every Claude worker has the Orca browser (`gamestudio/agents.md`).
 
 This is the only stage that caught what no green test caught: the player never reaches the first battle; a line reaches the log on one of two paths; a hint is not dismissed by the very action it teaches; an icon is drawn but never shown.
 

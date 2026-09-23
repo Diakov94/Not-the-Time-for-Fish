@@ -33,7 +33,7 @@ The tidying went like this:
 |---|---|---|
 | `STUDIO.md` | everyone | the working rules: batches, checking, merging, the queue, speed and money |
 | `START_PROMPT.md` | Producer | the coordinator's start prompt: the cycle, a worker's signs of life, how to set a task |
-| `agents.md` | Producer | providers, models, who holds which role, and the three launch failures |
+| `agents.md` | Producer | models, windows, who holds which role, and the launch failures |
 | `ORCA.md` | Producer | orchestrator pitfalls, each of which has already cost time |
 | `PORTING.md` | whoever ports it | what to fill in for a new project and what has to be earned again |
 | `roles/_common.md` | all roles | the shared part of every spec: commit, checking, the instrument count, one owner per fact |
@@ -54,13 +54,14 @@ The folder is copied whole and knows nothing about the engine. Everything that d
 
 - `.studio/project.conf`: the install command, the gates command, the screenshot command, source zones, the logical screen size;
 - `.studio/zones.conf`: what counts as logic and what counts as the UI zone (for `ui-diff-check.sh`);
-- `GAME.md` in the project root: the game itself: what we make, for whom, what we do not make.
+- `GAME.md` in the project root: the game itself: what we make, for whom, what we do not make;
+- `CLAUDE.md` in the project root: the working rules every Claude Code worker loads by itself (assumptions first, simplicity, surgical changes, verifiable goals).
 
 The details, and the list of what has to be measured again on your own machine, are in `PORTING.md`.
 
 ## Orchestrator
 
-The process is written for launching workers through Orca (`orca orchestration task-create` / `worker-start`) with the providers `claude`, `codex` and `kimi`. The rules about batches, checking and the owner of a fact do not depend on the orchestrator; only `ORCA.md` and the launch commands in `agents.md` do.
+The process is written for launching workers through Orca (`orca orchestration task-create` / `worker-start`). This project runs on the provider `claude` only; the pilot also used `codex` and `kimi`, and its anecdotes about them stay as evidence. The rules about batches, checking and the owner of a fact do not depend on the orchestrator; only `ORCA.md` and the launch commands in `agents.md` do.
 
 ## License
 
