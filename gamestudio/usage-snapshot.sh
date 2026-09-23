@@ -416,10 +416,10 @@ if even_rates:
 # ── THE SLOPE OVER THE WHOLE CURRENT WINDOW, not over a receding base ────────
 # The verdicts above take "own" from a base of 0.3…1.4 h. With the provider's
 # granularity of 1 pp, one quantisation step over such a baseline gives a spread of
-# SEVERAL TIMES: on 11 August 2026 the instrument printed codex ×16.1 while the
-# remainder over the same interval had shifted by exactly one, i.e. the rate
-# lay between 0 and 6 pp/hour. Worse: the codex window had reset, and the short
-# base compared numbers across the reset boundary.
+# SEVERAL TIMES: on 11 August 2026 the instrument printed ×16.1 for one window
+# while the remainder over the same interval had shifted by exactly one, i.e.
+# the rate lay between 0 and 6 pp/hour. Worse: that window had reset, and the
+# short base compared numbers across the reset boundary.
 #
 # The reliable baseline is the WHOLE current window: the last monotonically
 # non-decreasing stretch of `used` in the ledger. It ends at the reset by

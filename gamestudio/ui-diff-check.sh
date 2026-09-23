@@ -2,7 +2,7 @@
 #
 # WHAT IN A UI ROLE'S DELIVERY MUST BE READ BY EYE BEFORE MERGING.
 #
-# Why. The interface provider is trusted with the look and layout, not with the
+# Why. The UI role is trusted with the look and layout, not with the
 # game's rules (the owner's directive: it can be trusted with the interface
 # only). Green gates do not check that: on 11 August 2026 a UI worker touched
 # the module that owns saves, the branch landed on a green gate run, and the Producer read

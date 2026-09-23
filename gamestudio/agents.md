@@ -1,6 +1,6 @@
 # Models
 
-One provider, `claude` (Claude Code launched through Orca), on one subscription. The pilot also ran `codex` and `kimi`; its anecdotes about them (`ORCA.md`, `STUDIO.md`) stay as evidence, and nothing here is launched on them.
+One provider, `claude` (Claude Code launched through Orca), on one subscription.
 
 | model | used for | notes |
 |---|---|---|
@@ -43,7 +43,7 @@ After `git worktree add` Orca registers the worktree with a delay: the first `wo
 
 **The Integrator and Code Reviewer roles no longer exist**: an owner's decision from 11 August 2026, based on the results of the shift. Merging and reading the diff are done by the Producer personally (§4 of `STUDIO.md`, where the review checklist has been moved). The reason, in numbers: both roles stood idle for the whole project, while the Producer in one shift landed eight branches on trunk with the full gate run before each landing. The Integrator could not complete a merge at all anyway: trunk is checked out in the Producer's worktree, and git does not let another worker switch to a busy branch.
 
-**An owner's directive, in force:** the UI Developer is given the interface only, and a card that reaches into the game's rules goes to the Developer even if it looks like interface. In the pilot the reason was the model: the silent refusal in the city was fixed by opus, and the layout of the same panel by `gpt-5.6-sol`, whose code the owner did not trust. Here both roles run on the same model, and the reason is that every fact has one owner: the rules zone is the Developer's, so logic outside the UI zone in a UI delivery is read by eye before merging (§3 and §4 of `STUDIO.md`).
+**An owner's directive, in force:** the UI Developer is given the interface only, and a card that reaches into the game's rules goes to the Developer even if it looks like interface. In the pilot the reason was the model: the silent refusal in the city was fixed by opus, and the layout of the same panel by a cheaper interface model, whose code the owner did not trust. Here both roles run on the same model, and the reason is that every fact has one owner: the rules zone is the Developer's, so logic outside the UI zone in a UI delivery is read by eye before merging (§3 and §4 of `STUDIO.md`).
 
 ## Three launch failures that cost time every day
 

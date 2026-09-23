@@ -95,7 +95,7 @@ leaks=$(ps -eo pid,ppid,etime,pcpu,args 2>/dev/null | tail -n +2 | awk '
 # another engine add your own builder and runner names, otherwise the instrument
 # counts foreign load as ours.
 [ -f .studio/project.conf ] && . .studio/project.conf
-OURS_RE="${OURS_RE:-orca/workspaces|$(basename "$PWD")|vite-node|vitest|puppeteer|dotnet|godot|claude .*--model|codex}"
+OURS_RE="${OURS_RE:-orca/workspaces|$(basename "$PWD")|vite-node|vitest|puppeteer|dotnet|godot|claude .*--model}"
 ours=$(ps -eo pcpu,args 2>/dev/null | tail -n +2 | sort -k1 -rn | head -10 |
   grep -cE "$OURS_RE")
 echo
@@ -239,7 +239,7 @@ fi
 
 # ── 7. A worker launched and NOT STARTED ─────────────────────────────────────
 # A failure that cost three cases of two to three hours each (11 August:
-# ui-three-bugs, codex on framing, review-cut). The spec goes into the input
+# ui-three-bugs, framing, review-cut). The spec goes into the input
 # field and stays there: Orca shows `dispatched`, the process is alive, the
 # heartbeats go on, `worker-read` returns the task text, and not a single line
 # of work. It is not caught by eye, because the terminal tail looks plausible:
@@ -269,22 +269,14 @@ except Exception:
     # red and can go green.
     #
     # I tried a second sign and threw it away: the terminal's `latest cursor`
-    # counts pages, not lines, and counts DIFFERENTLY per provider: for working
-    # claude workers it equals 1, for codex it runs into thousands. A check on
-    # it gave four false positives out of four. A broad wrong guard is worse
-    # than a narrow right one: it teaches you not to believe red.
+    # counts pages, not lines, and for a working claude worker stays at 1. A
+    # check on it gave four false positives out of four. A broad wrong guard is
+    # worse than a narrow right one: it teaches you not to believe red.
     #
-    # What remains is an honestly named blind spot: on codex the sign is NOT
-    # VERIFIED: by the time of the check its banner has scrolled out of the
-    # buffer ("older output is no longer retained"), and we did not record the
-    # exact text in either of the two cases. So a codex worker is still checked
-    # by eye on the first cycle.
-    # `MCP startup incomplete` and `Use /skills` are the same banner of an
-    # unstarted worker, only codex reaches it AFTER the MCP servers fail (for
-    # us blender and godot-ai regularly fail to come up; they have nothing to
-    # do with the game). The day-log review stood like that for a whole cycle:
-    # the instrument was silent because it looked only for the agent greeting,
-    # and the tail ended with the MCP complaint.
+    # An honestly named blind spot: the banner can scroll out of the buffer
+    # ("older output is no longer retained") before the check runs, and then
+    # the sign is silent on a worker that never started. On the first cycle
+    # after a launch the worker is still checked by eye.
     # The same banner also sits in the tail of a FINISHED worker: having done
     # the work, it returns to the prompt, and the tail again ends with the
     # banner. The day-log review got onto the list that way a second time,
@@ -293,11 +285,11 @@ except Exception:
     # of its worktree has commits ahead of trunk. Hence two different verdicts
     # below, and they need opposite cures: Enter for one, collecting the work
     # for the other.
-    if printf '%s' "$tail40" | grep -qE 'Claude Code v[0-9]|Codex v[0-9]|Welcome to|MCP startup incomplete|Use /skills'; then
+    if printf '%s' "$tail40" | grep -qE 'Claude Code v[0-9]|Welcome to'; then
       # We tell them apart by the TRACES OF WORK above the banner, not by the
       # tree: Orca has no binding of a terminal to a worktree (`worktreeId` is
       # the project root for everyone). A finished one has its own commands in
-      # the tail (`Ran ...`), an unstarted one only the noise of MCP start-up.
+      # the tail (`Ran ...`), an unstarted one only the banner and the spec.
       if printf '%s' "$tail40" | grep -qE '(^|[^a-zA-Z])Ran [a-z]'; then
         finished="$finished $h"
       else

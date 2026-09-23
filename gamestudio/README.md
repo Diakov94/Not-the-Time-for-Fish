@@ -61,7 +61,7 @@ The details, and the list of what has to be measured again on your own machine, 
 
 ## Orchestrator
 
-The process is written for launching workers through Orca (`orca orchestration task-create` / `worker-start`). This project runs on the provider `claude` only; the pilot also used `codex` and `kimi`, and its anecdotes about them stay as evidence. The rules about batches, checking and the owner of a fact do not depend on the orchestrator; only `ORCA.md` and the launch commands in `agents.md` do.
+The process is written for launching workers through Orca (`orca orchestration task-create` / `worker-start`). This project runs on the provider `claude` only. The rules about batches, checking and the owner of a fact do not depend on the orchestrator; only `ORCA.md` and the launch commands in `agents.md` do.
 
 ## License
 
