@@ -1,0 +1,30 @@
+# The leading slash matters: in git `dir/` means "a directory with this name at
+# ANY depth", `/dir/` means "only at the repository root". The broad form is
+# written only where breadth is a decision.
+
+# ── OS and editor junk ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ── the state of a particular project, not of the studio ─────────────────────
+# The project profile (stack commands, zones, the orchestrator's project id),
+# the limit-usage ledger and everything the studio's instruments write live in
+# `.studio/` NEXT TO the studio, not inside it. The rule is here in case the
+# profile gets copied inside.
+/.studio/
+/project.conf
+/zones.conf
+
+# ── instrument snapshots ─────────────────────────────────────────────────────
+# `snapshots/` is the working output of health-check and usage-snapshot: it is
+# recreated by a command, there are no reference files, it has nothing to do
+# with history.
+/snapshots/*
+!/snapshots/.gitkeep
+
+# ── local ────────────────────────────────────────────────────────────────────
+*.local
+*.log
+/tmp/
