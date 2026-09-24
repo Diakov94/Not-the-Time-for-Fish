@@ -9,6 +9,9 @@ export type Release = { type: 'release'; from: ClientId; id: NetId; p: Vector; q
 export type Left = { type: 'left'; id: ClientId; host: ClientId };
 // A prop the sender threw met `dog` (ADR 0009).
 export type Hit = { type: 'hit'; from: ClientId; dog: NetId };
+// Events, not folded (ADR 0010): a noise ping born at the sender, and a team marker for the sender's side.
+export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number };
+export type Mark = { type: 'mark'; from: ClientId; p: Vector };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit;
+export type SimMessage = Spawn | Claim | Release | Hit | Noise | Mark;

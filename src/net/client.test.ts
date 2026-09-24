@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, expect, test } from 'vitest';
 import { startRelay, type Relay } from '../relay/node.ts';
+import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import { prototypeRoom, type Level } from '../sim/level.ts';
 import { IDLE, type Intent } from '../sim/movement.ts';
@@ -358,4 +359,20 @@ test('a crate thrown at the carrying dog frees the cat on all three clients with
   console.log(`cat free on all three ${ms.toFixed(0)} ms after the hit left the thrower`);
   expect(freeAt.size).toBe(3);
   expect(ms).toBeLessThanOrEqual(150);
+});
+
+test("two clients' crates shoved into each other: one noise for the impact, heard on both from the echo", async () => {
+  const [a, b] = await room(2);
+  const x = spawn(a!, 'prop', { x: -1.5, y: 0.5, z: 0 });
+  const y = spawn(b!, 'prop', { x: 1.5, y: 0.5, z: 0 });
+  await play(3000, () => a!.rested.has(x) && b!.rested.has(y) && sessions.every((s) => s.sim.entities.size === 2));
+  for (const s of sessions) drainEvents(s.sim);
+  a!.sim.entities.get(x)!.body.setLinvel({ x: 4, y: 0, z: 0 }, true);
+  b!.sim.entities.get(y)!.body.setLinvel({ x: -4, y: 0, z: 0 }, true);
+  await play(1000);
+  // Each list holds every noise of the relay's stream: noise reaches a list only from the echo.
+  const heard = (s: Session) => s.sim.events.filter((e) => e.type === 'noise' && Math.abs(e.p.x) < 3);
+  console.log(`noise for the impact: ${heard(a!).map((e) => e.from).join(', ')} on A; ${heard(b!).length} on B`);
+  expect(heard(a!).length).toBe(1);
+  expect(heard(b!).length).toBe(1);
 });

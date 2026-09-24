@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { Collider, KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
+import type { Collider, EventQueue, KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
 import type { ClientId, Entities, NetId } from './entities.ts';
 import type { Level } from './level.ts';
+import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
@@ -27,6 +28,11 @@ export type Sim = {
   lungeReady: number; // when the own dog may lunge again
   grabbedAt: number | null; // when this client's hold on a cat was accepted: the carrier's clock of the wiggle-free
   thrown: Map<NetId, number>; // props this client threw, and when
+  events: SimEvent[]; // what happened since the loop last drained it (ADR 0008)
+  queue: EventQueue; // the world's contact force reports, drained every step
+  impacts: Set<string>; // collider pairs pressing above the impact threshold in the last step
+  pinged: Map<NetId, number>; // when a body this client simulates last pinged an impact
+  stride: number; // m the own character has walked since its last step ping
 };
 
 export async function init(): Promise<void> {
@@ -69,12 +75,17 @@ export function createWorld(level: Level, me: ClientId): Sim {
     lungeReady: 0,
     grabbedAt: null,
     thrown: new Map(),
+    events: [],
+    queue: new RAPIER.EventQueue(true),
+    impacts: new Set(),
+    pinged: new Map(),
+    stride: 0,
   };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
 // `intent` is this client's player input, held for every step of the call. Returns the messages the
-// steps produced (a lunge's grab, a wiggle-free, a hit, touch claims), for the caller to send.
+// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims), for the caller to send.
 export function step(sim: Sim, dt: number, intent: Intent = IDLE): SimMessage[] {
   const out: SimMessage[] = [];
   sim.accumulator += dt;
@@ -84,8 +95,8 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE): SimMessage[] 
     const c = myCharacter(sim);
     if (c) drive(sim, c, intent);
     carry(sim);
-    sim.world.step();
-    out.push(...grabStep(sim), ...touchClaims(sim));
+    sim.world.step(sim.queue);
+    out.push(...grabStep(sim), ...noises(sim, intent), ...touchClaims(sim));
   }
   return out;
 }

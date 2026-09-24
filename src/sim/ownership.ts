@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
-import type { Claim, Hit, Left, Release, Spawn } from './messages.ts';
+import type { Claim, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
 import type { Sim } from './world.ts';
 
 // ADR 0006's and 0009's messages, in the relay's order.
@@ -27,7 +27,7 @@ export function mayHold(holder: Kind | undefined, target: Kind): boolean {
 export type Identities = ReadonlyMap<NetId, Pick<Entity, 'kind' | 'home'>>;
 
 // A client's side: the kind of its character (ADR 0009).
-function sideOf(entities: Identities, client: ClientId): Kind | undefined {
+export function sideOf(entities: Identities, client: ClientId): Kind | undefined {
   for (const e of entities.values()) if (e.home === client && isCharacter(e.kind)) return e.kind;
   return undefined;
 }
@@ -126,15 +126,24 @@ export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void 
   setBodyTypes(sim);
 }
 
-// Every client runs this for every message of the relay's order, its own echoed ones included.
-export function receive(sim: Sim, m: FoldMessage): void {
+// Every client runs this for every message of the relay's order, its own echoed ones included. A noise
+// is an event for everyone; a mark only for the marker's side (ADR 0010).
+export function receive(sim: Sim, m: SimMessage | Left): void {
+  if (m.type === 'noise' || m.type === 'mark') {
+    if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
+    return;
+  }
   if (m.type === 'spawn') spawnEntity(sim.world, sim.entities, m);
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities);
   if (!accepted && !settled) return;
   setBodyTypes(sim);
-  if (!accepted || (m.type !== 'claim' && m.type !== 'release')) return;
+  if (!accepted) return;
+  if (m.type === 'hit') sim.events.push({ type: 'hit', dog: m.dog, from: m.from });
+  if (m.type !== 'claim' && m.type !== 'release') return;
+  const moving = m.type === 'release' && Math.hypot(m.v.x, m.v.y, m.v.z) > 0;
+  if (m.type === 'release' || m.hold) sim.events.push({ type: m.type === 'claim' ? 'grab' : moving ? 'throw' : 'drop', id: m.id, from: m.from });
   const e = sim.entities.get(m.id);
   // The carrier's clock of the wiggle-free starts when its hold on a cat is accepted.
   if (m.type === 'claim' && m.hold && m.from === sim.me && e?.kind === 'cat') sim.grabbedAt = sim.time;
@@ -148,5 +157,5 @@ export function receive(sim: Sim, m: FoldMessage): void {
     if (isCharacter(e.kind)) sim.leap = { ...m.v };
   }
   // "Thrown" is this client's own fact: a prop it released with a velocity (ADR 0009's hit).
-  if (m.from === sim.me && !isCharacter(e.kind) && Math.hypot(m.v.x, m.v.y, m.v.z) > 0) sim.thrown.set(m.id, sim.time);
+  if (m.from === sim.me && !isCharacter(e.kind) && moving) sim.thrown.set(m.id, sim.time);
 }

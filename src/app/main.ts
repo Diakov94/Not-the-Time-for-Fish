@@ -1,6 +1,7 @@
 import { connect, frame, send, spawn } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { createView, draw } from '../render/view.ts';
+import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import { prototypeRoom } from '../sim/level.ts';
 import { carried } from '../sim/ownership.ts';
@@ -45,5 +46,6 @@ requestAnimationFrame(function loop(now: number) {
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), intent(input));
   last = now;
   draw(view, sim, input.look);
+  drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });

@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, ColliderDesc, RigidBody, World } from '@dimforge/rapier3d-compat';
+import { IMPACT } from './events.ts';
 import { CRATE_HALF } from './level.ts';
 import type { Spawn } from './messages.ts';
 
@@ -45,7 +46,10 @@ export function spawnEntity(world: World, entities: Entities, s: Spawn): Entity 
       s.p.z,
     ),
   );
-  world.createCollider(COLLIDER[s.kind](), body);
+  const collider = world.createCollider(COLLIDER[s.kind](), body);
+  // Contacts that press above IMPACT weights are reported: the noise of an impact (ADR 0010).
+  collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
+  collider.setContactForceEventThreshold(IMPACT * collider.mass() * -world.gravity.y);
   const e: Entity = { id: s.id, kind: s.kind, home: s.home, body };
   entities.set(e.id, e);
   return e;

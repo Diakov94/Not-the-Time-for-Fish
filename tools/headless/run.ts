@@ -1,6 +1,7 @@
 import { dump, type Dump } from '../../src/net/dump.ts';
 import { DELAY_MS, TICK_MS } from '../../src/net/ticks.ts';
 import { startRelay } from '../../src/relay/node.ts';
+import { drainEvents } from '../../src/sim/events.ts';
 import { prototypeRoom } from '../../src/sim/level.ts';
 import { init } from '../../src/sim/world.ts';
 import { joinHeadless, playHeadless, type HeadlessClient } from './client.ts';
@@ -113,6 +114,7 @@ export async function run(clients: number, seconds: number, ticks = true): Promi
       }
       if (start === Infinity && now - joined > 5000) throw new Error('the clients never all held every entity');
       for (const c of cs) playHeadless(c, (now - start) / 1000, (now - last) / 1000);
+      for (const c of cs) drainEvents(c.session.sim); // the runner is the loop that owns the frame
       last = now;
       if (start < Infinity) samples.push({ t: now, dumps: cs.map((c) => dump(c.session.sim)) });
     }
