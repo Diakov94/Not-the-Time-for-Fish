@@ -6,12 +6,15 @@ import { carried } from '../sim/ownership.ts';
 import { perkOf } from '../sim/perks.ts';
 import { inPlay, playerOf, playsAs, remaining, type Player } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
+import { due, see, type Hint } from './hints.ts';
 import { CSS } from './style.ts';
-import { FISH, ITEMS, MATE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
+import { FISH, HIDE, HINT, ITEMS, MATE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
 
 // GAME.md, UI / HUD: the in-round overlay (ADR 0008), a view of the sim as render and audio are. Once per
-// frame it reads the round table, the entity table and this client's own character state and writes what
-// they say into the DOM; it keeps no timer, count or state of its own. Shown while the round is in play.
+// frame it reads the round, entity and ownership tables, this client's own character state and render's
+// pings and projection, and writes what they say into the DOM. It keeps no timer, count or state of its
+// own; all it stores is a per-viewer setting, the first-round hints this browser has seen. Shown while the
+// round is in play.
 export type Hud = {
   root: HTMLElement;
   phase: HTMLElement;
@@ -51,6 +54,12 @@ export function createHud(): Hud {
     <div class="team"></div>
     <div class="arrows"></div>`;
   document.body.append(root);
+  // H hides the first-round hint on screen and every one after it, for this browser.
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyH' || e.repeat || e.target instanceof HTMLInputElement) return;
+    see(...(Object.keys(HINT) as Hint[]));
+    root.querySelector('.tip')?.remove();
+  });
   const $ = (selector: string) => root.querySelector<HTMLElement>(selector)!;
   return {
     root,
@@ -75,7 +84,10 @@ export function createHud(): Hud {
 export function drawHud(hud: Hud, sim: Sim, view: View): void {
   const r = sim.round;
   hud.root.hidden = !inPlay(r);
-  if (hud.root.hidden) return;
+  if (hud.root.hidden) {
+    hud.root.querySelector('.tip')?.remove(); // a hint cut short by the round's end is not shown again at the next
+    return;
+  }
   // The phase and its remaining time, the sim's derivation (ADR 0007), in whole seconds counted down.
   write(hud.phase, PHASE[r.phase] ?? '');
   write(hud.timer, clock(remaining(sim) ?? 0));
@@ -130,6 +142,15 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
     arrow.style.transform = `translate(${w / 2 + dx * k}px, ${h / 2 + dy * k}px) rotate(${Math.atan2(dy, dx)}rad)`;
     arrow.style.opacity = String(1 - age);
   });
+  // One first-round hint at a time, from the fact that calls for it; it leaves at its animation's end.
+  const hint = side && !hud.root.querySelector('.tip') ? due(sim) : null;
+  if (!side || !hint) return;
+  see(hint);
+  const tip = Object.assign(document.createElement('div'), { className: 'tip panel', innerHTML: '<span></span><small></small>' });
+  tip.firstElementChild!.textContent = HINT[hint][side];
+  tip.lastElementChild!.textContent = HIDE;
+  tip.onanimationend = () => tip.remove();
+  hud.root.append(tip);
 }
 
 const EDGE = 28; // px from the screen's edge to an arrow's centre
