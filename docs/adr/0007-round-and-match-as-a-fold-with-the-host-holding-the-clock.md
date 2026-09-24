@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, the match part superseded by ADR 0014 on 2026-09-24 (no teams: the roster's `team`, the `roster` message, the match rows and the two-round successor)
 date: 2026-09-24
 ---
 

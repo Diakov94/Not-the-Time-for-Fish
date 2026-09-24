@@ -41,6 +41,7 @@ export type Sim = {
   lunge: number | null; // when the own dog's dash in progress ends
   lungeReady: number; // when the own dog may lunge again
   grabbedAt: number | null; // when this client's hold on a cat was accepted: the carrier's clock of the wiggle-free
+  holder: ClientId | null; // whose hold on this client's own character was accepted last since prep: a capture's `by`
   thrown: Map<NetId, number>; // props this client threw, and when
   events: SimEvent[]; // what happened since the loop last drained it (ADR 0008)
   queue: EventQueue; // the world's contact force reports, drained every step
@@ -116,6 +117,7 @@ export function createWorld(level: Level, me: ClientId, levels: Sim['levels'] = 
     lunge: null,
     lungeReady: 0,
     grabbedAt: null,
+    holder: null,
     thrown: new Map(),
     events: [],
     queue: new RAPIER.EventQueue(true),
