@@ -7,11 +7,11 @@ import { DELAY_MS, TICK_MS } from '../../src/net/ticks.ts';
 import { startRelay } from '../../src/relay/node.ts';
 import type { ClientId, Kind, NetId } from '../../src/sim/entities.ts';
 import { drainEvents, type SimEvent } from '../../src/sim/events.ts';
-import type { Claim, Team } from '../../src/sim/messages.ts';
+import type { Claim } from '../../src/sim/messages.ts';
 import { whisker } from '../../src/sim/mines.ts';
 import { IDLE, type Intent } from '../../src/sim/movement.ts';
 import { fold, sideOf, type Identities } from '../../src/sim/ownership.ts';
-import { advance, catsTeam, duration, knobs, newRound, type Round } from '../../src/sim/round.ts';
+import { advance, duration, knobs, type Round } from '../../src/sim/round.ts';
 import { init } from '../../src/sim/world.ts';
 import { joinHeadless, playHeadless, type HeadlessClient, type Player, type Thing } from './client.ts';
 
@@ -21,12 +21,16 @@ export const RESTING_MAX = 0.02; // m: a copy of an entity at rest on its owner 
 // path for more than `for` ms; at most `max` in a run. A second, coarser judge beside the two above.
 export const VISIBLE = { off: 0.5, for: 1000, max: 1 };
 const FRAME_MS = 1000 / 60; // the runner's loop: a 60 Hz display's frames
+// A runner frame more than a network tick after the last is a stall of the runner's own process: every
+// client and the relay stopped at once, which no session has (card bug-net-round-at-six-clients-...).
+export const STALL_MS = TICK_MS;
+const STALL_EVERY = 2000; // ms between the stalls `stall` injects
 
 // A scenario, one file each: the level, what its host spawns beside the level's crates, and each
 // client's player by join order (the first joins as the host) on the level the game runs. Its judge adds its own checks to the
-// shared ones and prints its own numbers. A round scenario starts in the lobby: the host sides every
-// player as its `side` (ADR 0007's reassignment by hand) and starts the round, the characters enter at
-// prep, and the run ends once `rounds` rounds are over on every client, or after the run's seconds.
+// shared ones and prints its own numbers. A round scenario starts in the lobby: once every client holds
+// every name the host starts the round, the fold sides every player at prep (ADR 0014's rotation, not the
+// scenario's `side`), the characters enter then, and the run ends once `rounds` rounds are over on every client, or after the run's seconds.
 // `seconds` and `heist`: the run's length and the heist's when the command names none.
 export type Scenario = {
   about: string;
@@ -42,8 +46,13 @@ export type Verdict = { lines: string[]; ok: boolean };
 // The runner's knobs, none of them a norm of the game: the tick sender's rate and the interpolation delay
 // as fractions of TICK_MS's rate and DELAY_MS (card 66's negatives; `ticks: 0` sends none, card 11's), the
 // heist's length for a round scenario (card 63: every client's phase start is moved back at its heist's
-// fold, so the host's clock ends it sooner), and how many rounds a round scenario plays.
-export type Options = { ticks?: number; delay?: number; heist?: number; rounds?: number };
+// fold, so the host's clock ends it sooner), how many rounds a round scenario plays, and `stall`: every
+// STALL_EVERY one client in turn stalls this many ms, as a busy tab does: no frames, its messages held
+// until it resumes, then the whole gap in one frame. It paints nothing meanwhile, so its copies are not
+// judged; its own bodies stand still, the truth the others' copies are held against. A stall starts
+// after a frame the client ticked in, or while it sends none: what an owner moves between its last tick
+// and a stall never leaves it (up to a tick's motion, 0.45 m at a dog's sprint), and no copy can show it.
+export type Options = { ticks?: number; delay?: number; heist?: number; rounds?: number; stall?: number };
 
 // Every frame of the game, per connection in join order (a rejoin is a connection of its own): its dump
 // (its fold's table and every pose; null while it is not in the game), the events it drained, the ticks it
@@ -60,12 +69,14 @@ export type Wire = { up: number; down: number; in: number; sent: { at: number; m
 // (a rejoin's connect) and its round table at the end (null once gone).
 export type Run = { samples: Sample[]; wires: Wire[]; ids: ClientId[]; seats: number[]; opened: number[]; ends: (Round | null)[]; start: number; heist?: number };
 
-export type Divergence = { id: string; kind: string; moving: number; resting: number; exact: number };
+export type Divergence = { id: string; kind: string; moving: number; resting: number; exact: number; stalled: number };
 // Per connection, rates per second of the time it was in the game: ticks sent (the fewest in any whole
 // second, and the rate while it had something to send), kB up and down, events drained.
 export type Traffic = { id: ClientId; side?: Kind; ticks: number; minTicks: number; rate: number; up: number; down: number; events: number };
 export type Result = {
   divergence: Divergence[];
+  stalls: { n: number; longest: number }; // the runner's own stalls, and the longest, ms
+  injected: number; // the client stalls `stall` injected
   visible: { id: NetId; kind: Kind; n: number }[]; // visible desyncs by entity
   clients: Traffic[];
   sidesAgree: boolean; // every client sees every client's side as the scenario gave it
@@ -137,20 +148,39 @@ function offPath(p: V, frames: Frame[], id: NetId, t0: number, t1: number): numb
 // (ADR 0006), so the prop is moving there. A copy further than VISIBLE.off from that path or pose is off;
 // an entity off on any client for longer than VISIBLE.for is one visible desync. `seen` keeps every
 // entity's identity for the doomed-claim judge, since a round's entities end before the run does.
-function judges(ids: ClientId[]) {
+// An entity's path starts at its spawn's pose (`births`, from its spawner's `spawn`), taken as the truth
+// of the frame before its first: its owner may step it on before the runner's first look (under load a
+// dog sprinted 0.3 m, or a stall's worth, from its spawn before the first frame that held it).
+// Through a stall of the runner's own process (`stall`) every client froze at once and its owners jumped
+// a stall's motion in one frame, so no copy's timing is the game's: until a moving judge's window has
+// cleared the stall, a copy is held against its owner's whole path since the stall began (`stalled`).
+function judges(ids: ClientId[], births: Map<NetId, V>) {
   const seen = new Map<NetId, Pick<DumpRow, 'kind' | 'home'>>();
   const frames: Frame[] = [];
   const div = new Map<NetId, Divergence>();
+  const stalls: { from: number; to: number }[] = []; // those whose frames are still judged separately
+  const stalled = { n: 0, longest: 0 };
   const restSince: Map<NetId, number>[] = []; // per connection: since when its body of each entity has slept
   const offSince = new Map<NetId, { at: number; counted: boolean }>();
   const visible = new Map<NetId, { id: NetId; kind: Kind; n: number }>();
-  const see = (t: number, dumps: (Dump | null)[]) => {
+  const see = (t: number, dumps: (Dump | null)[], paused: boolean[]) => {
     const rows = dumps.map((d) => d && new Map(d.entities.map((e) => [e.id, e])));
     const own = new Map<NetId, number>();
     for (const [c, r] of rows.entries()) for (const row of r?.values() ?? []) if (row.owner === ids[c] && !own.has(row.id)) own.set(row.id, c);
     for (const r of rows) for (const { id, kind, home } of r?.values() ?? []) if (!seen.has(id)) seen.set(id, { kind, home });
+    const before = frames.at(-1);
+    for (const [id, o] of own) {
+      const p = births.get(id);
+      if (!p || !before || truth(before, id)) continue;
+      births.delete(id);
+      (before.rows[o] ??= new Map()).set(id, { ...rows[o]!.get(id)!, p });
+      before.own.set(id, o);
+    }
     frames.push({ t, rows: rows.map((r) => r ?? undefined), own });
-    while (frames.length > 1 && frames[1]!.t <= t - DELAY_MS - TICK_MS) frames.shift();
+    while (stalls.length > 0 && stalls[0]!.to <= t - DELAY_MS - TICK_MS) stalls.shift();
+    const through = stalls[0];
+    const keep = Math.min(t, through?.from ?? t) - DELAY_MS - TICK_MS;
+    while (frames.length > 1 && frames[1]!.t <= keep) frames.shift();
     for (const [c, r] of rows.entries()) {
       const next = new Map<NetId, number>();
       for (const row of r?.values() ?? []) if (row.rest) next.set(row.id, restSince[c]?.get(row.id) ?? t);
@@ -159,11 +189,12 @@ function judges(ids: ClientId[]) {
     const off = new Map<NetId, Kind>();
     for (const [k, r] of rows.entries()) {
       for (const row of r?.values() ?? []) {
-        const d = div.get(row.id) ?? { id: row.id, kind: row.kind, moving: 0, resting: 0, exact: 0 };
+        const d = div.get(row.id) ?? { id: row.id, kind: row.kind, moving: 0, resting: 0, exact: 0, stalled: 0 };
         div.set(row.id, d);
         const o = own.get(row.id) ?? -1;
         const now = rows[o]?.get(row.id);
         if (!now || row.owner === ids[k]) continue; // this client owns it in its own view, or nobody in the game simulates it
+        if (paused[k]) continue; // a stalled client paints nothing
         const since = restSince[o]!.get(row.id);
         let far: number;
         if (since !== undefined && t - since >= 1000 && !row.inFlight) {
@@ -172,9 +203,14 @@ function judges(ids: ClientId[]) {
         } else {
           const then = poseAt(frames, row.id, t - DELAY_MS);
           if (!then) continue;
-          far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, t - DELAY_MS + TICK_MS)!;
-          d.moving = Math.max(d.moving, far);
-          d.exact = Math.max(d.exact, dist(row.p, then));
+          if (through) {
+            far = offPath(row.p, frames, row.id, through.from - DELAY_MS - TICK_MS, t)!;
+            d.stalled = Math.max(d.stalled, far);
+          } else {
+            far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, t - DELAY_MS + TICK_MS)!;
+            d.moving = Math.max(d.moving, far);
+            d.exact = Math.max(d.exact, dist(row.p, then));
+          }
         }
         if (far > VISIBLE.off) off.set(row.id, row.kind);
       }
@@ -190,7 +226,11 @@ function judges(ids: ClientId[]) {
     }
   };
   const byId = <T extends { id: string }>(m: Map<string, T>) => [...m.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
-  return { see, divergence: () => byId(div), visible: () => byId(visible), identities: (): Identities => seen };
+  const stall = (from: number, to: number) => {
+    stalls.push({ from, to });
+    [stalled.n, stalled.longest] = [stalled.n + 1, Math.max(stalled.longest, to - from)];
+  };
+  return { see, stall, stalls: () => stalled, divergence: () => byId(div), visible: () => byId(visible), identities: (): Identities => seen };
 }
 
 // A dump whose rows that did not change since the connection's last one are that one's rows, so a long
@@ -209,13 +249,14 @@ function intern(last: Map<NetId, DumpRow>, d: Dump): Dump {
 
 // Taps a connection's socket for its Wire, from its first message on: bytes, messages in, what it sends but
 // ticks, and its round table's turns. With `heist`, the heist's phase start is moved back at its fold.
-function tap({ ws, sim }: Session, heist?: number): Wire {
+function tap({ ws, sim }: Session, births: Map<NetId, V>, heist?: number): Wire {
   const w: Wire = { up: 0, down: 0, in: 0, sent: [], turns: [] };
   const send = ws.send.bind(ws);
   ws.send = (text: string) => {
     w.up += Buffer.byteLength(text);
     const m = JSON.parse(text) as GameMessage;
     if (m.type !== 'tick') w.sent.push({ at: performance.now(), m: { ...m, from: sim.me } });
+    if (m.type === 'spawn') births.set(m.id, m.p);
     send(text);
   };
   const receive = ws.onmessage!;
@@ -252,10 +293,6 @@ function minTicks(samples: Sample[], c: number, from: number, to: number): numbe
   return min;
 }
 
-// The team that plays `side` in the round the lobby starts.
-const FIRST_CATS = catsTeam(newRound());
-const teamFor = (side: Player['side']): Team => (side === 'cat' ? FIRST_CATS : FIRST_CATS === 'A' ? 'B' : 'A');
-
 // One connection of the game: its seat (the player), its session, its Wire; `in` from the frame it shows
 // every entity its owner's pose (a rejoin first holds the host's world at no pose), `gone` once closed;
 // the span it was in the game, and its tick intervals of at most two network ticks (the rate it ticks at
@@ -266,18 +303,19 @@ type Link = { c: HeadlessClient; session: Session; wire: Wire; state: 'joining' 
 // for `seconds` of real time at 60 frames a second, every connection's dump sampled each frame and judged
 // online, then the shared judges and the scenario's.
 export async function run(scenario: Scenario, clients: number, seconds: number, o: Options = {}): Promise<Result> {
-  const { ticks = 1, delay = 1, heist, rounds = 1 } = o;
+  const { ticks = 1, delay = 1, heist, rounds = 1, stall = 0 } = o;
   await init();
   const relay = await startRelay();
   const url = `ws://localhost:${relay.port}/headless`;
   const seats: HeadlessClient[] = [];
   const links: Link[] = [];
   const link = (c: HeadlessClient, state: Link['state']) => {
-    links.push({ c, session: c.session, wire: tap(c.session, heist), state, from: Infinity, to: Infinity, ticks: { last: NaN, sum: 0, n: 0 } });
+    links.push({ c, session: c.session, wire: tap(c.session, births, heist), state, from: Infinity, to: Infinity, ticks: { last: NaN, sum: 0, n: 0 } });
     ids.push(c.session.sim.me);
     last.push(new Map());
   };
   const ids: ClientId[] = [];
+  const births = new Map<NetId, V>();
   const opened: number[] = [];
   const last: Map<NetId, DumpRow>[] = [];
   try {
@@ -287,7 +325,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       link(seats[i]!, 'in');
     }
     const samples: Sample[] = [];
-    const judge = judges(ids);
+    const judge = judges(ids, births);
     // A client shows the world once it holds `ref`'s entities and its owner's pose of each it does not own:
     // a pose DELAY_MS old is set as the copy's target, and the world steps it there within two frames. No
     // level is read: whatever the level and the scenario spawned is in the other's table.
@@ -296,31 +334,27 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       entityIds(ref.sim) === entityIds(sim) &&
       [...sim.entities.keys()].every((id) => sim.ownership.rows.get(id)?.owner === sim.me || (receiver.get(id)?.[0]?.at ?? Infinity) <= now - DELAY_MS - 2 * FRAME_MS);
     // A lobby game starts once every client shows the host's world with every character in it; a round
-    // game once every client's roster sides every player as the scenario does.
-    const teamOf = (s: Session, c: HeadlessClient) => s.sim.round.roster.find((p) => p.name === c.name)?.team;
-    const sided = (s: Session) => seats.every((c) => teamOf(s, c) === teamFor(c.player.side));
+    // game once every client's roster names every player (the fold sides them at prep).
+    const named = (s: Session) => seats.every((c) => s.sim.round.roster.some((p) => p.name === c.name));
     const ready = (now: number) =>
-      scenario.round ? seats.every((c) => sided(c.session)) : seats.every((c) => shows(c.session, seats[0]!.session, now) && ids.every((id) => sideOf(c.session.sim.entities, id)));
+      scenario.round ? seats.every((c) => named(c.session)) : seats.every((c) => shows(c.session, seats[0]!.session, now) && ids.every((id) => sideOf(c.session.sim.entities, id)));
     const present = () => links.filter((l) => l.state === 'in');
     const over = () => present().every((l) => l.session.sim.round.results.length >= rounds && l.session.sim.round.phase === 'over');
     const joined = performance.now();
     let start = Infinity;
     let prev = joined;
     let next = joined;
-    let asked = false; // the host sent the scenario's sides
     let pressed = ''; // the phase and round the host last pressed its button in
     let cpu = process.cpuUsage();
+    type Stalled = { c: HeadlessClient; from: number; until: number; resume: () => void };
+    let stalled: Stalled | null = null;
+    let injected = 0;
     const now0 = performance.now.bind(performance);
     while (prev - start < seconds * 1000 && !(scenario.round && start < Infinity && over())) {
       next += FRAME_MS;
       await new Promise((r) => setTimeout(r, Math.max(0, next - performance.now())));
       const now = performance.now();
       if (now - next > 100) next = now; // behind by more than a few frames: no burst to catch up
-      const first = seats[0]!.session;
-      if (start === Infinity && scenario.round && !asked && seats.every((c) => teamOf(first, c))) {
-        asked = true;
-        for (const c of seats) if (teamOf(first, c) !== teamFor(c.player.side)) send(first, { type: 'roster', from: first.sim.me, name: c.name, team: teamFor(c.player.side) });
-      }
       if (start === Infinity && ready(now)) {
         start = now;
         cpu = process.cpuUsage();
@@ -338,12 +372,32 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
         send(h, m);
       }
       const dt = (now - prev) / 1000;
+      const turn = seats[injected % seats.length]!;
+      const tick = links.findLast((l) => l.c === turn)?.ticks.last ?? NaN;
+      const quiet = tick === prev || !(now - tick <= 2 * TICK_MS);
+      if (stall > 0 && start < Infinity && !stalled && now - start >= (injected + 1) * STALL_EVERY && turn.session && !turn.left && quiet) {
+        const ws = turn.session.ws;
+        const handler = ws.onmessage!;
+        const held: MessageEvent[] = [];
+        ws.onmessage = (e) => void held.push(e);
+        const resume = () => {
+          ws.onmessage = handler;
+          for (const e of held) handler.call(ws, e);
+        };
+        stalled = { c: turn, from: prev, until: now + stall, resume };
+        injected++;
+      }
+      let resumed: Stalled | null = null;
+      if (stalled && now >= stalled.until) {
+        stalled.resume();
+        [resumed, stalled] = [stalled, null];
+      }
       for (const c of seats) {
-        if (!c.session) continue; // its new tab is still connecting
+        if (!c.session || stalled?.c === c) continue; // its new tab is still connecting, or it is stalled
         const l = links.findLast((x) => x.c === c)!;
         const sent = c.session.ticks;
         if (delay !== 1) performance.now = () => now0() + DELAY_MS * (1 - delay); // interpolation shows a pose this much later
-        const act = playHeadless(c, (now - start) / 1000, dt);
+        const act = playHeadless(c, (now - start) / 1000, resumed?.c === c ? (now - resumed.from) / 1000 : dt);
         performance.now = now0;
         if (c.session.ticks > sent) {
           if (ticks > 0 && ticks < 1) c.session.lastTick += TICK_MS * (1 / ticks - 1);
@@ -372,14 +426,16 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       if (start === Infinity) continue;
       const dumps = links.map((l, i) => (l.state === 'in' ? intern(last[i]!, dump(l.session.sim)) : null));
       const intents = links.map((l) => (l.state === 'in' ? l.c.intent : IDLE));
+      if (dt * 1000 > STALL_MS) judge.stall(now - dt * 1000, now);
       const cues = links.map((l) => l.state === 'in' && whisker(l.session.sim));
       samples.push({ t: now, dumps, events, ticks: links.map((l) => l.session.ticks), intents, cues });
-      judge.see(now, dumps);
+      judge.see(now, dumps, links.map((l) => l.c === stalled?.c && l.session === l.c.session));
     }
     const s = (prev - start) / 1000;
     const used = process.cpuUsage(cpu);
     await new Promise((r) => setTimeout(r, 100)); // what is still in flight is folded everywhere
     const here = present();
+    const sides = (s: Session) => seats.map((c) => s.sim.round.roster.find((p) => p.name === c.name)?.side);
     const traffic = links.map((l, i) => {
       const [from, to] = [Math.max(l.from, start), Math.min(l.to, prev)];
       const span = Math.max(to - from, 1) / 1000;
@@ -408,9 +464,11 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const verdict = scenario.judge?.({ samples, wires: links.map((l) => l.wire), ids, seats: seatOf, opened, ends: ended, start, ...(heist !== undefined && { heist }) }) ?? { lines: [], ok: true };
     const r = {
       divergence: div,
+      stalls: judge.stalls(),
+      injected,
       visible,
       clients: traffic,
-      sidesAgree: scenario.round ? here.every((l) => sided(l.session)) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
+      sidesAgree: scenario.round ? here.every((l) => JSON.stringify(sides(l.session)) === JSON.stringify(sides(here[0]!.session))) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
       tablesAgree: ends.every((t) => isDeepStrictEqual(t, ends[0])),
       roundsAgree: tables.every((t) => isDeepStrictEqual(t, tables[0])),
       claims: claims.length,
@@ -419,7 +477,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       relayOut,
       cpu: (used.user + used.system) / 1000 / (prev - start),
     };
-    const bad = div.some((d) => d.moving > MOVING_MAX || d.resting > RESTING_MAX) || visible.reduce((n, v) => n + v.n, 0) > VISIBLE.max;
+    const bad = div.some((d) => d.moving > MOVING_MAX || d.stalled > MOVING_MAX || d.resting > RESTING_MAX) || visible.reduce((n, v) => n + v.n, 0) > VISIBLE.max;
     const ok = !bad && r.sidesAgree && r.tablesAgree && r.roundsAgree && r.doomed === 0 && errors.length === 0 && verdict.ok;
     return { ...r, verdict: { lines: [...errors, ...verdict.lines], ok: verdict.ok }, code: ok ? 0 : 1 };
   } finally {

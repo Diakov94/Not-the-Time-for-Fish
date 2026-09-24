@@ -1,16 +1,18 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, RigidBody, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import type { Level } from '../content/level.ts';
 import { wear } from '../art/cosmetics.ts';
-import { emote, pose, type Facts, type Rig } from '../art/rig.ts';
+import { band, emote, pose, type Facts, type Rig } from '../art/rig.ts';
+import { settings } from '../settings/store.ts';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEPS } from '../sim/events.ts';
 import { hidden } from '../sim/hiding.ts';
-import { stunned } from '../sim/mines.ts';
+import { soakedUntil, stunnedUntil } from '../sim/mines.ts';
 import { speedsOf, yawOf } from '../sim/movement.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
-import { buildLook, debrisLook, lookOf, wornOf } from './looks.ts';
+import { buildLook, debrisLook, freeLooks, lookOf, wornOf } from './looks.ts';
 import { createJuice, drawJuice, samples, type Juice } from './juice.ts';
 import { createMarkers, drawMarkers, type Markers } from './markers.ts';
 import { createSenses, drawSenses, type Senses } from './senses.ts';
@@ -28,7 +30,10 @@ export type View = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  orbit: THREE.Vector3; // the point the camera orbited on the last frame drawn: where the player is (the ear)
   objects: Map<NetId, THREE.Object3D>;
+  level: Level; // the content level drawn, the sim's `level` as of the last frame drawn
+  parts: THREE.Group; // that level's statics, doors, points and volumes
   doors: THREE.Object3D[]; // the level's door panels, index for index with the sim's door bodies
   debris: THREE.Object3D[]; // the level's debris, index for index with the sim's local debris bodies
   senses: Senses;
@@ -41,14 +46,16 @@ export type View = {
 // peek put out of sight.
 type Peek = { from: THREE.Vector3; turn: THREE.Quaternion; until: number; unseen: THREE.Object3D | null };
 
-const DISTANCE = 6; // m from the camera to the point above the character it looks at
-const EYE = 1; // m: that point's height above the character's centre
+// A party game's framing (the camera card): at 1280x720 the own cat spans 23 % of the height and a mine's
+// 0.1 m at its feet 24 px at 1080p (at 6 m and 1 m: 11 % and 13 px); the price is the dogs' overview, 6.4 m
+// of ground across at the character's depth instead of 13.2 m.
+const DISTANCE = 2.8; // m from the camera to the point above the character it looks at
+const EYE = 0.7; // m: that point's height above the character's centre
 const LENS = new RAPIER.Ball(0.2); // what the camera keeps clear of a wall: twice its near plane
 const NO_TURN = { x: 0, y: 0, z: 0, w: 1 };
 const PEEK_EYE = 0.25; // m above the cat's centre: its head, under a 0.8 m box's top
 const BLEND = 0.25; // s from the peek view back to the orbit
 
-// The level drawn is the content the sim's world was built from (`sim.level`).
 export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -58,25 +65,33 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
   const sun = new THREE.DirectionalLight(0xffffff, 2);
   sun.position.set(4, 10, -3);
   scene.add(sun);
-  const doors = drawLevel(scene, sim.level);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
   camera.position.set(0, 12, -14);
   camera.lookAt(0, 0, 0);
-  const debris = sim.debris.map((d) => {
-    const o = debrisLook(sim, d);
-    scene.add(o);
-    return o;
-  });
-  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers(), peek: { from: new THREE.Vector3(), turn: new THREE.Quaternion(), until: -Infinity, unseen: null } };
+  const view = { renderer, scene, camera, orbit: new THREE.Vector3(), objects: new Map(), level: sim.level, parts: new THREE.Group(), doors: [], debris: [], senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers(), peek: { from: new THREE.Vector3(), turn: new THREE.Quaternion(), until: -Infinity, unseen: null } };
+  drawLevelOf(view, sim);
+  return view;
+}
+
+// The level drawn is the content the sim's world was built from (`sim.level`), and it follows the world
+// when the round's map rebuilds it at prep (card 142): the old level's parts and debris are dropped and
+// freed, the new level is drawn in its map's theme, with its door and debris indices anew.
+function drawLevelOf(view: View, sim: Sim): void {
+  const { scene, work } = view;
+  freeLooks(scene, [view.parts, ...view.debris]);
+  const { parts, doors } = drawLevel(sim.level, sim.levels);
+  const debris = sim.debris.map((d) => debrisLook(sim, d));
+  scene.add(parts, ...debris);
+  Object.assign(view, { level: sim.level, parts, doors, debris });
   // Every effect's shader compiles now, not on the frame that first shows it (card 57: the first blast's
-  // frame took 96 ms): one of each is added and the hidden overlays shown while the scene compiles.
+  // frame took 96 ms), and again for a new level's theme: one of each is added and the hidden overlays
+  // shown while the scene compiles.
   const effects = samples();
   scene.add(...effects);
-  view.work.stars.visible = view.work.ring.visible = true;
-  renderer.compile(scene, camera);
+  work.stars.visible = work.ring.visible = true;
+  view.renderer.compile(scene, view.camera);
   scene.remove(...effects);
-  view.work.stars.visible = view.work.ring.visible = false;
-  return view;
+  work.stars.visible = work.ring.visible = false;
 }
 
 const size = new THREE.Vector2();
@@ -95,16 +110,24 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
+  if (view.level !== sim.level) drawLevelOf(view, sim);
   const lag = STEP - sim.accumulator;
+  const { palette, reducedMotion } = settings(); // this viewer's choices (ADR 0012), read once a frame
+  const gone: THREE.Object3D[] = [];
   for (const e of sim.entities.values()) {
     const o = objects.get(e.id);
     // A character whose look the roster changed is built anew.
-    if (o?.userData.look !== undefined && o.userData.look !== lookOf(sim, e)) scene.remove(o);
+    if (o?.userData.look !== undefined && o.userData.look !== lookOf(sim, e)) {
+      scene.remove(o);
+      gone.push(o);
+    }
     const drawn = o && o.parent ? o : add(view, sim, e);
     place(drawn, e.body, lag);
     const rig = drawn.userData.rig as Rig | undefined;
     if (rig) {
       wear(rig, wornOf(sim, e));
+      // The band shows the side (card 117 after ADR 0014: A the cats, B the dogs); the side is the kind.
+      band(rig, e.kind === 'cat' ? 'A' : e.kind === 'dog' ? 'B' : undefined, palette);
       pose(rig, facts(sim, e), sim.time);
     }
   }
@@ -119,11 +142,13 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   sim.debris.forEach((d, i) => place(view.debris[i]!, d.body, lag));
   for (const [id, o] of objects) {
     if (sim.entities.has(id)) continue;
-    scene.remove(o);
+    gone.push(o);
     objects.delete(id);
   }
+  freeLooks(scene, gone);
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
+  if (at) view.orbit.copy(at);
   const shake = drawJuice(view.juice, sim, scene, camera, at);
   const e = typeof target === 'string' ? sim.entities.get(target) : undefined;
   if (view.peek.unseen) view.peek.unseen.visible = true;
@@ -131,7 +156,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   if (o && e?.kind === 'cat' && e.home === sim.me && hidden(sim, e)) peek(view, sim, o, e);
   else if (at) {
     follow(camera, sim, at, o ? EYE : 0, look, e?.body, shake);
-    const k = Math.max(0, (view.peek.until - sim.time) / BLEND);
+    const k = reducedMotion ? 0 : Math.max(0, (view.peek.until - sim.time) / BLEND); // instant under reduced motion
     camera.position.lerp(view.peek.from, k * k * (3 - 2 * k));
     camera.quaternion.slerp(view.peek.turn, k * k * (3 - 2 * k));
   }
@@ -151,8 +176,8 @@ function add(view: View, sim: Sim, e: Entity): THREE.Object3D {
 }
 
 // What the sim says a character is doing this frame (ADR 0011), for its rig: its speed over the ground
-// from its body, its side's stride and paces, the ownership table's holds, and the queries' stun (its own
-// client's fact, so only the own cat's) and hiding.
+// from its body, its side's stride and paces, the ownership table's holds, and the queries' stun and
+// wetness (every character's: a slipped dog tumbles, a soaked cat drips on every screen) and hiding.
 function facts(sim: Sim, e: Entity): Facts {
   const v = e.body.linvel();
   const s = speedsOf(e);
@@ -164,8 +189,9 @@ function facts(sim: Sim, e: Entity): Facts {
     pace: { sneak: s.sneak, walk: s.walk },
     carrying,
     held: sim.ownership.rows.get(e.id)?.held ?? false,
-    stunned: e.home === sim.me && stunned(sim),
+    stunned: sim.time < stunnedUntil(sim, e),
     hidden: e.kind === 'cat' && hidden(sim, e),
+    wet: e.kind === 'cat' && sim.time < soakedUntil(sim, e),
   };
 }
 
@@ -188,7 +214,7 @@ export function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
 // camera leaves the orbit for a fixed view from the cat's head, inside the spot, looking level toward
 // where the cat last stood outside one (the sim's `outside`): out of the way it came in, never through
 // the spot's walls. The cat's own look is out of sight meanwhile. Leaving, the camera blends back to the
-// orbit over BLEND.
+// orbit over BLEND, or at once under reduced motion.
 function peek(view: View, sim: Sim, o: THREE.Object3D, cat: Entity): void {
   const { camera, peek } = view;
   camera.position.set(o.position.x, o.position.y + PEEK_EYE, o.position.z);

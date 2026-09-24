@@ -3,9 +3,10 @@ import WebSocket from 'ws';
 import { startRelay } from './node.ts';
 
 // A socket whose reader stops (a laptop lid: no close frame, TCP still up) answers no ping; the other
-// member, which reads on, hears its `left` from the relay.
+// member, which reads on, hears its `left` from the relay. The ping runs at 50 ms and gives up after
+// 150 ms here, not the relay's 5 s and 15 s, so the test takes a fraction of a second of real time.
 test('a paused socket is announced left to the others within 20 s', { timeout: 30000 }, async () => {
-  const relay = await startRelay();
+  const relay = await startRelay(0, { pingMs: 50, deadMs: 150 });
   const url = `ws://localhost:${relay.port}/dead`;
   const open = () =>
     new Promise<WebSocket>((done) => {
