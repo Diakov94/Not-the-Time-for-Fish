@@ -117,7 +117,7 @@ const script = (c: HeadlessClient): Script => {
 // The i-th player's side by GAME.md's auto-balance, asked of the round's own rule.
 function balanced(i: number): Side {
   const r = newRound();
-  r.roster = Array.from({ length: i + 1 }, (_, j) => ({ name: `p${j}`, team: null, client: null, looks: {}, captured: null }));
+  r.roster = Array.from({ length: i + 1 }, (_, j) => ({ name: `p${j}`, team: null, client: null, looks: {}, worn: {}, captured: null }));
   return autoTeam(r, `p${i}`) === catsTeam(r) ? 'cat' : 'dog';
 }
 

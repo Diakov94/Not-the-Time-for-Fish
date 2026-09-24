@@ -187,11 +187,11 @@ function remove(sim: Sim, id: NetId): void {
   sim.inFlight.delete(id);
 }
 
-// ADR 0006's and 0010's messages. A noise and a bark are events for everyone; a mark only for the marker's
-// side. Every cat's client answers a bark for its own cat. A mine's spawn, or a trap's with a home, is a
+// ADR 0006's and 0010's messages. A noise, a bark and an emote (ADR 0013) are events for everyone; a mark
+// only for the marker's side. Every cat's client answers a bark for its own cat. A mine's spawn, or a trap's with a home, is a
 // plant where it was put (card 55).
 function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: ClientId): void {
-  if (m.type === 'noise' || m.type === 'mark' || m.type === 'bark') {
+  if (m.type === 'noise' || m.type === 'mark' || m.type === 'bark' || m.type === 'emote') {
     if (m.type !== 'mark' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
     if (m.type === 'bark') barked(sim, m);
     return;
