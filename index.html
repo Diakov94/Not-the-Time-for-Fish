@@ -156,27 +156,135 @@
         min-height: 1.3em;
         color: var(--star);
       }
-      .lobby [aria-pressed='true'] {
-        outline: 2px solid var(--star);
+      .lobby header,
+      .lobby .teams,
+      .lobby footer {
+        box-sizing: border-box;
+        width: min(100%, 66em);
       }
-      .teams {
+      .lobby header {
         display: flex;
-        gap: 24px;
+        align-items: center;
+        gap: 1em;
       }
-      .teams section {
+      .lobby h1 {
+        flex: 1;
+        font-size: 1.8em;
+      }
+      .lobby .teams {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1em;
+      }
+      .side {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        width: 360px;
+        gap: 0.5em;
+        min-width: 0;
+        padding: 0.7em 0.8em;
+        background: color-mix(in srgb, var(--ink) 25%, transparent);
+        border: 0.12em solid color-mix(in srgb, var(--linen) 25%, transparent);
+        border-radius: 1em;
       }
-      .teams button,
-      .teams p {
-        text-align: left;
+      .side h2 {
+        align-self: flex-start;
+        padding: 0.15em 0.6em;
+        border-radius: 0.4em;
       }
-      .looks {
+      .team-a h2 {
+        background: var(--team-a);
+        color: var(--ink);
+      }
+      .team-b h2 {
+        background: var(--team-b);
+        color: var(--paper);
+      }
+      .side h3 {
+        margin: 0;
+        font-size: 0.85em;
+      }
+      .side .players {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4em;
+      }
+      .screen .player {
+        box-sizing: border-box;
         display: flex;
-        gap: 6px;
+        flex-wrap: wrap;
         align-items: center;
+        column-gap: 0.4em;
+        min-height: 44px;
+        padding: 0.2em 0.5em;
+        font-size: 0.85em;
+        text-align: left;
+        color: var(--paper);
+        background: color-mix(in srgb, var(--paper) 10%, transparent);
+        border: 0.12em solid transparent;
+        border-radius: 0.5em;
+        box-shadow: none;
+      }
+      .screen button.player:hover {
+        background: color-mix(in srgb, var(--paper) 20%, transparent);
+        border-color: var(--star);
+      }
+      .player img {
+        width: 2.2em;
+        height: 2.2em;
+      }
+      .player b {
+        overflow-wrap: anywhere;
+      }
+      .player span,
+      .player small {
+        font-size: 0.85em;
+        opacity: 0.8;
+      }
+      .pick .row {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 0.35em;
+      }
+      .screen .character {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.1em;
+        min-width: 0;
+        padding: 0.3em 0.1em;
+        font-size: 0.7em;
+        line-height: 1.15;
+        background: var(--linen);
+        overflow-wrap: break-word;
+      }
+      .screen .character[aria-pressed='true'] {
+        background: var(--star);
+        outline: 0.2em solid var(--paper);
+      }
+      .character img {
+        width: 100%;
+        max-width: 5em;
+        aspect-ratio: 1;
+      }
+      .signature {
+        min-height: 2.4em;
+        font-size: 0.75em;
+        opacity: 0.9;
+      }
+      .lobby footer {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+      }
+      .lobby footer .tip {
+        flex: 1;
+        font-size: 0.8em;
+        opacity: 0.85;
+      }
+      .lobby .start {
+        padding: 0.5em 1.4em;
+        font-size: 1.15em;
       }
       .host {
         display: flex;
