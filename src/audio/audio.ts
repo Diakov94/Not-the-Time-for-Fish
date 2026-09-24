@@ -3,20 +3,23 @@ import { volumeAt } from '../sim/build.ts';
 import { isCharacter, type ClientId, type Entity, type NetId } from '../sim/entities.ts';
 import type { SimEvent } from '../sim/events.ts';
 import { SPEED } from '../sim/movement.ts';
+import { tension } from '../sim/tension.ts';
 import type { Sim } from '../sim/world.ts';
 import { ambience, surround, type Ambience } from './ambience.ts';
+import { music, sequence, wanted, type Music } from './music.ts';
 import { pant, SOUNDS, whiteNoise, type Kit, type Pant, type Sound } from './sfx.ts';
 
 // Where the listener stands and faces: the camera's pose (render's camera is one).
 export type Ear = { position: Vec3; quaternion: Vec3 & { w: number } };
 
-type Graph = { kit: Kit & { ctx: AudioContext }; master: GainNode; meters: AnalyserNode[]; pants: Map<NetId, Pant & { at: PannerNode }>; ambience: Ambience };
+type Graph = { kit: Kit & { ctx: AudioContext }; master: GainNode; meters: AnalyserNode[]; pants: Map<NetId, Pant & { at: PannerNode }>; ambience: Ambience; music: Music };
 
-// The game's sound, a view of the sim (ADR 0008): every frame it reads the event list, the entity and
-// ownership tables and the sim's volume query, and keeps no fact beyond the voices it plays. The graph is
-// made on the first click (the browser's autoplay rule); M mutes it, a per-viewer setting. With `?audio`
-// in the address a dev readout shows the master bus's peak, the worst lag from an impact's frame to its
-// sound leaving the speakers, and what `hear` costs the main thread per frame.
+// The game's sound, a view of the sim (ADR 0008): every frame it reads the event list, the entity,
+// ownership and round tables and the sim's volume and tension queries, and keeps no fact beyond the voices
+// it plays and the music's scheduler. The graph is made on the first click (the browser's autoplay rule);
+// M mutes it, a per-viewer setting. With `?audio` in the address a dev readout shows the master bus's
+// peak, the worst lag from an impact's frame to its sound leaving the speakers, and what `hear` costs the
+// main thread per frame.
 export type Audio = { graph: Graph | null; muted: boolean; readout: HTMLElement | null; peak: number; lag: number; cost: { sum: number; max: number; frames: number } };
 
 const REF = 2; // m: a voice nearer than this is at full level; farther, it falls as REF / distance
@@ -56,7 +59,7 @@ function start(muted: boolean): Graph {
     return meter;
   });
   const kit = { ctx, noise: whiteNoise(ctx) };
-  return { kit, master, meters, pants: new Map(), ambience: ambience(kit, master) };
+  return { kit, master, meters, pants: new Map(), ambience: ambience(kit, master), music: music(kit, master) };
 }
 
 // Once per frame, after the sim stepped and before the loop drains the event list.
@@ -70,6 +73,7 @@ export function hear(audio: Audio, sim: Sim, ear: Ear): void {
   // The player's body in the house, by the sim's volume query; the yard while it has no body.
   const me = characterOf(sim, sim.me);
   surround(g.ambience, g.kit, me !== undefined && volumeAt(sim, 'house', me.body.translation()) >= 0);
+  sequence(g.music, g.kit, wanted(sim.round.phase, tension(sim)));
   const cost = performance.now() - now;
   audio.cost = { sum: audio.cost.sum + cost, max: Math.max(audio.cost.max, cost), frames: audio.cost.frames + 1 };
   if (audio.readout) show(audio, g);
