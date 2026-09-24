@@ -16,7 +16,7 @@ export const walls = { ...prototypeRoom, props: [] }; // the Prototype room with
 export const west: Intent = { move: { x: -1, z: 0 }, sprint: false, jump: false };
 export const north: Intent = { move: { x: 0, z: 1 }, sprint: false, jump: false };
 export const south: Intent = { move: { x: 0, z: -1 }, sprint: false, jump: false };
-let relay: Relay | undefined;
+export let relay: Relay | undefined;
 export let url = '';
 export let sessions: Session[] = [];
 let names = 0; // every client of a test run hellos with a name of its own

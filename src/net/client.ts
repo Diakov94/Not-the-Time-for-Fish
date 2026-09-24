@@ -12,6 +12,9 @@ import { interpolate, receiveTick, tick, TICK_MS, type Receiver, type Rested } f
 export type Session = {
   sim: Sim;
   ws: WebSocket;
+  // Settles once, on the socket's close, whatever closed it (the relay, the network, this client), with the
+  // close code: the room is gone for this client. No game fact is in it; what to show is the caller's.
+  closed: Promise<number>;
   host: ClientId; // the relay's fact, as its `welcome` and `left` state it
   owed: Set<ClientId>; // joiners whose `joined` this client saw and whose `state` it has not
   rested: Rested;
@@ -34,6 +37,7 @@ export type Refused = Error & { code: 'refused'; player: string; reason: Refusal
 // `levels` are the maps by name the host may pick (card 128); the world starts from `level`.
 export function connect(url: string, level: Level, name: string, levels: Record<string, Level> = {}): Promise<Session> {
   const ws = new WebSocket(url);
+  const closed = new Promise<number>((done) => ws.addEventListener('close', (e) => done(e.code)));
   return new Promise((resolve, reject) => {
     ws.onerror = () => reject(new Error(`no relay at ${url}`));
     let s: Session;
@@ -47,7 +51,7 @@ export function connect(url: string, level: Level, name: string, levels: Record<
       if (m.type === 'hello' && m.from === s.sim.me) mine = m.seq;
       if (m.type === 'welcome') {
         const sim = createWorld(level, m.you, levels);
-        s = { sim, ws, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), lastTick: 0, ticks: 0 };
+        s = { sim, ws, closed, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), lastTick: 0, ticks: 0 };
         hello();
         if (m.host !== m.you) return;
         held = null;
@@ -154,8 +158,10 @@ export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: numb
 // the frame that sent it, so the mean interval is TICK_MS at any frame rate; after a stall of more than a
 // tick the schedule starts again from now. A tick waits for a
 // frame the sim stepped in: before its first step, a body the fold just gave this client (a grabbed
-// cat) still stands at its copy's pose, which is not this client's.
+// cat) still stands at its copy's pose, which is not this client's. Once the socket is closing or closed
+// (`closed`), a frame steps nothing and sends nothing: nobody hears this world any more.
 export function frame(s: Session, dt: number, intent: Intent): void {
+  if (s.ws.readyState !== WebSocket.OPEN) return;
   const now = performance.now();
   const time = s.sim.time;
   for (const claim of step(s.sim, dt, intent, s.host, (left) => interpolate(s.sim, s.receiver, now - left * 1000))) send(s, claim);

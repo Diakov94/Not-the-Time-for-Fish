@@ -5,11 +5,11 @@ import { grab } from '../sim/grab.ts';
 import { IDLE } from '../sim/movement.ts';
 import { playerOf, remaining } from '../sim/round.ts';
 import { connect, send, spawn, type Refused, type Session } from './client.ts';
-import { facts, join, leave, play, room, same, sessions, url, walls, west } from './clients.test.ts';
+import { facts, join, leave, play, relay, room, same, sessions, url, walls, west } from './clients.test.ts';
 
 // Join and state, and what the others' ticks show: a joiner holds the host's table, round and every pose
-// from its owner; the next host answers when the host leaves; a copy follows its owner, a resting body
-// sends nothing, and an impact between two owners' crates is one noise.
+// from its owner; the next host answers when the host leaves; a client learns its relay is gone; a copy
+// follows its owner, a resting body sends nothing, and an impact between two owners' crates is one noise.
 
 test('a crate moved on one client shows on the other within 150 ms', async () => {
   const [a, b] = await room(2);
@@ -187,6 +187,33 @@ test("a joiner whose host leaves before answering holds the next host's table an
   console.log(`joiner orphaned by its host matched the next host ${ms.toFixed(0)} ms after the left`);
   expect(c && facts(c)).toEqual(facts(b!));
   expect(ms).toBeLessThanOrEqual(500);
+});
+
+// The review's sequence (card bug-net-socket-close-unnoticed): the relay dies under a client whose cat
+// walks. Its next 30 frames counted 11 ticks as sent and stepped the cat 2 m on, into a closed socket.
+test('the relay closes under a walking client: its session reports closed within 100 ms, and 30 frames then step and send nothing', async () => {
+  const [a] = await room(1);
+  const cat = spawn(a!, 'cat', { x: 0, y: 1, z: 0 });
+  await play(500, () => a!.sim.entities.has(cat));
+  await play(200, undefined, undefined, () => west);
+  let closedAt = Infinity;
+  void a!.closed.then(() => (closedAt = performance.now()));
+  const t0 = performance.now();
+  await relay!.close();
+  await play(100, () => closedAt < Infinity, undefined, () => west);
+  const ticks = a!.ticks;
+  const x = a!.sim.entities.get(cat)!.body.translation().x;
+  let sent = 0;
+  const send0 = a!.ws.send.bind(a!.ws);
+  a!.ws.send = (d) => (sent++, send0(d));
+  let frames = 0;
+  await play(1000, () => frames === 30, () => frames++, () => west);
+  const moved = Math.abs(a!.sim.entities.get(cat)!.body.translation().x - x);
+  console.log(`closed ${(closedAt - t0).toFixed(0)} ms after the relay; the next ${frames} frames: ${a!.ticks - ticks} ticks counted, ${sent} messages sent, the cat ${moved.toFixed(2)} m on`);
+  expect(closedAt - t0).toBeLessThanOrEqual(100);
+  expect(a!.ticks - ticks).toBe(0);
+  expect(sent).toBe(0);
+  expect(moved).toBe(0);
 });
 
 // The host drops its first `drops` states and leaves at the next one, so nobody left holds the world.
