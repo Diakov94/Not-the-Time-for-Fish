@@ -24,6 +24,7 @@ const FRAME_MS = 1000 / 60; // the runner's loop: a 60 Hz display's frames
 // A runner frame more than a network tick after the last is a stall of the runner's own process: every
 // client and the relay stopped at once, which no session has (card bug-net-round-at-six-clients-...).
 export const STALL_MS = TICK_MS;
+const STALL_EVERY = 2000; // ms between the stalls `stall` injects
 
 // A scenario, one file each: the level, what its host spawns beside the level's crates, and each
 // client's player by join order (the first joins as the host) on the level the game runs. Its judge adds its own checks to the
@@ -45,8 +46,13 @@ export type Verdict = { lines: string[]; ok: boolean };
 // The runner's knobs, none of them a norm of the game: the tick sender's rate and the interpolation delay
 // as fractions of TICK_MS's rate and DELAY_MS (card 66's negatives; `ticks: 0` sends none, card 11's), the
 // heist's length for a round scenario (card 63: every client's phase start is moved back at its heist's
-// fold, so the host's clock ends it sooner), and how many rounds a round scenario plays.
-export type Options = { ticks?: number; delay?: number; heist?: number; rounds?: number };
+// fold, so the host's clock ends it sooner), how many rounds a round scenario plays, and `stall`: every
+// STALL_EVERY one client in turn stalls this many ms, as a busy tab does: no frames, its messages held
+// until it resumes, then the whole gap in one frame. It paints nothing meanwhile, so its copies are not
+// judged; its own bodies stand still, the truth the others' copies are held against. A stall starts
+// after a frame the client ticked in, or while it sends none: what an owner moves between its last tick
+// and a stall never leaves it (up to a tick's motion, 0.45 m at a dog's sprint), and no copy can show it.
+export type Options = { ticks?: number; delay?: number; heist?: number; rounds?: number; stall?: number };
 
 // Every frame of the game, per connection in join order (a rejoin is a connection of its own): its dump
 // (its fold's table and every pose; null while it is not in the game), the events it drained, the ticks it
@@ -70,6 +76,7 @@ export type Traffic = { id: ClientId; side?: Kind; ticks: number; minTicks: numb
 export type Result = {
   divergence: Divergence[];
   stalls: { n: number; longest: number }; // the runner's own stalls, and the longest, ms
+  injected: number; // the client stalls `stall` injected
   visible: { id: NetId; kind: Kind; n: number }[]; // visible desyncs by entity
   clients: Traffic[];
   sidesAgree: boolean; // every client sees every client's side as the scenario gave it
@@ -156,7 +163,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
   const restSince: Map<NetId, number>[] = []; // per connection: since when its body of each entity has slept
   const offSince = new Map<NetId, { at: number; counted: boolean }>();
   const visible = new Map<NetId, { id: NetId; kind: Kind; n: number }>();
-  const see = (t: number, dumps: (Dump | null)[]) => {
+  const see = (t: number, dumps: (Dump | null)[], paused: boolean[]) => {
     const rows = dumps.map((d) => d && new Map(d.entities.map((e) => [e.id, e])));
     const own = new Map<NetId, number>();
     for (const [c, r] of rows.entries()) for (const row of r?.values() ?? []) if (row.owner === ids[c] && !own.has(row.id)) own.set(row.id, c);
@@ -187,6 +194,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
         const o = own.get(row.id) ?? -1;
         const now = rows[o]?.get(row.id);
         if (!now || row.owner === ids[k]) continue; // this client owns it in its own view, or nobody in the game simulates it
+        if (paused[k]) continue; // a stalled client paints nothing
         const since = restSince[o]!.get(row.id);
         let far: number;
         if (since !== undefined && t - since >= 1000 && !row.inFlight) {
@@ -299,7 +307,7 @@ type Link = { c: HeadlessClient; session: Session; wire: Wire; state: 'joining' 
 // for `seconds` of real time at 60 frames a second, every connection's dump sampled each frame and judged
 // online, then the shared judges and the scenario's.
 export async function run(scenario: Scenario, clients: number, seconds: number, o: Options = {}): Promise<Result> {
-  const { ticks = 1, delay = 1, heist, rounds = 1 } = o;
+  const { ticks = 1, delay = 1, heist, rounds = 1, stall = 0 } = o;
   await init();
   const relay = await startRelay();
   const url = `ws://localhost:${relay.port}/headless`;
@@ -344,6 +352,9 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     let asked = false; // the host sent the scenario's sides
     let pressed = ''; // the phase and round the host last pressed its button in
     let cpu = process.cpuUsage();
+    type Stalled = { c: HeadlessClient; from: number; until: number; resume: () => void };
+    let stalled: Stalled | null = null;
+    let injected = 0;
     const now0 = performance.now.bind(performance);
     while (prev - start < seconds * 1000 && !(scenario.round && start < Infinity && over())) {
       next += FRAME_MS;
@@ -372,12 +383,32 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
         send(h, m);
       }
       const dt = (now - prev) / 1000;
+      const turn = seats[injected % seats.length]!;
+      const tick = links.findLast((l) => l.c === turn)?.ticks.last ?? NaN;
+      const quiet = tick === prev || !(now - tick <= 2 * TICK_MS);
+      if (stall > 0 && start < Infinity && !stalled && now - start >= (injected + 1) * STALL_EVERY && turn.session && !turn.left && quiet) {
+        const ws = turn.session.ws;
+        const handler = ws.onmessage!;
+        const held: MessageEvent[] = [];
+        ws.onmessage = (e) => void held.push(e);
+        const resume = () => {
+          ws.onmessage = handler;
+          for (const e of held) handler.call(ws, e);
+        };
+        stalled = { c: turn, from: prev, until: now + stall, resume };
+        injected++;
+      }
+      let resumed: Stalled | null = null;
+      if (stalled && now >= stalled.until) {
+        stalled.resume();
+        [resumed, stalled] = [stalled, null];
+      }
       for (const c of seats) {
-        if (!c.session) continue; // its new tab is still connecting
+        if (!c.session || stalled?.c === c) continue; // its new tab is still connecting, or it is stalled
         const l = links.findLast((x) => x.c === c)!;
         const sent = c.session.ticks;
         if (delay !== 1) performance.now = () => now0() + DELAY_MS * (1 - delay); // interpolation shows a pose this much later
-        const act = playHeadless(c, (now - start) / 1000, dt);
+        const act = playHeadless(c, (now - start) / 1000, resumed?.c === c ? (now - resumed.from) / 1000 : dt);
         performance.now = now0;
         if (c.session.ticks > sent) {
           if (ticks > 0 && ticks < 1) c.session.lastTick += TICK_MS * (1 / ticks - 1);
@@ -409,7 +440,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       if (dt * 1000 > STALL_MS) judge.stall(now - dt * 1000, now);
       const cues = links.map((l) => l.state === 'in' && whisker(l.session.sim));
       samples.push({ t: now, dumps, events, ticks: links.map((l) => l.session.ticks), intents, cues });
-      judge.see(now, dumps);
+      judge.see(now, dumps, links.map((l) => l.c === stalled?.c && l.session === l.c.session));
     }
     const s = (prev - start) / 1000;
     const used = process.cpuUsage(cpu);
@@ -444,6 +475,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const r = {
       divergence: div,
       stalls: judge.stalls(),
+      injected,
       visible,
       clients: traffic,
       sidesAgree: scenario.round ? here.every((l) => sided(l.session)) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
