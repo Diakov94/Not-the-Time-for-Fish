@@ -86,6 +86,17 @@ type Frame = { t: number; rows: (Map<NetId, DumpRow> | undefined)[]; own: Map<Ne
 
 const dist = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
+// Two desync dumps (the report hotkey's files) against each other: per entity in either, the distance
+// between its two poses, Infinity when one dump does not hold it; the visible bar is VISIBLE.off.
+export function compareDumps(a: Dump, b: Dump): { id: NetId; kind: Kind; d: number }[] {
+  const rows = [a, b].map((x) => new Map(x.entities.map((e) => [e.id, e])));
+  const ids = [...new Set([...rows[0]!.keys(), ...rows[1]!.keys()])].sort();
+  return ids.map((id) => {
+    const [p, q] = rows.map((r) => r.get(id));
+    return { id, kind: (p ?? q)!.kind, d: p && q ? dist(p.p, q.p) : Infinity };
+  });
+}
+
 // The last frame at or before `t`, by bisection (-1 if none).
 function indexAt(frames: { t: number }[], t: number): number {
   let lo = -1;

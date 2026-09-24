@@ -1,7 +1,8 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { Level } from '../../src/content/level.ts';
-import { MOVING_MAX, RESTING_MAX, run, VISIBLE, type Scenario } from './run.ts';
+import type { Dump } from '../../src/net/dump.ts';
+import { compareDumps, MOVING_MAX, RESTING_MAX, run, VISIBLE, type Scenario } from './run.ts';
 
 // Found by file name, no record lists them (ADR 0011): a scenario is `scenarios/<name>.ts` with its
 // Scenario as the default export (the bots' helpers there have none); a map is
@@ -17,7 +18,7 @@ const mapOf = async (name: string): Promise<Level | undefined> => (await load(MA
 // judge fails, 2 for a scenario or a map it does not know. `--map <name>` plays the scenario on that map
 // instead of its own. A round scenario takes `--heist S` (the heist's length) and `--rounds N`;
 // `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay.
-const { values } = parseArgs({
+const { values, positionals } = parseArgs({
   options: {
     scenario: { type: 'string', default: 'default' },
     map: { type: 'string' },
@@ -27,8 +28,21 @@ const { values } = parseArgs({
     rounds: { type: 'string', default: '1' },
     'tick-rate': { type: 'string', default: '1' },
     delay: { type: 'string', default: '1' },
+    compare: { type: 'boolean' },
   },
+  allowPositionals: true,
 });
+// `--compare a.json b.json`: two desync dumps by the visible bar, no game; exit 1 when an entity is over it.
+if (values.compare) {
+  const [a, b] = positionals.map((f) => JSON.parse(readFileSync(f, 'utf8')) as Dump);
+  const rows = compareDumps(a!, b!);
+  const over = rows.filter((r) => r.d > VISIBLE.off);
+  console.log(`headless: compare ${positionals[0]} (${a!.me}) and ${positionals[1]} (${b!.me}), ${rows.length} entities`);
+  console.log('entity    kind      distance m');
+  for (const r of rows) console.log(`${r.id.padEnd(9)} ${r.kind.padEnd(9)} ${r.d.toFixed(3).padStart(10)}`);
+  console.log(`over ${VISIBLE.off} m: ${over.length}${over.map((r) => `; ${r.id} ${r.kind} ${r.d.toFixed(3)} m`).join('')}; ${over.length ? 'FAIL' : 'PASS'}`);
+  process.exit(over.length ? 1 : 0);
+}
 const own = await scenarioOf(values.scenario);
 if (!own) {
   const scenarios = [];
