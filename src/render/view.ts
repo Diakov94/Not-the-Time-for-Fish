@@ -109,7 +109,8 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     const rig = drawn.userData.rig as Rig | undefined;
     if (rig) {
       wear(rig, wornOf(sim, e));
-      band(rig, (e.home !== null && playerOf(sim.round, e.home)?.team) || undefined, palette);
+      // The band shows the side (card 117 after ADR 0014: A the cats, B the dogs); the side is the kind.
+      band(rig, e.kind === 'cat' ? 'A' : e.kind === 'dog' ? 'B' : undefined, palette);
       pose(rig, facts(sim, e), sim.time);
     }
   }
