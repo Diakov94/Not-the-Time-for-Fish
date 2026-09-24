@@ -10,7 +10,9 @@ export type Left = { type: 'left'; id: ClientId; host: ClientId };
 // A prop the sender threw met `dog` (ADR 0009).
 export type Hit = { type: 'hit'; from: ClientId; dog: NetId };
 // Events, not folded (ADR 0010): a noise ping born at the sender, and a team marker for the sender's side.
-export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number };
+// A noise names its cause, set where it is born: a character's step, an impact, a mine's blast, a sprung trap.
+export type NoiseCause = 'step' | 'impact' | 'blast' | 'trap';
+export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number; cause: NoiseCause };
 export type Mark = { type: 'mark'; from: ClientId; p: Vector };
 // The round's (ADR 0007): a joining client's name, the host's team for a name, a player's look for a side.
 export type Team = 'A' | 'B';
