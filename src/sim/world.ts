@@ -45,6 +45,7 @@ export type Sim = {
   queue: EventQueue; // the world's contact force reports, drained every step
   impacts: Set<string>; // collider pairs pressing above the impact threshold in the last step
   pinged: Map<NetId, number>; // when a body this client simulates last pinged an impact
+  ownerSpeed: Map<NetId, number>; // m/s each copy moves at by its owner's last pose applied here (ADR 0006)
   stride: number; // m the own character has walked since its last step ping
   scent: Map<NetId, Scent[]>; // each cat's and lure's trail as this client applied its poses (ADR 0010)
   sniffing: boolean; // the own dog sniffs this step
@@ -116,6 +117,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     queue: new RAPIER.EventQueue(true),
     impacts: new Set(),
     pinged: new Map(),
+    ownerSpeed: new Map(),
     stride: 0,
     scent: new Map(),
     sniffing: false,
