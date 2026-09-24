@@ -12,7 +12,7 @@ import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { newOwnershipTable, receive } from './ownership.ts';
-import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, successor, type RoundMessage } from './round.ts';
+import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, successor, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -150,6 +150,44 @@ test('the rotation at every seated count 3-8: GAME.md dog counts, 3 4 3 3 4 3 ro
   expect(at[5]!.dogs).toEqual([['p0', 'p1', 'p2'], ['p3', 'p4', 'p5'], ['p0', 'p6', 'p7']]);
 });
 
+// ADR 0014's score over scripted matches at 5 players (dogs p0+p1, p2+p3, p0+p4), folded in the relay's
+// order: a fish's row is held by its carrier's client until it is secured.
+test('the score is per player: p3 secures 2, p0 catches 1, p1 2, a capture held by a cat 0; p3 wins on the sooner last point; 0-0 is a draw; the session score survives the lobby', () => {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const entities = new Map(['f1', 'f2'].map((id) => [id, { kind: 'fish' as const, home: null }]));
+  const fold = (m: RoundMessage) => foldRound(r, m, 'c0', t, entities);
+  const next = () => fold({ type: 'phase', from: 'c0', ...successor(r) });
+  const secure = (fish: string, at: number) => {
+    t.rows.set(fish, { owner: 'c3', held: true });
+    fold({ type: 'secured', from: 'c3', fish, at });
+    t.rows.delete(fish);
+  };
+  const capture = (cat: number, by: string, at: number) => fold({ type: 'captured', from: `c${cat}`, at, by });
+  const scores = () => r.roster.map((p) => scoreOf(r, p.name)).join();
+  for (let i = 0; i < 5; i++) fold({ type: 'hello', from: `c${i}`, name: `p${i}` });
+  next(); // prep
+  next(); // heist
+  secure('f1', 100);
+  capture(2, 'c0', 150);
+  secure('f2', 200);
+  capture(4, 'c1', 250);
+  fold({ type: 'rescue', from: 'c3' });
+  capture(2, 'c1', 300);
+  capture(4, 'c2', 320); // held last by p2, a cat
+  const inPlay = scores();
+  next(); // overtime: no fish held, over
+  const points = r.results[0]!.points;
+  while (r.phase !== 'lobby') next();
+  const won = { match: r.match, decided: r.decided, score: { ...r.score } };
+  next(); // a second match, nobody scores
+  while (r.phase !== 'lobby') next();
+  console.log(`scores p0-p4 in play ${inPlay}, at the end ${scores()}; round 1 points ${JSON.stringify(points)}; match ${JSON.stringify(won)}; a 0-0 match: ${r.match} (${r.decided}), session ${JSON.stringify(r.score)}`);
+  expect(inPlay).toBe('1,2,0,2,0');
+  expect(points).toEqual({ p3: { n: 2, last: 200 }, p0: { n: 1, last: 150 }, p1: { n: 2, last: 300 } });
+  expect(won).toEqual({ match: 'p3', decided: 'sooner', score: { p3: 1 } });
+  expect([r.match, r.decided, r.score]).toEqual(['draw', 'level', { p3: 1 }]);
+});
+
 // A side's looks are its characters in the roster (card 100): six per side, the fold refuses a seventh.
 test('the fold accepts looks 0 to 5 on either side and refuses 6', () => {
   const [r, t] = [newRound(), newOwnershipTable()];
@@ -249,7 +287,7 @@ function holdFish(r: Relay, cat: Sim): NetId {
 }
 const secure = (r: Relay, cat: Sim, fish: NetId, at = cat.time - cat.heistAt) => r.send(cat, { type: 'secured', from: cat.me, fish, at });
 const captureAll = (r: Relay) => {
-  for (const c of catsOf(r)) r.send(c, { type: 'captured', from: c.me, at: c.time - c.heistAt });
+  for (const c of catsOf(r)) r.send(c, { type: 'captured', from: c.me, at: c.time - c.heistAt, by: null });
 };
 
 test('prep lasts 45.0 s on every client; three secured fish end the round with cats on every client at the same message', () => {
@@ -267,7 +305,8 @@ test('prep lasts 45.0 s on every client; three secured fish end the round with c
   console.log(`prep ${preps.map((t) => t.toFixed(3)).join(' / ')} s; phases after each secured: ${after.join(' | ')}`);
   for (const t of preps) expect(Math.abs(t - 45)).toBeLessThanOrEqual(0.1);
   expect(after).toEqual(['heist,heist,heist', 'heist,heist,heist', 'over,over,over']);
-  for (const s of r.sims()) expect(s.round.results).toEqual([{ dogs: ['P0'], secured: 3, last: s.round.secured.at(-1)!.at, why: 'fish', winner: 'cat' }]);
+  const last = (s: Sim) => s.round.secured.at(-1)!.at;
+  for (const s of r.sims()) expect(s.round.results).toEqual([{ dogs: ['P0'], secured: 3, last: last(s), why: 'fish', winner: 'cat', points: { P1: { n: 3, last: last(s) } } }]);
   expect(agree(r)).toBe(true);
 });
 
@@ -276,9 +315,9 @@ test('every cat captured ends the round with dogs on every client at the same me
   r.players(3);
   toHeist(r);
   const [a, b] = catsOf(r);
-  r.send(a!, { type: 'captured', from: a!.me, at: 1 });
+  r.send(a!, { type: 'captured', from: a!.me, at: 1, by: null });
   const one = phases(r);
-  r.send(b!, { type: 'captured', from: b!.me, at: 2 });
+  r.send(b!, { type: 'captured', from: b!.me, at: 2, by: null });
   console.log(`phases with 1 of 2 cats captured: ${one}; with both: ${phases(r)}`);
   expect(one).toBe('heist,heist,heist');
   expect(phases(r)).toBe('over,over,over');
@@ -489,6 +528,29 @@ test('a cat a dog tosses through the hatch is captured on every client when its 
   expect(before).toBe('false,false,false');
   for (const t of lag) expect(Math.abs(t)).toBeLessThanOrEqual(150);
   expect(inKennel(after)).toBe(true);
+  expect(agree(r)).toBe(true);
+});
+
+test('a catch goes to the dog that held the cat last: the first dog, its hold ended by a hit, scores 0; the next, which tossed it in, 1 on every client', () => {
+  const r = relay(countryHouse, true);
+  const [first, dog, cat, mate] = r.players(5); // P0 and P1 play the dogs, P2 and P3 cats
+  toHeist(r);
+  r.send(first!, { type: 'claim', from: first!.me, id: own(cat!).id, hold: true });
+  r.send(mate!, { type: 'hit', from: mate!.me, dog: own(first!).id });
+  const freed = r.sims().map((s) => s.ownership.rows.get(own(cat!).id)?.held).join();
+  stand(dog!, -2.2, 10, Math.PI / 2); // 1 m west of the cage, facing it
+  stand(cat!, -1.45, 10, 0);
+  r.run(2);
+  r.send(dog!, { type: 'claim', from: dog!.me, id: own(cat!).id, hold: true });
+  r.run(10);
+  r.send(dog!, throwCarried(dog!)!);
+  r.until(() => r.sims().every((s) => s.round.caught.length > 0), 3 * 60);
+  const caught = r.sims().map((s) => s.round.caught.map((c) => `${c.cat} by ${c.by}`).join());
+  const scores = r.sims().map((s) => ['P0', 'P1'].map((n) => scoreOf(s.round, n)).join());
+  console.log(`held after the hit ${freed}; caught ${caught.join(' | ')}; P0, P1 scores ${scores.join(' | ')}`);
+  expect(freed).toBe('false,false,false,false,false');
+  expect(caught).toEqual(Array(5).fill('P2 by P1'));
+  expect(scores).toEqual(Array(5).fill('0,1'));
   expect(agree(r)).toBe(true);
 });
 

@@ -14,18 +14,21 @@ export type Player = { name: string; side: Side | null; client: ClientId | null;
 // Why a round ended: three fish secured (cats), every cat captured, the heist timer out with no fish held,
 // or overtime with none held or capped (dogs).
 export type Why = 'fish' | 'captured' | 'timer' | 'overtime';
+// Each name's points (ADR 0014): a fish secured as a cat, a catch as a dog, and the `at` of its last one.
+export type Points = Record<string, { n: number; last: number }>;
 // An ended round: its dogs (the rotation counts them), what the cats secured, the `at` of the last secure,
-// the side that won.
-export type Result = { dogs: string[]; secured: number; last: number | null; why: Why; winner: Side };
-// Which of GAME.md's match rules decided a match: more fish secured; on equal counts, the last fish secured
-// sooner in its round; neither (0-0, or both last fish at the same time), a draw.
+// the side that won, each name's points that round.
+export type Result = { dogs: string[]; secured: number; last: number | null; why: Why; winner: Side; points: Points };
+// Which of GAME.md's match rules decided a match: the top score; on equal scores, the last point sooner
+// into its round; neither (nobody scored, or both last points at the same time), a draw.
 export type Decider = 'more' | 'sooner' | 'level';
 export type Round = {
   roster: Player[]; // in the order of each name's first hello
   phase: Phase;
   round: number; // 0 in the lobby, 1 to `rounds` within a match
   rounds: number; // the match's round count, written at its round 1's prep (ADR 0014)
-  secured: { fish: NetId; at: number }[]; // this round's, in order
+  secured: { fish: NetId; at: number; by: string }[]; // this round's, in order, each with its sender's name
+  caught: { cat: string; by: string | null; at: number }[]; // this round's captures, each with the name of the cat's last holder
   opened: number[]; // this round's door storages worked open, by volume index
   doors: number[]; // this round's house doors open, by door index
   results: Result[]; // this match's ended rounds
@@ -55,7 +58,7 @@ const KNOBS = [
 export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
 
 export function newRound(): Round {
-  return { roster: [], phase: 'lobby', round: 0, rounds: 0, secured: [], opened: [], doors: [], results: [], match: null, decided: null, score: {}, map: null };
+  return { roster: [], phase: 'lobby', round: 0, rounds: 0, secured: [], caught: [], opened: [], doors: [], results: [], match: null, decided: null, score: {}, map: null };
 }
 
 export const playerOf = (r: Round, client: ClientId): Player | undefined => r.roster.find((p) => p.client === client);
@@ -121,10 +124,44 @@ function fishHeld(t: OwnershipTable, entities: Identities): boolean {
   return false;
 }
 
+// The current round's points from its lists: a fish for the cat that secured it, a catch for the dog that
+// held the cat last; a catch naming no dog of this round scores nothing.
+function pointsOf(r: Round): Points {
+  const out = new Map<string, { n: number; last: number }>();
+  const credit = (name: string, at: number) => out.set(name, { n: (out.get(name)?.n ?? 0) + 1, last: Math.max(out.get(name)?.last ?? at, at) });
+  for (const s of r.secured) credit(s.by, s.at);
+  for (const c of r.caught) if (c.by !== null && r.roster.some((p) => p.name === c.by && p.side === 'dog')) credit(c.by, c.at);
+  return Object.fromEntries(out); // a name is the player's own text: every key an own one, `__proto__` too
+}
+
+// The match's points per name, derived, never stored (ADR 0014): the ended rounds' and, while a round is
+// in play, its own; `last` from the latest round the name scored in.
+function tally(r: Round): Map<string, { n: number; last: number }> {
+  const out = new Map<string, { n: number; last: number }>();
+  for (const points of [...r.results.map((x) => x.points), ...(inPlay(r) ? [pointsOf(r)] : [])]) {
+    for (const [name, { n, last }] of Object.entries(points)) out.set(name, { n: (out.get(name)?.n ?? 0) + n, last });
+  }
+  return out;
+}
+export const scoreOf = (r: Round, name: string): number => tally(r).get(name)?.n ?? 0;
+
+// The winner of a match and the rule that decided it: the top score; on equal scores, the name whose last
+// point came sooner into its round; nobody scored, or the same `at`, a draw.
+function matchOutcome(r: Round): [string | 'draw', Decider] {
+  const [a, b] = [...tally(r)].sort(([, x], [, y]) => y.n - x.n || x.last - y.last);
+  if (!a) return ['draw', 'level'];
+  if (!b || a[1].n > b[1].n) return [a[0], 'more'];
+  return a[1].last < b[1].last ? [a[0], 'sooner'] : ['draw', 'level'];
+}
+
 function end(r: Round, why: Why): void {
   const dogs = r.roster.filter((p) => p.side === 'dog').map((p) => p.name);
   r.phase = 'over';
-  r.results.push({ dogs, secured: r.secured.length, last: r.secured.at(-1)?.at ?? null, why, winner: why === 'fish' ? 'cat' : 'dog' });
+  r.results.push({ dogs, secured: r.secured.length, last: r.secured.at(-1)?.at ?? null, why, winner: why === 'fish' ? 'cat' : 'dog', points: pointsOf(r) });
+  if (r.round < r.rounds) return;
+  [r.match, r.decided] = matchOutcome(r);
+  const won = r.match;
+  if (won !== 'draw') r.score = { ...r.score, [won]: (Object.hasOwn(r.score, won) ? r.score[won]! : 0) + 1 };
 }
 
 // The ends the table itself says (ADR 0007), checked after every message: three fish secured, every cat
@@ -188,7 +225,7 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       r.round = m.round;
       if (m.to === 'overtime' && !fishHeld(t, entities)) end(r, 'timer');
       if (m.to !== 'prep') return true;
-      [r.secured, r.opened, r.doors] = [[], [], []];
+      [r.secured, r.caught, r.opened, r.doors] = [[], [], [], []];
       for (const q of r.roster) q.captured = null;
       if (m.round === 1) [r.results, r.match, r.decided] = [[], null, null];
       // The rotation sides every seated player; a name not seated waits for the next prep (ADR 0014).
@@ -198,16 +235,18 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       return true;
     }
     case 'secured': {
-      // Only from the client the ownership table says holds that fish, once per fish.
+      // Only from a named client the ownership table says holds that fish, once per fish; the fold names it.
       const row = t.rows.get(m.fish);
-      if (!stealing(r) || entities.get(m.fish)?.kind !== 'fish' || row?.owner !== m.from || !row.held) return false;
+      if (!stealing(r) || !p || entities.get(m.fish)?.kind !== 'fish' || row?.owner !== m.from || !row.held) return false;
       if (r.secured.some((s) => s.fish === m.fish)) return false;
-      r.secured.push({ fish: m.fish, at: m.at });
+      r.secured.push({ fish: m.fish, at: m.at, by: p.name });
       return true;
     }
     case 'captured':
+      // The cat's client names the client that held it last (ADR 0014); the fold keeps that client's name.
       if (!inPlay(r) || !p || playsAs(r, m.from) !== 'cat' || p.captured !== null) return false;
       p.captured = m.at;
+      r.caught.push({ cat: p.name, by: m.by === null ? null : (playerOf(r, m.by)?.name ?? null), at: m.at });
       return true;
     case 'rescue': {
       // A free cat opens the kennel: every captured cat is free at once.
@@ -270,7 +309,7 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.called = false;
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
-  [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
+  [sim.opening, sim.capturing, sim.gateUntil, sim.holder] = [null, false, 0, null];
   [sim.stunUntil, sim.wetUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap, sim.doorWork, sim.perk] = [0, 0, 0, null, null, null, 'noise', null, null];
   sim.securing.clear();
   sim.ending.clear();

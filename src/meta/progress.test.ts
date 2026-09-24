@@ -8,7 +8,7 @@ function afterRound1(events: SimEvent[]) {
   const round = newRound();
   round.roster.push({ name: 'P0', side: 'cat', client: 'a', looks: {}, worn: {}, captured: null });
   [round.phase, round.round] = ['over', 1];
-  round.results.push({ dogs: [], secured: 3, last: 100, why: 'fish', winner: 'cat' });
+  round.results.push({ dogs: [], secured: 3, last: 100, why: 'fish', winner: 'cat', points: {} });
   return { me: 'a', round, events };
 }
 
