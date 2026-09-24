@@ -76,3 +76,4 @@
 - bug-net-tick-cadence-at-60-hz: ticks 16.4–17.1/s → 19.9–20.1/s at 8 clients; the schedule is frame's in src/net/client.ts. Batch F1, 2026-09-24.
 - 69 overtime carrier ping: roundStep emits it for every fish carrier in overtime; red without the rule. Batch F1, 2026-09-24.
 - 70 results name the tiebreak: the round table's matchOutcome owns the deciding rule; the screen shows it in Ukrainian. Batch F1, 2026-09-24.
+- 134 the high-rise map as data on the frozen schema. Wave 0 MAP-high-rise, 2026-09-24.
