@@ -1,3 +1,5 @@
+zone: tools/headless
+size: S
 # mines-and-traps @ 6 clients: p4, p5 scripts stuck, trap not sprung (FAIL)
 
 src/sim
