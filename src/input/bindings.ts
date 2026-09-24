@@ -1,11 +1,14 @@
+import { settings } from '../settings/store.ts';
+
 // ADR 0012: which key does what, one table. GAME.md's Controls as data, per device: per action the codes
 // that do it, on the keyboard a KeyboardEvent code or `Mouse<button>`, on the gamepad a `Pad…` code
 // (gamepad.ts names them); the listeners test these codes and every screen that names a key asks `keyOf`.
 // `interact` is one key: tapped it interacts, held it sniffs or defuses. The camera is the mouse or the
-// right stick, not a code. The emote keys are card 125's; the viewer's overrides are the settings store's
-// (card 124).
+// right stick, not a code. The emote keys are card 125's. These are the defaults: the viewer's overrides
+// are the settings store's, applied on top by `resolve` at every use.
 export type Action = 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'sneak' | 'jump' | 'grab' | 'plant' | 'interact' | 'perk' | 'mark' | 'next' | 'report';
 export type Device = 'keyboard' | 'gamepad';
+type Table = Partial<Record<Action, string[]>>;
 
 export const BINDINGS: { keyboard: Record<Action, string[]>; gamepad: Partial<Record<Action, string[]>> } = {
   keyboard: {
@@ -40,12 +43,36 @@ export const BINDINGS: { keyboard: Record<Action, string[]>; gamepad: Partial<Re
   },
 };
 
-// The codes that do `action`, on either device.
-export const codesOf = (action: Action): string[] => [...BINDINGS.keyboard[action], ...(BINDINGS.gamepad[action] ?? [])];
+// The other action that does `code` in `table`, if one does.
+const clash = (table: Table, action: Action, code: string) => (Object.keys(table) as Action[]).find((other) => other !== action && table[other]!.includes(code));
+
+// A device's table in effect: each override replaces its action's codes with its one code, and one whose
+// code another action then also does is refused (both of two overrides on one code are), so its action
+// keeps its default; a refusal can bring back a default another override clashes with, so it repeats.
+export function resolve(defaults: Table, overrides: Record<string, string>): Table {
+  let kept = Object.entries(overrides).filter(([action]) => action in BINDINGS.keyboard);
+  for (;;) {
+    const table: Table = { ...defaults, ...Object.fromEntries(kept.map(([action, code]) => [action, [code]])) };
+    const refused = kept.filter(([action, code]) => clash(table, action as Action, code));
+    if (refused.length === 0) return table;
+    kept = kept.filter((o) => !refused.includes(o));
+  }
+}
+
+const deviceOf = (code: string): Device => (code.startsWith('Pad') ? 'gamepad' : 'keyboard');
+// Read from the store at every use, so a save is in effect from the next press and the next frame.
+const bound = (device: Device) => resolve(BINDINGS[device], settings().bindings[device]);
+
+// The codes that do `action` now, on either device.
+export const codesOf = (action: Action): string[] => [...(bound('keyboard')[action] ?? []), ...(bound('gamepad')[action] ?? [])];
+
+// Why the settings screen may not bind `code` to `action`: the action that does it now on its device;
+// null when it is free.
+export const conflict = (action: Action, code: string): Action | null => clash(bound(deviceOf(code)), action, code) ?? null;
 
 // The device used last: the input zone reports every press, and the keys are named on that device.
 let last: Device = 'keyboard';
-export const used = (code: string) => (last = code.startsWith('Pad') ? 'gamepad' : 'keyboard');
+export const used = (code: string) => (last = deviceOf(code));
 
 // A key's name on the screen, in Ukrainian where it has one; a letter, a digit or a pad button is itself.
 const NAMES: Record<string, string> = {
@@ -66,8 +93,8 @@ const NAMES: Record<string, string> = {
   PadRight: '→',
 };
 
-// The action's key on the device used last; an action the pad has no button for is named by the keyboard.
+// The action's key in effect on the device used last; one the pad has no button for is named by the keyboard.
 export function keyOf(action: Action): string {
-  const code = (BINDINGS[last][action] ?? BINDINGS.keyboard[action])[0]!;
+  const code = (bound(last)[action] ?? bound('keyboard')[action]!)[0]!;
   return NAMES[code] ?? code.replace(/^(Key|Digit|Pad)/, '');
 }
