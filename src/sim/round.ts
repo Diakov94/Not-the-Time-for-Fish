@@ -303,9 +303,9 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
 }
 
 // The round table turned to a new phase on this client (the entity table is already cleared for prep):
-// the phase starts now by this client's clock, and at prep the world follows the table's map, the host
-// spawns the level anew and every player its character, of the side the roster gives it this round, at
-// its side's spawn point.
+// the phase starts now by this client's clock, and at prep the world follows the table's map, its debris
+// stands again where content puts it, still, the host spawns the level anew and every player its
+// character, of the side the roster gives it this round, at its side's spawn point.
 export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   const r = sim.round;
   sim.phaseAt = sim.time;
@@ -319,6 +319,12 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.ending.clear();
   sim.barged.clear();
   follow(sim);
+  for (const { prop, body } of sim.debris) {
+    body.setTranslation(sim.level.props[prop]!.p, true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }

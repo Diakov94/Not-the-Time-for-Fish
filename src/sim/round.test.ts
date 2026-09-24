@@ -451,6 +451,28 @@ test("round 2 starts with every client's character of the side the rotation give
   expect(agree(r)).toBe(true);
 });
 
+test("the next prep puts every piece of debris knocked in round 1 back at its content pose, at rest 3 s later, on every client", () => {
+  const r = relay(countryHouse);
+  r.players(3);
+  toHeist(r);
+  const home = (s: Sim) => s.debris.filter(({ prop, body }) => {
+    const p = countryHouse.props[prop]!.p;
+    const q = body.translation();
+    return Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) <= 0.01 && body.isSleeping();
+  }).length;
+  // Every plate, cup, vase and pot swept 1.2 m south and dropped from 0.3 m, on every client.
+  for (const s of r.sims()) for (const { body } of s.debris) body.setTranslation({ x: body.translation().x, y: 0.3, z: body.translation().z - 1.2 }, true);
+  r.run(60);
+  const knocked = r.sims().map(home);
+  captureAll(r);
+  r.send(hostOf(r), advance(hostOf(r), hostOf(r).me)!);
+  r.run(3 * 60);
+  const round2 = r.sims().map(home);
+  console.log(`debris at its content pose of ${countryHouse.props.filter((p) => !p.synced).length}: knocked in round 1 ${knocked.join(' / ')}; at round 2's prep ${round2.join(' / ')} (${r.sims()[0]!.round.phase} ${r.sims()[0]!.round.round})`);
+  expect(r.sims()[0]!.round).toMatchObject({ phase: 'prep', round: 2 });
+  expect(round2).toEqual([26, 26, 26]);
+});
+
 // This client's own character, put where a test wants it, facing `yaw`.
 function stand(sim: Sim, x: number, z: number, yaw: number): Entity {
   const me = [...sim.entities.values()].find((e) => e.home === sim.me)!;
