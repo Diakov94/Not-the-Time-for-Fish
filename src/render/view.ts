@@ -8,7 +8,7 @@ import { settings } from '../settings/store.ts';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEPS } from '../sim/events.ts';
 import { hidden } from '../sim/hiding.ts';
-import { stunnedUntil, wet } from '../sim/mines.ts';
+import { soakedUntil, stunnedUntil } from '../sim/mines.ts';
 import { speedsOf, yawOf } from '../sim/movement.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
@@ -176,8 +176,8 @@ function add(view: View, sim: Sim, e: Entity): THREE.Object3D {
 }
 
 // What the sim says a character is doing this frame (ADR 0011), for its rig: its speed over the ground
-// from its body, its side's stride and paces, the ownership table's holds, and the queries' stun (every
-// character's: a slipped dog tumbles on every screen), hiding and wetness (the own cat's).
+// from its body, its side's stride and paces, the ownership table's holds, and the queries' stun and
+// wetness (every character's: a slipped dog tumbles, a soaked cat drips on every screen) and hiding.
 function facts(sim: Sim, e: Entity): Facts {
   const v = e.body.linvel();
   const s = speedsOf(e);
@@ -191,7 +191,7 @@ function facts(sim: Sim, e: Entity): Facts {
     held: sim.ownership.rows.get(e.id)?.held ?? false,
     stunned: sim.time < stunnedUntil(sim, e),
     hidden: e.kind === 'cat' && hidden(sim, e),
-    wet: e.kind === 'cat' && e.home === sim.me && wet(sim) > 0,
+    wet: e.kind === 'cat' && sim.time < soakedUntil(sim, e),
   };
 }
 
