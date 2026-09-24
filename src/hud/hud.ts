@@ -1,11 +1,17 @@
+import type { Vector } from '@dimforge/rapier3d-compat';
+import { TEAM } from '../art/palette.ts';
 import { livePings } from '../render/senses.ts';
 import { project, type View } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
 import { pinging } from '../sim/heist.ts';
 import { minesLeft, progress, whisker } from '../sim/mines.ts';
+import type { Side } from '../sim/messages.ts';
+import { sideOf } from '../sim/ownership.ts';
 import { perkOf } from '../sim/perks.ts';
 import { inPlay, playerOf, playsAs, remaining, type Player } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
+import { offerView } from '../settings/screen.ts';
+import { settings } from '../settings/store.ts';
 import { due, see, type Hint } from './hints.ts';
 import { CSS } from './style.ts';
 import { FISH, HIDE, HINT, ITEMS, MATE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
@@ -13,8 +19,8 @@ import { FISH, HIDE, HINT, ITEMS, MATE, OVERTIME, PERK, PHASE, WORK } from './wo
 // GAME.md, UI / HUD: the in-round overlay (ADR 0008), a view of the sim as render and audio are. Once per
 // frame it reads the round, entity and ownership tables, this client's own character state and render's
 // pings and projection, and writes what they say into the DOM. It keeps no timer, count or state of its
-// own; all it stores is a per-viewer setting, the first-round hints this browser has seen. Shown while the
-// round is in play.
+// own; all it stores is a per-viewer setting, the first-round hints this browser has seen, and the age of
+// each sound cue it shows. Shown while the round is in play.
 export type Hud = {
   root: HTMLElement;
   phase: HTMLElement;
@@ -31,7 +37,12 @@ export type Hud = {
   whisker: HTMLElement;
   team: HTMLElement;
   arrows: HTMLElement;
+  cues: { p: Vector; born: number }[];
 };
+
+// The settings overlay (ADR 0012) mounts itself on import, before any room; it learns the team pairs and
+// whether a round is in play (the HUD is shown) from the HUD.
+offerView({ pairs: TEAM, playing: () => document.querySelector('.hud:not([hidden])') !== null });
 
 export function createHud(): Hud {
   document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
@@ -77,11 +88,16 @@ export function createHud(): Hud {
     whisker: $('.whisker'),
     team: $('.team'),
     arrows: $('.arrows'),
+    cues: [],
   };
 }
 
 // Once per frame, after the sim stepped and before the loop drains the event list.
 export function drawHud(hud: Hud, sim: Sim, view: View): void {
+  // The viewer's text scale, on the root so the app's screens follow it too (cards 118-120).
+  const { textScale, soundCues } = settings();
+  const root = document.documentElement.style;
+  if (root.getPropertyValue('--scale') !== String(textScale)) root.setProperty('--scale', String(textScale));
   const r = sim.round;
   hud.root.hidden = !inPlay(r);
   if (hud.root.hidden) {
@@ -132,7 +148,8 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   const h = innerHeight;
   const off = livePings(view.senses, sim)
     .map((ping) => ({ ...project(view, ping.p), age: ping.age }))
-    .filter(({ x, y, behind }) => behind || x < 0 || x > w || y < 0 || y > h);
+    .filter(({ x, y, behind }) => behind || x < 0 || x > w || y < 0 || y > h)
+    .concat(cues(hud, sim, side, soundCues).map((cue) => ({ ...project(view, cue.p), age: cue.age })));
   pool(hud.arrows, off.length, 'arrow', '');
   off.forEach(({ x, y, behind, age }, i) => {
     // From the centre toward the point, turned back when it lies behind the camera, to the edge.
@@ -150,10 +167,33 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   tip.firstElementChild!.textContent = HINT[hint][side];
   tip.lastElementChild!.textContent = HIDE;
   tip.onanimationend = () => tip.remove();
-  hud.root.append(tip);
+  hud.root.querySelector('.top')!.append(tip); // under the clock and overtime, never over them
 }
 
 const EDGE = 28; // px from the screen's edge to an arrow's centre
+const CUE_TIME = 2; // s a sound cue's arrow fades over, as a ping's ring does
+const HEARD = 15; // m within which a dog's steps and panting are cues
+const PANT_AGE = 0.5; // a panting dog's arrow stands half faded, under a fresh step's
+
+// The sound cues (GAME.md, Accessibility; card 122): with the viewer's toggle on, a player who is not a dog
+// (a dog has its pings) sees an edge arrow toward every noise of the event list, a dog's steps only within
+// HEARD, and toward every dog within HEARD, which pants. Each arrow is kept with its
+// birth only, off the event list; the panting ones are read from the entity table every frame.
+function cues(hud: Hud, sim: Sim, side: Side | undefined, on: boolean): { p: Vector; age: number }[] {
+  if (!on || !side || side === 'dog') {
+    hud.cues.length = 0;
+    return [];
+  }
+  const me = [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind))?.body.translation();
+  const near = (p: Vector) => me !== undefined && Math.hypot(p.x - me.x, p.y - me.y, p.z - me.z) <= HEARD;
+  for (const e of sim.events) {
+    if (e.type !== 'noise' || (e.cause === 'step' && !(sideOf(sim.entities, e.from) === 'dog' && near(e.p)))) continue;
+    hud.cues.push({ p: { ...e.p }, born: sim.time });
+  }
+  hud.cues = hud.cues.filter((c) => sim.time - c.born < CUE_TIME);
+  const panting = [...sim.entities.values()].filter((e) => e.kind === 'dog' && near(e.body.translation()));
+  return [...hud.cues.map((c) => ({ p: c.p, age: (sim.time - c.born) / CUE_TIME })), ...panting.map((e) => ({ p: e.body.translation(), age: PANT_AGE }))];
+}
 
 // A teammate is captured by the round table, grabbed by the ownership table (its character held), else free.
 function stateOf(sim: Sim, p: Player): keyof typeof MATE {
