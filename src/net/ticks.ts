@@ -29,23 +29,36 @@ export function tick(sim: Sim, rested: Rested): Tick | null {
 }
 
 // The receiver's buffer: per entity, the snapshots around the pose it shows, stamped with arrival time.
+// It takes a snapshot only from the fold's owner as of its arrival in the relay's order (ADR 0006), so
+// across an ownership change the previous owner's snapshots already in it still carry the copy until the
+// new owner's take over. A client's own tick never enters it: it empties the buffer of every entity it
+// names, since nothing buffered before is a target while this client simulates the entity.
 type Entry = { at: number; from: ClientId; s: Snapshot };
 export type Receiver = Map<NetId, Entry[]>;
 
-// A resting pose is final: it is placed at once. A moving one joins the buffer; after a pause (the
-// body rested, or this client simulated it) the buffer restarts from the copy's current pose one tick
-// earlier, so the copy moves off without a jump. An entity's first pose starts the buffer alone: a
-// joiner's copy has no pose of its own to start from.
+// A resting pose is final: it is placed at once. A moving one joins the buffer; after its owner's pause
+// (the body rested) the buffer restarts from the copy's current pose one tick earlier, so the copy moves
+// off without a jump. After this client simulated the entity, the new owner's first pose counts from one
+// tick before it came, as at any handoff (see interpolate). An entity's first pose starts the buffer
+// alone: a joiner's copy has no pose of its own to start from.
 export function receiveTick(sim: Sim, r: Receiver, t: Tick, at: number): void {
   for (const s of t.s) {
     const e = sim.entities.get(s.id);
     if (!e) continue;
+    if (t.from === sim.me) {
+      r.set(s.id, []);
+      continue;
+    }
+    if (sim.ownership.rows.get(s.id)?.owner !== t.from) continue;
     const entry = { at, from: t.from, s };
     const list = r.get(s.id);
+    const last = list?.at(-1);
     if (s.rest || !list) {
       if (s.rest) applySnapshot(sim, t.from, s);
       r.set(s.id, [entry]);
-    } else if (list.at(-1)!.at < at - 2 * TICK_MS) {
+    } else if (!last) {
+      r.set(s.id, [{ ...entry, at: at - TICK_MS }, entry]);
+    } else if (last.from === t.from && last.at < at - 2 * TICK_MS) {
       r.set(s.id, [{ at: at - TICK_MS, from: t.from, s: readSnapshot(e) }, entry]);
     } else list.push(entry);
   }
@@ -66,13 +79,17 @@ function mix(a: Snapshot, b: Snapshot, k: number): Snapshot {
 }
 
 // Every frame: each copy goes to its owner's pose DELAY_MS ago, between the two snapshots around it.
-// The sim's snapshot rule still drops a pose from anyone but the fold's owner.
+// Two owners' snapshots are never blended, since a handoff can jump (a grabbed cat into the carrier's
+// mouth): the new owner's first tick came within a tick of the fold, so its pose shows from one tick
+// before it came, and the previous owner's last until then. The sim's snapshot rule leaves alone a body
+// this client simulates or carries.
 export function interpolate(sim: Sim, r: Receiver, now: number): void {
   const t = now - DELAY_MS;
   for (const list of r.values()) {
     while (list.length > 1 && list[1]!.at <= t) list.shift();
-    const [a, b] = list as [Entry, Entry?];
-    if (a.at > t) continue;
-    applySnapshot(sim, (b ?? a).from, b ? mix(a.s, b.s, (t - a.at) / (b.at - a.at)) : a.s);
+    const [a, b] = list as [Entry?, Entry?];
+    if (!a || a.at > t) continue;
+    const k = !b ? 0 : b.from === a.from ? (t - a.at) / (b.at - a.at) : t < b.at - TICK_MS ? 0 : 1;
+    applySnapshot(sim, (b ?? a).from, b && k > 0 ? mix(a.s, b.s, k) : a.s);
   }
 }
