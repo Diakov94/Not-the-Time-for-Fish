@@ -24,3 +24,6 @@
 - 22 movement asymmetry, sneak, climb, carry: one speed table; cat 0.5 m wide and 0.9 m tall, dog 0.8 m and 1.4 m; dog walk 4 m/s, carrying 2 m/s. Batch S1, 2026-09-24.
 - 23 noise pings, markers, the event list: one ping per impact (ADR 0010 amended). Batch S1, 2026-09-24.
 - 24 scent trails and sniff: each client's own pose history. Batch S1, 2026-09-24.
+- 35 runner for the MVP: scenarios by name; judges divergence, end tables, sides, doomed claims = 0. Batch H1, 2026-09-24.
+- 36 scenario grab-toss-wiggle-hit at 3 clients: 3 of 3 runs; hit frees in 18–20 ms, wiggle-free at 7.99–8.01 s, moving peak 0.241 m (limit 0.25). Batch H1, 2026-09-24.
+- 37 eight clients within budget: measured 289.6 kB/s down per client, relay 169.9 msg/s, 16.7 ticks/s; the budget itself is card 45. Batch H1, 2026-09-24.
