@@ -7,7 +7,7 @@ import type { ClientId, Kind } from '../../src/sim/entities.ts';
 import { drainEvents, type SimEvent } from '../../src/sim/events.ts';
 import type { Level } from '../../src/sim/level.ts';
 import type { Claim } from '../../src/sim/messages.ts';
-import { fold, sideOf } from '../../src/sim/ownership.ts';
+import { fold, sideOf, type Identities } from '../../src/sim/ownership.ts';
 import { init } from '../../src/sim/world.ts';
 import { joinHeadless, playHeadless, type HeadlessClient, type Player, type Thing } from './client.ts';
 
@@ -27,7 +27,7 @@ export type Sample = { t: number; dumps: Dump[]; events: SimEvent[][]; ticks: nu
 // sent but a tick, stamped: the stream's claims, releases and hits.
 export type Wire = { up: number; down: number; in: number; sent: { at: number; m: GameMessage }[] };
 // A finished game as the judges read it; `ids` are the clients in join order.
-export type Run = { samples: Sample[]; wires: Wire[]; ids: ClientId[]; start: number; end: number };
+export type Run = { samples: Sample[]; wires: Wire[]; ids: ClientId[]; start: number };
 
 export type Divergence = { id: string; kind: string; moving: number; resting: number; exact: number };
 // Per client, rates per second of the game: ticks sent (and the fewest in any whole second), kB up and
@@ -140,7 +140,7 @@ function tap({ session: { ws, sim } }: HeadlessClient): Wire {
 
 // A claim the fold rejects even with its target free: one its sender should never have made (ADR 0009's
 // predicate for a hold, ADR 0006's home rule for a touch). The runner asks the fold rather than restating it.
-const doomed = (m: Claim, identities: Parameters<typeof fold>[2]) =>
+const doomed = (m: Claim, identities: Identities) =>
   !fold({ rows: new Map([[m.id, { owner: m.from, held: false }]]), gone: new Set() }, m, identities);
 
 // The fold's facts in a dump: who was seen leaving, and each entity's identity and table row.
@@ -219,7 +219,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const identities = cs[0]!.session.sim.entities;
     const claims = wires.flatMap((w) => w.sent.map((x) => x.m)).filter((m): m is Claim => m.type === 'claim');
     const div = divergence(samples);
-    const verdict = scenario.judge?.({ samples, wires, ids, start, end: last }) ?? { lines: [], ok: true };
+    const verdict = scenario.judge?.({ samples, wires, ids, start }) ?? { lines: [], ok: true };
     const r = {
       divergence: div,
       clients: traffic,
