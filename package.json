@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "zones": "! grep -rslE \"(from|import)[ (]*['\\\"]three|document\\.|window\\.|navigator\\.\" src/sim src/net src/relay | grep . && ! grep -rslE \"(src/|\\.\\./|@)(render|app)/\" src/sim src/net src/relay | grep .",
     "test": "vitest run --passWithNoTests",
-    "gates": "npm run typecheck && npm run lint && npm run zones && npm run test",
+    "gates": "npm run typecheck && npm run lint && npm run zones && npm run test && npm run headless -- --clients 2 --seconds 10",
     "relay": "node src/relay/serve.ts",
     "headless": "node tools/headless/main.ts"
   },
