@@ -76,6 +76,8 @@
 - bug-net-tick-cadence-at-60-hz: ticks 16.4–17.1/s → 19.9–20.1/s at 8 clients; the schedule is frame's in src/net/client.ts. Batch F1, 2026-09-24.
 - 69 overtime carrier ping: roundStep emits it for every fish carrier in overtime; red without the rule. Batch F1, 2026-09-24.
 - 70 results name the tiebreak: the round table's matchOutcome owns the deciding rule; the screen shows it in Ukrainian. Batch F1, 2026-09-24.
+- 107 palette: owns every colour; render holds 0 colour literals. 108 patterns and decals. 109 a theme per map found by path. Wave 0 ART0-A, 2026-09-24.
+- bug-chase-kennel-rescue-rejoin-movement-sync (QA hunt): merged into bug-net-copy-freezes-at-an-ownership-change as the same defect; its numbers (3 of 8 runs at 4 clients, 0.261-0.380 m moving) were sent to that worker. Producer, 2026-09-24.
 - 100 character roster: the twelve characters' one owner is src/content/characters.ts. Wave 0 SIM-SEAMS, 2026-09-24.
 - 104 emote event: born in src/sim/emotes.ts, lives only on the event list. Wave 0 SIM-SEAMS, 2026-09-24.
 - 105 worn in the roster: Player.worn per side, folded from look messages. Wave 0 SIM-SEAMS, 2026-09-24.
@@ -84,3 +86,5 @@
 - 138 the farm map: every anatomy number holds; the schema lacks a fence role (reported). Wave 0 MAP-farm, 2026-09-24.
 - 136 the market map: every anatomy number holds (exits 4 > dogs 3, farthest storage 12.8 m from the hatch). Wave 0 MAP-market, 2026-09-24.
 - 126 progress save: src/meta/progress.ts owns it. 127 unlock rules: twelve, one per cosmetic id. Wave 1 META, 2026-09-24.
+- 128 map in the round table; 129 water bomb (soaks: a wet cat pings for 20 s); 130 slip trap (a banana peel slips a dog 1.5 s). Wave 1 SIM1, 2026-09-24.
+- 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.

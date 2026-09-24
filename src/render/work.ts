@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OVERLAY } from '../art/palette.ts';
 import { isCharacter, type NetId } from '../sim/entities.ts';
 import { progress, stunned } from '../sim/mines.ts';
 import type { Sim } from '../sim/world.ts';
@@ -15,14 +16,14 @@ export type Work = { stars: THREE.Group; ring: THREE.Group; arc: THREE.RingGeome
 
 export function createWork(scene: THREE.Scene): Work {
   const stars = new THREE.Group();
-  const gold = new THREE.MeshBasicMaterial({ color: 0xffd23a, side: THREE.DoubleSide });
+  const gold = new THREE.MeshBasicMaterial({ color: OVERLAY.star, side: THREE.DoubleSide });
   for (let i = 0; i < STARS; i++) stars.add(new THREE.Mesh(STAR, gold));
   // A white arc filling clockwise from the top over a black ring, drawn over everything.
   const arc = new THREE.RingGeometry(0.16, 0.24, SEGMENTS, 1, Math.PI / 2, 2 * Math.PI);
   const ring = new THREE.Group();
   for (const [geometry, colour] of [
-    [new THREE.RingGeometry(0.13, 0.27, SEGMENTS), 0x111111],
-    [arc, 0xffffff],
+    [new THREE.RingGeometry(0.13, 0.27, SEGMENTS), OVERLAY.rim],
+    [arc, OVERLAY.white],
   ] as const) {
     const m = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: colour, depthTest: false, side: THREE.DoubleSide }));
     m.renderOrder = 11;
