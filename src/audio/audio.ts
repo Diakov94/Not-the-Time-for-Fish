@@ -10,7 +10,8 @@ import { ambience, surround, type Ambience } from './ambience.ts';
 import { music, sequence, wanted, type Music } from './music.ts';
 import { beeps, pant, SOUNDS, whiteNoise, type Beeps, type Kit, type Pant, type Sound } from './sfx.ts';
 
-// Where the listener stands and faces: the camera's pose (render's camera is one).
+// Where the listener stands and faces: at the point the camera orbits (the player's character), turned
+// as the camera is, so distances are the character's and left and right are the screen's.
 export type Ear = { position: Vec3; quaternion: Vec3 & { w: number } };
 
 type Graph = {
@@ -93,7 +94,7 @@ export function hear(audio: Audio, sim: Sim, ear: Ear): void {
   if (audio.readout) show(audio, g);
 }
 
-// The listener's pose from the camera's: it faces the camera's -z with the camera's +y up.
+// The listener's pose from the ear's: it faces the camera's -z with the camera's +y up.
 function listen(l: AudioListener, { position: p, quaternion: { x, y, z, w } }: Ear): void {
   l.setPosition(p.x, p.y, p.z);
   l.setOrientation(-2 * (x * z + w * y), 2 * (w * x - y * z), 2 * (x * x + y * y) - 1, 2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x));
