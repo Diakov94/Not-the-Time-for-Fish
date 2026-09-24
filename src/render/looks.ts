@@ -80,3 +80,18 @@ export function buildLook(sim: Sim, e: Entity): THREE.Object3D {
 export function debrisLook(sim: Sim, d: Sim['debris'][number]): THREE.Object3D {
   return prop(d.body.collider(0).shape, sim.level.props[d.prop]?.label);
 }
+
+// Takes looks out of the scene and frees what they uploaded (the card on gone looks): every geometry of
+// theirs that nothing left in the scene draws. A geometry art shares (the band's ring) stays while another
+// look shows it. Every material is art's, shared from its caches (the palette's `material`, the patterns,
+// the decals, a module's constant), so a look owns none and none is freed.
+export function freeLooks(scene: THREE.Scene, looks: THREE.Object3D[]): void {
+  if (looks.length === 0) return;
+  const owned = new Set<THREE.BufferGeometry>();
+  for (const o of looks) {
+    scene.remove(o);
+    o.traverse((m) => (m as THREE.Mesh).geometry && owned.add((m as THREE.Mesh).geometry));
+  }
+  scene.traverse((m) => (m as THREE.Mesh).geometry && owned.delete((m as THREE.Mesh).geometry));
+  for (const g of owned) g.dispose();
+}

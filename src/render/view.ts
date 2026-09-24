@@ -11,7 +11,7 @@ import { stunned } from '../sim/mines.ts';
 import { speedsOf, yawOf } from '../sim/movement.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
-import { buildLook, debrisLook, lookOf, wornOf } from './looks.ts';
+import { buildLook, debrisLook, freeLooks, lookOf, wornOf } from './looks.ts';
 import { createJuice, drawJuice, samples, type Juice } from './juice.ts';
 import { createMarkers, drawMarkers, type Markers } from './markers.ts';
 import { createSenses, drawSenses, type Senses } from './senses.ts';
@@ -99,10 +99,14 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   }
   const lag = STEP - sim.accumulator;
   const { palette, reducedMotion } = settings(); // this viewer's choices (ADR 0012), read once a frame
+  const gone: THREE.Object3D[] = [];
   for (const e of sim.entities.values()) {
     const o = objects.get(e.id);
     // A character whose look the roster changed is built anew.
-    if (o?.userData.look !== undefined && o.userData.look !== lookOf(sim, e)) scene.remove(o);
+    if (o?.userData.look !== undefined && o.userData.look !== lookOf(sim, e)) {
+      scene.remove(o);
+      gone.push(o);
+    }
     const drawn = o && o.parent ? o : add(view, sim, e);
     place(drawn, e.body, lag);
     const rig = drawn.userData.rig as Rig | undefined;
@@ -124,9 +128,10 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   sim.debris.forEach((d, i) => place(view.debris[i]!, d.body, lag));
   for (const [id, o] of objects) {
     if (sim.entities.has(id)) continue;
-    scene.remove(o);
+    gone.push(o);
     objects.delete(id);
   }
+  freeLooks(scene, gone);
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
   if (at) view.orbit.copy(at);
