@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Не час для рибки</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #1d2330;
+        color: #f4f1ea;
+        font-family: system-ui, sans-serif;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+      .room {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: #1d2330;
+      }
+      .room h1 {
+        margin: 0 0 12px;
+      }
+      .room p {
+        margin: 0;
+      }
+      .room button,
+      .room input {
+        width: 240px;
+        padding: 10px;
+        font: inherit;
+        font-size: 18px;
+        text-align: center;
+      }
+      .hint {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        margin: 0;
+        padding: 6px 10px;
+        background: rgb(0 0 0 / 0.5);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas></canvas>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

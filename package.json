@@ -6,6 +6,8 @@
     "node": ">=22.18.0"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "zones": "! grep -rslE \"(from|import)[ (]*['\\\"]three|document\\.|window\\.|navigator\\.\" src/sim src/net src/relay | grep . && ! grep -rslE \"(src/|\\.\\./|@)(render|app)/\" src/sim src/net src/relay | grep .",

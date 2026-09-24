@@ -9,6 +9,7 @@ const PROBE_RADIUS = 0.25;
 const HAND = 1; // the anchor is this far ahead of the carrier's centre (capsule 0.35 + crate 0.5 + a gap)
 const LIFT = 0.3; // and this far above it
 const THROW_PITCH = (5 * Math.PI) / 180; // a 6 m/s throw touches down 3.55 m from the thrower
+export const THROW_SPEED = 6; // m/s, a player's throw
 
 // Where a carrier at `p` facing `yaw` holds what it carries.
 export function anchor(p: Vector, yaw: number): Vector {
