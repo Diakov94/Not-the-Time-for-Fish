@@ -92,6 +92,7 @@
 - 101 maps by file name, the headless --map; 102 the settings store (one owner of per-viewer settings); 103 the input zone and bindings. Wave 0 APP-SEAMS, 2026-09-24.
 - 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.
 - w1-ui1: its cards closed (see the batch report). 2026-09-24.
+- w1-mapscen: its cards closed (see the batch report). 2026-09-24.
 - w1-settings: its cards closed (see the batch report). 2026-09-24.
 - w1-props: delivered cards closed (see the batch report). 2026-09-24.
 - fix-audio: delivered cards closed (see the batch report). 2026-09-24.
@@ -103,7 +104,6 @@
 - bug-net-copy-freezes-at-an-ownership-change: the fold decides once, at a tick's arrival; the 8-client round meets the card's acceptance 5/5 (a grabbed cat on the other clients 0.150-0.203 → 0.055-0.094 m). Stall divergence is filed separately. The last MVP bug, 2026-09-24.
 - STALL: bug-net-divergence-under-frame-stalls, bug-app-host-tab-stall-holds-the-clock, bug-net-round-at-six-clients-copies-spike-off-their-owners-path, review-net-copies-hitch-on-a-two-step-frame. The 6-client round at load ~30 passes 4 of 5 (before 0 of 5; the target 5 of 5 is not met). 2026-09-24.
 - 160 the rotation picks the dogs at every prep; 161 per-player score, a catch names its dog; 164 meta progress by side. ROTATION (owner decision, ADR 0014), 2026-09-24.
-- w1-ui1: its cards closed (see the batch report). 2026-09-24.
 - RENDER-FIX: 142 the view follows the map; review-render-camera-six-metres-out; review-render-looks-of-gone-entities-never-freed. 2026-09-24.
 - 143 high-rise theme; 149 fish-market theme; 144 water-bomb and slip looks (own client; every-client wiring follows SIM-FIX). THEMES-A, 2026-09-24.
 - 150 farm theme; 151 yacht theme. THEMES-B, 2026-09-24.
