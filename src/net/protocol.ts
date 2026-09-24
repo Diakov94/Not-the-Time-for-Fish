@@ -1,4 +1,4 @@
-import type { ClientId, Kind, NetId } from '../sim/entities.ts';
+import type { ClientId, Kind, NetId, Variant } from '../sim/entities.ts';
 import type { Left, SimMessage } from '../sim/messages.ts';
 import type { Ownership } from '../sim/ownership.ts';
 import type { Round } from '../sim/round.ts';
@@ -9,13 +9,14 @@ import type { Snapshot } from '../sim/snapshot.ts';
 export type Tick = { type: 'tick'; from: ClientId; s: Snapshot[] };
 // The host's answer to a joiner: identity, the fold's table and the round table as of `seq`, the last
 // message the host folded, and how long the current phase and the heist have run by the host's clock, s
-// (ADR 0007); never a pose.
+// (ADR 0007); never a pose. `variant` is named even when none, so an answer that forgets it does not compile:
+// a joiner would fold a water bomb as a firecracker and a slip trap as a noise maker.
 export type State = {
   type: 'state';
   from: ClientId;
   to: ClientId;
   seq: number;
-  entities: { id: NetId; kind: Kind; home: ClientId | null; prop?: number }[];
+  entities: { id: NetId; kind: Kind; home: ClientId | null; prop?: number; variant: Variant | undefined }[];
   table: { rows: [NetId, Ownership][]; gone: ClientId[] };
   round: Round;
   elapsed: { phase: number; heist: number };

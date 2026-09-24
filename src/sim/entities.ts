@@ -9,6 +9,9 @@ export type NetId = string; // `<client id>:<counter>` (ADR 0006)
 export type ClientId = string;
 // ADR 0009: a character's side is its kind, `cat` or `dog`; the rest are the game's props.
 export type Kind = 'cat' | 'dog' | 'fish' | 'mine' | 'trap' | 'bag' | 'lure' | 'prop';
+// A mine's variant (card 129): the firecracker, or the water bomb; a trap's (card 130): the noise maker,
+// or the slip trap.
+export type Variant = 'firecracker' | 'water' | 'noise' | 'slip';
 
 // The one owner of identity (ADR 0004). The pose and velocity live in `body`, never here.
 export type Entity = {
@@ -16,6 +19,7 @@ export type Entity = {
   kind: Kind;
   home: ClientId | null; // its player's client for a character, none for a prop
   prop?: number; // a content prop's index in the level's props: its shape, mass and label (ADR 0008)
+  variant?: Variant; // a mine's or a trap's, from its spawn
   body: RigidBody;
 };
 
@@ -23,6 +27,13 @@ export type Entities = Map<NetId, Entity>;
 
 export function isCharacter(kind: Kind): boolean {
   return kind === 'cat' || kind === 'dog';
+}
+
+// The character of client `client`: the row whose home it is and whose kind is a side (ADR 0003, 0004).
+// Every "this client's character" asks here.
+export function characterOf<E extends Pick<Entity, 'kind' | 'home'>>(entities: ReadonlyMap<NetId, E>, client: ClientId | null): E | undefined {
+  for (const e of entities.values()) if (e.home === client && isCharacter(e.kind)) return e;
+  return undefined;
 }
 
 // ADR 0009: mines, traps and bags are never held or pushed. Each is a fixed sensor where it was put:
@@ -77,7 +88,7 @@ export function halfHeight(kind: Kind): number {
 }
 
 // A body to spawn, before it has an id; `spawnOf` gives it the next of this client's net ids.
-export type Body = Pick<Spawn, 'kind' | 'p' | 'q' | 'prop' | 'v'>;
+export type Body = Pick<Spawn, 'kind' | 'p' | 'q' | 'prop' | 'v' | 'variant'>;
 export function spawnOf(sim: Sim, b: Body): Spawn {
   return { type: 'spawn', from: sim.me, id: `${sim.me}:${sim.spawned++}`, home: isCharacter(b.kind) ? sim.me : null, ...b };
 }
@@ -98,7 +109,7 @@ export function spawnEntity(sim: Sim, s: Spawn): Entity {
   // Contacts that press above IMPACT weights are reported: the noise of an impact (ADR 0010).
   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
   collider.setContactForceEventThreshold(IMPACT * collider.mass() * -world.gravity.y);
-  const e: Entity = { id: s.id, kind: s.kind, home: s.home, ...(s.prop !== undefined && { prop: s.prop }), body };
+  const e: Entity = { id: s.id, kind: s.kind, home: s.home, ...(s.prop !== undefined && { prop: s.prop }), ...(s.variant && { variant: s.variant }), body };
   sim.entities.set(e.id, e);
   return e;
 }

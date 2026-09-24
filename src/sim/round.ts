@@ -1,40 +1,47 @@
+import { ofSide } from '../content/characters.ts';
+import type { Level } from '../content/level.ts';
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
-import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
-import type { Captured, Despawn, DugOut, Hello, Left, Look, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
+import { characterOf, halfHeight, spawnOf, type ClientId, type NetId } from './entities.ts';
+import type { Captured, Despawn, DugOut, Hello, Left, Look, MapPick, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Secured, Side, Worn } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
-import type { Sim } from './world.ts';
+import { follow, type Sim } from './world.ts';
 
 // ADR 0007's round table: a pure function of the relay's order, written only by `foldRound` on every
-// client. A player is a name: its team (null until the host answers its first hello), the client it
-// plays from (null while it is away), the look it picked per side, and when it was captured (the
-// sender's `at`), null while free.
-export type Player = { name: string; team: Team | null; client: ClientId | null; looks: Partial<Record<Side, number>>; captured: number | null };
+// client. A player is a name: its side this round (ADR 0014: written at every prep, null for a name not
+// seated then), the client it plays from (null while it is away), the look it picked per side and what it
+// wears there (ADR 0013), and when it was captured (the sender's `at`), null while free.
+export type Player = { name: string; side: Side | null; client: ClientId | null; looks: Partial<Record<Side, number>>; worn: Partial<Record<Side, Worn>>; captured: number | null };
 // Why a round ended: three fish secured (cats), every cat captured, the heist timer out with no fish held,
 // or overtime with none held or capped (dogs).
 export type Why = 'fish' | 'captured' | 'timer' | 'overtime';
-// An ended round: which team played cats, what it secured, the `at` of its last secure, the winner.
-export type Result = { cats: Team; secured: number; last: number | null; why: Why; winner: Team };
-// Which of GAME.md's match rules decided a match: more fish secured; on equal counts, the last fish secured
-// sooner in its round; neither (0-0, or both last fish at the same time), a draw.
+// Each name's points (ADR 0014): a fish secured as a cat, a catch as a dog, and the `at` of its last one.
+export type Points = Record<string, { n: number; last: number }>;
+// An ended round: its dogs (the rotation counts them), what the cats secured, the `at` of the last secure,
+// the side that won, each name's points that round.
+export type Result = { dogs: string[]; secured: number; last: number | null; why: Why; winner: Side; points: Points };
+// Which of GAME.md's match rules decided a match: the top score; on equal scores, the last point sooner
+// into its round; neither (nobody scored, or both last points at the same time), a draw.
 export type Decider = 'more' | 'sooner' | 'level';
 export type Round = {
   roster: Player[]; // in the order of each name's first hello
   phase: Phase;
-  round: number; // 0 in the lobby, 1 or 2 within a match
-  secured: { fish: NetId; at: number }[]; // this round's, in order
+  round: number; // 0 in the lobby, 1 to `rounds` within a match
+  rounds: number; // the match's round count, written at its round 1's prep (ADR 0014)
+  secured: { fish: NetId; at: number; by: string }[]; // this round's, in order, each with its sender's name
+  caught: { cat: string; by: string | null; at: number }[]; // this round's captures, each with the name of the cat's last holder
   opened: number[]; // this round's door storages worked open, by volume index
   doors: number[]; // this round's house doors open, by door index
   results: Result[]; // this match's ended rounds
-  match: Team | 'draw' | null; // the outcome of the last match, from the end of its round 2
+  match: string | 'draw' | null; // the outcome of the last match, a name, from the end of its last round
   decided: Decider | null; // and the rule that decided it
-  score: Record<Team, number>; // the session's matches won, for the life of the room
+  score: Record<string, number>; // the session's matches won per name, for the life of the room
+  map: string | null; // the map the host picked, by name (card 128); null until it picks: the level the client was given
 };
 
-export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
-const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened', 'door']);
+export type RoundMessage = Hello | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor | MapPick;
+const ROUND = new Set(['hello', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened', 'door', 'map']);
 export const isRound = (m: { type: string }): m is RoundMessage => ROUND.has(m.type);
 
-const LOOKS = 3; // per side (GAME.md, Characters)
 const TO_WIN = 3; // fish secured
 const PREP = 45; // s
 const OVERTIME = 60; // s at most
@@ -51,41 +58,39 @@ const KNOBS = [
 export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
 
 export function newRound(): Round {
-  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], doors: [], results: [], match: null, decided: null, score: { A: 0, B: 0 } };
+  return { roster: [], phase: 'lobby', round: 0, rounds: 0, secured: [], caught: [], opened: [], doors: [], results: [], match: null, decided: null, score: {}, map: null };
 }
 
 export const playerOf = (r: Round, client: ClientId): Player | undefined => r.roster.find((p) => p.client === client);
 
-// Team A plays cats in round 1, and the teams swap sides for round 2.
-export const catsTeam = (r: Round): Team => (r.round === 2 ? 'B' : 'A');
-const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
-
 // The side a client plays this round: the one answer to it (ADR 0009 spawns the kind from it).
-export function playsAs(r: Round, client: ClientId): Side | undefined {
-  const team = playerOf(r, client)?.team;
-  return team ? (team === catsTeam(r) ? 'cat' : 'dog') : undefined;
-}
+export const playsAs = (r: Round, client: ClientId): Side | undefined => playerOf(r, client)?.side ?? undefined;
 
-// A player's position on its team, in roster order: its default look and its spawn point.
+// A player's position on its side, in roster order: its default look and its spawn point.
 export function positionOf(r: Round, p: Player): number {
-  return r.roster.filter((q) => q.team === p.team).indexOf(p);
+  return r.roster.filter((q) => q.side === p.side).indexOf(p);
 }
 
 export function lookOf(r: Round, p: Player, side: Side): number {
-  return p.looks[side] ?? positionOf(r, p) % LOOKS;
+  return p.looks[side] ?? positionOf(r, p) % ofSide(side).length;
 }
 
-// GAME.md's auto-balance, about one dog per two cats: 3 → 1 vs 2, 4 → 1 vs 3, 5 → 2 vs 3, 6 → 2 vs 4,
-// 7 → 2 vs 5, 8 → 3 vs 5 (team B plays dogs in round 1). Every name before `name` counts with its team,
-// or with the team this rule gives it if the host's answer is still on its way.
-export function autoTeam(r: Round, name: string): Team {
-  let dogs = 0;
-  for (const [i, p] of r.roster.entries()) {
-    const team = p.team ?? (dogs < Math.round((i + 1) / 3) ? 'B' : 'A');
-    if (p.name === name) return team;
-    if (team === 'B') dogs++;
-  }
-  return 'A';
+// GAME.md's dogs per seated count, about one per two cats: 3 → 1, 4 → 1, 5 → 2, 6 → 2, 7 → 2, 8 → 3.
+export const dogCount = (n: number) => Math.round(n / 3);
+// The match's rounds for n seated (ADR 0014): the fewest in which every player is a dog at least once with
+// the dog counts at most one apart: 3 → 3, 4 → 4, 5 → 3, 6 → 3, 7 → 4, 8 → 3 (one round for a lone cat).
+export const roundsOf = (n: number) => Math.ceil(n / Math.max(1, dogCount(n)));
+const seated = (r: Round) => r.roster.filter((p) => p.client !== null);
+
+// ADR 0014's rotation: the dogs of the next prep, by name. The seated players (a client connected) with the
+// fewest dog rounds in this match's results first, then roster order; the first `dogCount` of them. The
+// fold applies it at prep, the lobby shows it as a preview: in the lobby the next prep starts a new match,
+// so no result counts.
+export function rotation(r: Round): string[] {
+  const past = r.phase === 'lobby' ? [] : r.results;
+  const dogRounds = (p: Player) => past.filter((x) => x.dogs.includes(p.name)).length;
+  const order = seated(r).sort((a, b) => dogRounds(a) - dogRounds(b)); // stable: roster order among equals
+  return order.slice(0, dogCount(order.length)).map((p) => p.name);
 }
 
 // The phase that follows the current one, and its round: the only `phase` the fold accepts.
@@ -100,7 +105,7 @@ export function successor(r: Round): Pick<PhaseMessage, 'to' | 'round'> {
     case 'overtime':
       return { to: 'over', round: r.round };
     case 'over':
-      return r.round < 2 ? { to: 'prep', round: r.round + 1 } : { to: 'lobby', round: 0 };
+      return r.round < r.rounds ? { to: 'prep', round: r.round + 1 } : { to: 'lobby', round: 0 };
   }
 }
 
@@ -109,7 +114,11 @@ export function duration(r: Round): number | null {
   return r.phase === 'prep' ? PREP : r.phase === 'heist' ? knobs(r).heist : r.phase === 'overtime' ? OVERTIME : null;
 }
 
-const cats = (r: Round) => r.roster.filter((p) => p.team === catsTeam(r) && p.client !== null);
+// The cats this round, their client here or away (ADR 0007: the roster owns who plays): a cat whose tab died
+// keeps its state, free or captured, its character frozen where it stood, so a `left` never ends a round.
+const cats = (r: Round) => r.roster.filter((p) => p.side === 'cat');
+// The captured cats: every one a rescue frees, and what a free cat's interact at the latch answers.
+export const captives = (r: Round) => cats(r).filter((p) => p.captured !== null);
 export const inPlay = (r: Round) => r.phase === 'prep' || r.phase === 'heist' || r.phase === 'overtime';
 const stealing = (r: Round) => r.phase === 'heist' || r.phase === 'overtime';
 
@@ -119,23 +128,44 @@ function fishHeld(t: OwnershipTable, entities: Identities): boolean {
   return false;
 }
 
-// The winner of a match and the rule that decided it: more fish secured; on equal counts, the team whose
-// last fish was secured sooner in its round; 0-0 (or the same second) a draw.
-function matchOutcome(results: Result[]): [Team | 'draw', Decider] {
-  const [a, b] = (['A', 'B'] as const).map((t) => results.find((x) => x.cats === t)!);
-  if (a!.secured !== b!.secured) return [a!.secured > b!.secured ? 'A' : 'B', 'more'];
-  if (a!.last === null || b!.last === null || a!.last === b!.last) return ['draw', 'level'];
-  return [a!.last < b!.last ? 'A' : 'B', 'sooner'];
+// The current round's points from its lists: a fish for the cat that secured it, a catch for the dog that
+// held the cat last; a catch naming no dog of this round scores nothing.
+function pointsOf(r: Round): Points {
+  const out = new Map<string, { n: number; last: number }>();
+  const credit = (name: string, at: number) => out.set(name, { n: (out.get(name)?.n ?? 0) + 1, last: Math.max(out.get(name)?.last ?? at, at) });
+  for (const s of r.secured) credit(s.by, s.at);
+  for (const c of r.caught) if (c.by !== null && r.roster.some((p) => p.name === c.by && p.side === 'dog')) credit(c.by, c.at);
+  return Object.fromEntries(out); // a name is the player's own text: every key an own one, `__proto__` too
+}
+
+// The match's points per name, derived, never stored (ADR 0014): the ended rounds' and, while a round is
+// in play, its own; `last` from the latest round the name scored in.
+function tally(r: Round): Map<string, { n: number; last: number }> {
+  const out = new Map<string, { n: number; last: number }>();
+  for (const points of [...r.results.map((x) => x.points), ...(inPlay(r) ? [pointsOf(r)] : [])]) {
+    for (const [name, { n, last }] of Object.entries(points)) out.set(name, { n: (out.get(name)?.n ?? 0) + n, last });
+  }
+  return out;
+}
+export const scoreOf = (r: Round, name: string): number => tally(r).get(name)?.n ?? 0;
+
+// The winner of a match and the rule that decided it: the top score; on equal scores, the name whose last
+// point came sooner into its round; nobody scored, or the same `at`, a draw.
+function matchOutcome(r: Round): [string | 'draw', Decider] {
+  const [a, b] = [...tally(r)].sort(([, x], [, y]) => y.n - x.n || x.last - y.last);
+  if (!a) return ['draw', 'level'];
+  if (!b || a[1].n > b[1].n) return [a[0], 'more'];
+  return a[1].last < b[1].last ? [a[0], 'sooner'] : ['draw', 'level'];
 }
 
 function end(r: Round, why: Why): void {
-  const cats = catsTeam(r);
-  const winner = why === 'fish' ? cats : other(cats);
+  const dogs = r.roster.filter((p) => p.side === 'dog').map((p) => p.name);
   r.phase = 'over';
-  r.results.push({ cats, secured: r.secured.length, last: r.secured.at(-1)?.at ?? null, why, winner });
-  if (r.round < 2) return;
-  [r.match, r.decided] = matchOutcome(r.results);
-  if (r.match !== 'draw') r.score[r.match]++;
+  r.results.push({ dogs, secured: r.secured.length, last: r.secured.at(-1)?.at ?? null, why, winner: why === 'fish' ? 'cat' : 'dog', points: pointsOf(r) });
+  if (r.round < r.rounds) return;
+  [r.match, r.decided] = matchOutcome(r);
+  const won = r.match;
+  if (won !== 'draw') r.score = { ...r.score, [won]: (Object.hasOwn(r.score, won) ? r.score[won]! : 0) + 1 };
 }
 
 // The ends the table itself says (ADR 0007), checked after every message: three fish secured, every cat
@@ -156,29 +186,34 @@ export function refusal(r: Round, m: Hello): Refusal | null {
   return r.roster.some((q) => q.name === m.name && q.client) ? 'taken' : null;
 }
 
+// Why the fold refuses a map (card 128): not from the host, not in the lobby, or a name this client has
+// no level for.
+export type MapRefusal = 'host' | 'lobby' | 'unknown';
+export function mapRefusal(r: Round, m: MapPick, host: ClientId, levels: Readonly<Record<string, Level>>): MapRefusal | null {
+  if (m.from !== host) return 'host';
+  if (r.phase !== 'lobby') return 'lobby';
+  return Object.hasOwn(levels, m.name) ? null : 'unknown';
+}
+
 // Folds one message of the relay's order and says whether it was accepted. `host` is the host the relay
-// names as of the message: only its `roster` and `phase` count. The fold reads the ownership table and
-// the entities' identities; it writes only the round table.
-export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: OwnershipTable, entities: Identities): boolean {
+// names as of the message: only its `phase` and `map` count. The fold reads the ownership table,
+// the entities' identities and the maps this client can build; it writes only the round table.
+export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: OwnershipTable, entities: Identities, levels: Readonly<Record<string, Level>> = {}): boolean {
   const p = m.type === 'left' ? undefined : playerOf(r, m.from);
   switch (m.type) {
     case 'hello': {
-      // A known name whose client left is a rejoin: it keeps its team and gets the new client.
+      // A known name whose client left is a rejoin: it keeps its side for the round and gets the new client.
       if (refusal(r, m)) return false;
       const known = r.roster.find((q) => q.name === m.name);
       if (known) known.client = m.from;
-      else r.roster.push({ name: m.name, team: null, client: m.from, looks: {}, captured: null });
-      return true;
-    }
-    case 'roster': {
-      const named = r.roster.find((q) => q.name === m.name);
-      if (m.from !== host || !named) return false;
-      named.team = m.team;
+      else r.roster.push({ name: m.name, side: null, client: m.from, looks: {}, worn: {}, captured: null });
       return true;
     }
     case 'look':
-      if (!p || !Number.isInteger(m.look) || m.look < 0 || m.look >= LOOKS) return false;
+      // What it wears is any catalogue id: the sim checks no unlock (ADR 0013).
+      if (!p || !Number.isInteger(m.look) || m.look < 0 || m.look >= ofSide(m.side).length) return false;
       p.looks[m.side] = m.look;
+      p.worn[m.side] = m.worn;
       return true;
     case 'left':
       for (const q of r.roster) if (q.client === m.id) q.client = null;
@@ -194,26 +229,32 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       r.round = m.round;
       if (m.to === 'overtime' && !fishHeld(t, entities)) end(r, 'timer');
       if (m.to !== 'prep') return true;
-      [r.secured, r.opened, r.doors] = [[], [], []];
+      [r.secured, r.caught, r.opened, r.doors] = [[], [], [], []];
       for (const q of r.roster) q.captured = null;
       if (m.round === 1) [r.results, r.match, r.decided] = [[], null, null];
+      // The rotation sides every seated player; a name not seated waits for the next prep (ADR 0014).
+      const dogs = rotation(r);
+      for (const q of r.roster) q.side = q.client === null ? null : dogs.includes(q.name) ? 'dog' : 'cat';
+      if (m.round === 1) r.rounds = roundsOf(seated(r).length);
       return true;
     }
     case 'secured': {
-      // Only from the client the ownership table says holds that fish, once per fish.
+      // Only from a named client the ownership table says holds that fish, once per fish; the fold names it.
       const row = t.rows.get(m.fish);
-      if (!stealing(r) || entities.get(m.fish)?.kind !== 'fish' || row?.owner !== m.from || !row.held) return false;
+      if (!stealing(r) || !p || entities.get(m.fish)?.kind !== 'fish' || row?.owner !== m.from || !row.held) return false;
       if (r.secured.some((s) => s.fish === m.fish)) return false;
-      r.secured.push({ fish: m.fish, at: m.at });
+      r.secured.push({ fish: m.fish, at: m.at, by: p.name });
       return true;
     }
     case 'captured':
+      // The cat's client names the client that held it last (ADR 0014); the fold keeps that client's name.
       if (!inPlay(r) || !p || playsAs(r, m.from) !== 'cat' || p.captured !== null) return false;
       p.captured = m.at;
+      r.caught.push({ cat: p.name, by: m.by === null ? null : (playerOf(r, m.by)?.name ?? null), at: m.at });
       return true;
     case 'rescue': {
-      // A free cat opens the kennel: every captured cat is free at once.
-      const inside = cats(r).filter((q) => q.captured !== null);
+      // A free cat opens the kennel: every captured cat is free at once, one whose tab died too.
+      const inside = captives(r);
       if (!inPlay(r) || !p || playsAs(r, m.from) !== 'cat' || p.captured !== null || inside.length === 0) return false;
       for (const q of inside) q.captured = null;
       return true;
@@ -231,43 +272,44 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       if (!inPlay(r) || !p || r.doors.includes(m.door)) return false;
       r.doors.push(m.door);
       return true;
+    case 'map':
+      if (mapRefusal(r, m, host, levels)) return false;
+      r.map = m.name;
+      return true;
   }
 }
 
-// `receive`'s part for the round. The host's decision is a message like any other: it answers a name
-// with no team by the auto-balance, when the hello arrives or when a `left` makes it the host. Every
-// client notes each `left` by its own clock, with the leaver's name, for the host's removal duty. A
+// `receive`'s part for the round. Every client notes each `left` by its own clock, with the leaver's name, for the host's removal duty. A
 // rescue opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once
 // captured, starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the
 // tunnel exit. This client's own hello with a known name mid-round is a rejoin: its character enters,
-// and its own refused hello leaves the fold's reason for its client to show.
+// and its own refused hello leaves the fold's reason for its client to show. Its own refused `secured`
+// is forgotten, so its cat secures that fish on its next carry.
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
   const leaver = m.type === 'left' ? playerOf(sim.round, m.id) : undefined;
   if (m.type === 'hello' && m.from === sim.me) sim.refused = refusal(sim.round, m);
-  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities)) return false;
+  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities, sim.levels)) {
+    if (m.type === 'secured' && m.from === sim.me) sim.securing.delete(m.fish);
+    return false;
+  }
   if (m.type === 'left') sim.away.set(m.id, { name: leaver?.name ?? null, at: sim.time });
   if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
   if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;
   if (playerOf(sim.round, sim.me)?.captured === null) sim.digOut = null;
   if (m.type === 'dugOut' && m.from === sim.me) {
-    const me = [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind));
+    const me = characterOf(sim.entities, sim.me);
     const exit = pointFor(sim.level, 'tunnelExit', 'cat');
     if (me && exit) me.body.setTranslation(exit, true);
     sim.leap = null;
   }
   if (m.type === 'hello' && m.from === sim.me && inPlay(sim.round)) enter(sim);
-  if (host === sim.me && (m.type === 'hello' || m.type === 'left')) {
-    for (const p of sim.round.roster) {
-      if (p.team !== null || (m.type === 'hello' && p.name !== m.name)) continue;
-      sim.outbox.push({ type: 'roster', from: sim.me, name: p.name, team: autoTeam(sim.round, p.name) });
-    }
-  }
   return true;
 }
 
 // The round table turned to a new phase on this client (the entity table is already cleared for prep):
-// the phase starts now by this client's clock, and at prep the host spawns the level anew and every
-// player its character, of the side the roster gives it this round, at its side's spawn point.
+// the phase starts now by this client's clock, and at prep the world follows the table's map, its debris
+// stands again where content puts it, still, the host spawns the level anew and every player its
+// character, of the side the roster gives it this round, at its side's spawn point.
 export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   const r = sim.round;
   sim.phaseAt = sim.time;
@@ -275,18 +317,25 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.called = false;
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
-  [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
-  [sim.stunUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap, sim.doorWork, sim.perk] = [0, 0, null, null, null, true, null, null];
+  [sim.opening, sim.capturing, sim.gateUntil, sim.holder] = [null, false, 0, null];
+  [sim.stunUntil, sim.wetUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap, sim.doorWork, sim.perk] = [0, 0, 0, null, null, null, 'noise', null, null];
   sim.securing.clear();
   sim.ending.clear();
   sim.barged.clear();
+  follow(sim);
+  for (const { prop, body } of sim.debris) {
+    body.setTranslation(sim.level.props[prop]!.p, true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }
 
 // This client's character enters the round, of the side the roster gives it: at its side's spawn point,
 // or on the kennel's floor if the roster holds it captured (a rejoin), digging out on a timer of its own
-// from now. A name with no team yet waits for the next prep.
+// from now. A name with no side yet waits for the next prep.
 function enter(sim: Sim): void {
   const r = sim.round;
   const p = playerOf(r, sim.me);
@@ -309,7 +358,8 @@ export function removals(sim: Sim, host: ClientId | undefined): Despawn[] {
     const back = sim.round.roster.some((p) => p.name === name && p.client !== null);
     if (!back && sim.time - at < AWAY - 1e-9) continue;
     sim.away.delete(client);
-    for (const e of sim.entities.values()) if (e.home === client && isCharacter(e.kind)) out.push({ type: 'despawn', from: sim.me, id: e.id });
+    const gone = characterOf(sim.entities, client);
+    if (gone) out.push({ type: 'despawn', from: sim.me, id: gone.id });
   }
   return out;
 }

@@ -102,7 +102,7 @@ function judge({ samples, wires, ids }: Run): Verdict {
 
 // Cards 20-22 in play at three clients: the host is the dog and spawns the fish ahead of cat A and a crate
 // east of cat B.
-export const grabTossWiggleHit: Scenario = {
+const grabTossWiggleHit: Scenario = {
   about: 'a lunge drops the fish, carry, toss, a thrown crate frees, a wiggle-free',
   level: prototypeRoom,
   things: [
@@ -117,3 +117,4 @@ export const grabTossWiggleHit: Scenario = {
     ][i] ?? { side: 'cat', at: { x: 6, y: 1, z: -6 - i }, script: [] },
   judge,
 };
+export default grabTossWiggleHit;

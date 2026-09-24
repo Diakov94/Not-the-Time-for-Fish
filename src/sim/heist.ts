@@ -8,7 +8,7 @@ import { stunned } from './mines.ts';
 import { clear } from './traps.ts';
 import { myCharacter } from './movement.ts';
 import { carried } from './ownership.ts';
-import { playerOf } from './round.ts';
+import { captives, playerOf } from './round.ts';
 import type { Sim } from './world.ts';
 
 const TAKE = 0.8; // m from a storage's box: a cat takes a fish from there, and a teammate holds a lid
@@ -64,7 +64,7 @@ export function interact(sim: Sim): SimMessage | null {
   const p = c.body.translation();
   const latch = sim.level.points.find((pt) => pt.role === 'latch')?.p;
   const free = playerOf(sim.round, sim.me)?.captured === null;
-  if (latch && free && away(p, { p: latch, half: { x: 0, y: 0, z: 0 } }) <= LATCH && sim.round.roster.some((q) => q.captured !== null)) {
+  if (latch && free && away(p, { p: latch, half: { x: 0, y: 0, z: 0 } }) <= LATCH && captives(sim.round).length > 0) {
     return { type: 'rescue', from: sim.me };
   }
   if (sim.opening || sim.doorWork) return null;
@@ -87,10 +87,11 @@ export const pinging = (sim: Sim): boolean => sim.round.phase === 'overtime' && 
 // meet it while a rescue holds it open. A door storage worked on for OPENING, or a house door for
 // DOOR_WORK, by a cat still at it opens, loudly. This client's dog that meets a shut house door in play
 // barges it: open here at once, and for everyone at the message. A house door is fixed at its closed pose
-// while shut and a free panel once open. A fish this client holds inside the hideout is secured, once.
+// while shut and a free panel once open. A fish this client holds inside the hideout is secured, once
+// unless the fold refuses it.
 // While this client is the pinging carrier, its character pings every CARRIER_EVERY, the first at once.
-// This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured; its
-// dig-out timer ending digs it out.
+// This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured, naming its
+// last holder; its dig-out timer ending digs it out.
 export function roundStep(sim: Sim): SimMessage[] {
   const out: SimMessage[] = [];
   const r = sim.round;
@@ -131,7 +132,7 @@ export function roundStep(sim: Sim): SimMessage[] {
   const caught = c?.kind === 'cat' && shut && sim.controller.computedGrounded() && volumeAt(sim, 'kennel', c.body.translation()) >= 0;
   if (inPlay && me?.captured === null && !sim.capturing && caught) {
     sim.capturing = true;
-    out.push({ type: 'captured', from: sim.me, at: sim.time - sim.heistAt });
+    out.push({ type: 'captured', from: sim.me, at: sim.time - sim.heistAt, by: sim.holder });
   }
   if (sim.digOut !== null && sim.time >= sim.digOut - 1e-9) {
     sim.digOut = null;
