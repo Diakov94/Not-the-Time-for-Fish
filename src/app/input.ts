@@ -12,18 +12,19 @@ const TAP = 250; // ms: E released sooner is also a tap, the interact; held, it 
 export type Input = { keys: Set<string>; look: Look; sneaking: NetId | undefined; pressedE: number };
 
 // A press's one sim call each (card 49); the sim answers it by the player's own kind.
-export type Actions = { grab: () => void; plant: () => void; interact: () => void; perk: () => void; mark: () => void; report: () => void };
+export type Actions = { grab: () => void; plant: () => void; interact: () => void; perk: () => void; mark: () => void; next: () => void; report: () => void };
 
 // Keyboard on the window, the mouse on the canvas: the first click captures the mouse for the camera,
-// every later left click is `grab` (grab or throw); the middle button is `mark`, Q `plant`, F `perk`, F9
-// `report`. Ctrl toggles sneaking for the character `own` names now, so a new character starts upright.
-// E is held from its press on (the intent's sniff and defuse) and, let go within TAP, is also a tap.
+// every later left click is `grab` (grab or throw); the middle button is `mark`, Q `plant`, F `perk`,
+// Tab `next` (the teammate a captured cat watches), F9 `report`. Ctrl toggles sneaking for the character
+// `own` names now, so a new character starts upright. E is held from its press on (the intent's sniff
+// and defuse) and, let go within TAP, is also a tap.
 export function listen(canvas: HTMLCanvasElement, own: () => NetId | undefined, act: Actions): Input {
   const input: Input = { keys: new Set(), look: { yaw: 0, pitch: 0.35 }, sneaking: undefined, pressedE: -Infinity };
-  const press: Record<string, () => void> = { KeyQ: act.plant, KeyF: act.perk, F9: act.report };
+  const press: Record<string, () => void> = { KeyQ: act.plant, KeyF: act.perk, Tab: act.next, F9: act.report };
   addEventListener('keydown', (e) => {
     input.keys.add(e.code);
-    if (e.code === 'F9') e.preventDefault();
+    if (e.code === 'F9' || e.code === 'Tab') e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'KeyE') input.pressedE = e.timeStamp;
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') input.sneaking = input.sneaking === own() ? undefined : own();

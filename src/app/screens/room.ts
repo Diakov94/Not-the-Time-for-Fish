@@ -69,6 +69,6 @@ export function roomScreen<T>(enter: (code: string, name: string) => Promise<T>)
 function hint(room: string): HTMLElement {
   const p = document.createElement('p');
   p.className = 'hint';
-  p.textContent = `Кімната ${room} · клацніть, щоб керувати камерою · WASD — рух · Shift — біг · Пробіл — стрибок · Ctrl — крастися · ЛКМ — схопити / кинути · Q — міна / пастка · E — взаємодія, утримати — нюхати / знешкодити · F — перк · СКМ — позначка · F9 — звіт про розсинхрон`;
+  p.textContent = `Кімната ${room} · клацніть, щоб керувати камерою · WASD — рух · Shift — біг · Пробіл — стрибок · Ctrl — крастися · ЛКМ — схопити / кинути · Q — міна / пастка · E — взаємодія, утримати — нюхати / знешкодити · F — перк · СКМ — позначка · Tab — інший кіт (з вольєра) · F9 — звіт про розсинхрон`;
   return p;
 }

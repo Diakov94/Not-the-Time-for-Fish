@@ -4,8 +4,8 @@ import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { RELAY_PATH } from '../relay/address.ts';
-import { createView, draw } from '../render/view.ts';
-import { isCharacter } from '../sim/entities.ts';
+import { createView, draw, type Target } from '../render/view.ts';
+import { isCharacter, type ClientId } from '../sim/entities.ts';
 import { drainEvents, markAt } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import { interact } from '../sim/heist.ts';
@@ -14,7 +14,7 @@ import { plant } from '../sim/mines.ts';
 import { IDLE } from '../sim/movement.ts';
 import { carried } from '../sim/ownership.ts';
 import { usePerk } from '../sim/perks.ts';
-import { advance } from '../sim/round.ts';
+import { advance, playerOf } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
 import { intent, listen } from './input.ts';
 import { lobbyScreen } from './screens/lobby.ts';
@@ -40,13 +40,27 @@ const next = () => {
 const lobby = lobbyScreen(room, (m) => send(session, m), next);
 const results = resultsScreen(next);
 const hint = document.querySelector<HTMLElement>('.hint')!;
-// The camera's target: this client's own character, whichever the sim spawned it this round.
-const own = () => [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind))?.id;
+// A client's character, whichever the sim spawned this round.
+const characterOf = (client: ClientId | null) => [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind))?.id;
+const own = () => characterOf(sim.me);
+// Spectating (card 51): the round table says this client's cat is captured. Whom the camera follows is
+// the app's one decision, made from the table every frame: the own character; while spectating, a free
+// teammate, the `tabs`-th of them by Tab, or with none free the kennel's centre.
+const spectating = () => (playerOf(sim.round, sim.me)?.captured ?? null) !== null;
+let tabs = 0;
+function target(): Target | undefined {
+  const me = playerOf(sim.round, sim.me);
+  if (!me || me.captured === null) return own();
+  const free = sim.round.roster.filter((p) => p.team === me.team && p.client !== sim.me && p.captured === null).flatMap((p) => characterOf(p.client) ?? []);
+  return free.length > 0 ? free[tabs % free.length] : sim.level.volumes.find((v) => v.role === 'kennel')?.p;
+}
+// Play: the canvas is the screen and the own character is not a spectator; only then the keys count.
+const acting = () => PLAY.includes(sim.round.phase) && !spectating();
 
 const canvas = document.querySelector('canvas')!;
-// A press's sim call, sent only while the canvas is the screen; what it does is the sim's, by kind.
+// A press's sim call, sent only in play; what it does is the sim's, by kind.
 const act = (call: () => SimMessage | null) => () => {
-  const m = PLAY.includes(sim.round.phase) ? call() : null;
+  const m = acting() ? call() : null;
   if (m) send(session, m);
 };
 const input = listen(canvas, own, {
@@ -55,6 +69,9 @@ const input = listen(canvas, own, {
   interact: act(() => interact(sim)),
   perk: act(() => usePerk(sim)),
   mark: act(() => markAt(sim, view.camera.position, view.camera.getWorldDirection(new Vector3()))),
+  next: () => {
+    if (spectating()) tabs++;
+  },
   report: () => {
     // The desync report: the dump the headless runner compares, as a file.
     const a = document.createElement('a');
@@ -74,9 +91,9 @@ let last = performance.now();
 // canvas is the screen, and the mouse is freed for the lobby's and the results' buttons.
 requestAnimationFrame(function loop(now: number) {
   const playing = PLAY.includes(sim.round.phase);
-  frame(session, Math.min((now - last) / 1000, MAX_FRAME), playing ? intent(input, own()) : IDLE);
+  frame(session, Math.min((now - last) / 1000, MAX_FRAME), acting() ? intent(input, own()) : IDLE);
   last = now;
-  draw(view, sim, input.look, own());
+  draw(view, sim, input.look, target());
   hear(audio, sim, view.camera);
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
