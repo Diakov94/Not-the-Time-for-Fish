@@ -38,3 +38,7 @@
 - 33 juice: stars on noise with cause impact or blast (the sim's word), shake proportional to loudness. Batch R1, 2026-09-24.
 - 34 camera target named by the app. Batch R1, 2026-09-24.
 - 14 camera collision: the camera no longer sees through walls. Batch R1, 2026-09-24.
+- 43 state carries the round: a joiner's timer is within 34 ms of the host's (limit 250); 20 pings held before the state reach it as 0 events. Batch N1, 2026-09-24.
+- 44 hello and rejoin: a taken name is refused with {code: 'refused'} in 5–7 ms. Batch N1, 2026-09-24.
+- 45 snapshot budget for eight: 58.8–60.6 kB/s down per client (budget 100; before 289.6). Batch N1, 2026-09-24.
+- 46 dead socket leaves: a silent socket is terminated and `left` follows; before, none within 60 s. Batch N1, 2026-09-24.
