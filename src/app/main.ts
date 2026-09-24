@@ -8,6 +8,7 @@ import { createHud, drawHud } from '../hud/hud.ts';
 import { record } from '../meta/progress.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw, type Target } from '../render/view.ts';
+import { emote } from '../sim/emotes.ts';
 import { isCharacter, type ClientId } from '../sim/entities.ts';
 import { drainEvents, markAt } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
@@ -81,6 +82,7 @@ const input = listen(canvas, own, {
   interact: act(() => interact(sim)),
   perk: act(() => usePerk(sim)),
   mark: act(() => markAt(sim, view.camera.position, view.camera.getWorldDirection(new Vector3()))),
+  emote: (n) => act(() => emote(sim, n))(),
   next: () => {
     if (spectating()) tabs++;
   },
