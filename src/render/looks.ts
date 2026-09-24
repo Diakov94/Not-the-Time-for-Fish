@@ -4,7 +4,7 @@ import type { Worn } from '../art/cosmetics.ts';
 import { KINDS as PROPS } from '../art/props.ts';
 import { lookFor, rigFor, type Side } from '../art/rig.ts';
 import { ofSide } from '../content/characters.ts';
-import { isCharacter, type Entity, type Kind } from '../sim/entities.ts';
+import { isCharacter, type Entity, type Kind, type Variant } from '../sim/entities.ts';
 import { lookOf as rosterLook, playerOf } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
 import { COLOUR, DEFAULT, material, shaped } from './level.ts';
@@ -59,11 +59,11 @@ function prop(shape: Shape, label: string | undefined): THREE.Object3D {
   return look ? new THREE.Group().add(look) : new THREE.Mesh(geometry(shape), material((label && COLOUR[label]) || DEFAULT));
 }
 
-// The kinds' looks are art's (ADR 0011), sized from the collider here.
-const KINDS: Partial<Record<Kind, (shape: Shape) => THREE.Object3D>> = {
+// The kinds' looks are art's (ADR 0011), sized from the collider here; a mine or a trap by its variant.
+const KINDS: Partial<Record<Kind, (shape: Shape, variant?: Variant) => THREE.Object3D>> = {
   fish: (s) => PROPS.fish((s as Cuboid).halfExtents),
-  mine: (s) => PROPS.mine((s as Cuboid).halfExtents),
-  trap: (s) => PROPS.trap((s as Cuboid).halfExtents),
+  mine: (s, v) => PROPS[v === 'water' ? 'water' : 'mine']((s as Cuboid).halfExtents),
+  trap: (s, v) => PROPS[v === 'slip' ? 'slip' : 'trap']((s as Cuboid).halfExtents),
   bag: (s) => PROPS.bag((s as Ball).radius),
   // Card 57: the lure is a fish-shaped decoy at its collider's size (half a fish's length).
   lure: (s) => PROPS.lure((s as Cuboid).halfExtents),
@@ -73,7 +73,7 @@ export function buildLook(sim: Sim, e: Entity): THREE.Object3D {
   const shape = e.body.collider(0).shape;
   if (isCharacter(e.kind)) return character(e.kind as Side, lookOf(sim, e), shape as Capsule);
   if (e.kind === 'prop') return prop(shape, e.prop === undefined ? undefined : sim.level.props[e.prop]?.label);
-  return KINDS[e.kind]?.(shape) ?? new THREE.Mesh(geometry(shape), material(DEFAULT));
+  return KINDS[e.kind]?.(shape, e.variant) ?? new THREE.Mesh(geometry(shape), material(DEFAULT));
 }
 
 // Debris is a content prop the sim keeps as a local body, never an entity (card 26).
