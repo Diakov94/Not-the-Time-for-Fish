@@ -95,7 +95,10 @@ leaks=$(ps -eo pid,ppid,etime,pcpu,args 2>/dev/null | tail -n +2 | awk '
 # another engine add your own builder and runner names, otherwise the instrument
 # counts foreign load as ours.
 [ -f .studio/project.conf ] && . .studio/project.conf
-OURS_RE="${OURS_RE:-orca/workspaces|$(basename "$PWD")|vite-node|vitest|puppeteer|dotnet|godot|claude .*--model|codex}"
+# Trunk: from the profile (TRUNK), else the remote's default branch, else main.
+TRUNK="${TRUNK:-$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')}"
+TRUNK="${TRUNK:-main}"
+OURS_RE="${OURS_RE:-orca/workspaces|$(basename "$PWD")|vite-node|vitest|puppeteer|dotnet|godot|claude .*--model}"
 ours=$(ps -eo pcpu,args 2>/dev/null | tail -n +2 | sort -k1 -rn | head -10 |
   grep -cE "$OURS_RE")
 echo
@@ -193,18 +196,18 @@ for w in (d.get('result',{}).get('workers') or []):
     if w.get('dispatchStatus') == 'dispatched':
         print(w.get('resource',{}).get('worktreeId','').split('/')[-1])
 " 2>/dev/null)
-main_tip=$(git rev-parse main 2>/dev/null)
+trunk_tip=$(git rev-parse "$TRUNK" 2>/dev/null)
 landed=""
 fresh=""
 while read -r _ path; do
   [ -z "$path" ] && continue
   b=$(basename "$path")
   git show-ref --verify --quiet "refs/heads/$b" 2>/dev/null || continue
-  git merge-base --is-ancestor "$b" main 2>/dev/null || continue
+  git merge-base --is-ancestor "$b" "$TRUNK" 2>/dev/null || continue
   # A live task on the worktree: do not touch, whatever the tip says.
   if printf '%s\n' "$live_wt" | grep -qx "$b" 2>/dev/null; then fresh="$fresh $b(task)"; continue; fi
   tip=$(git rev-parse "$b" 2>/dev/null)
-  if [ "$tip" = "$main_tip" ]; then fresh="$fresh $b"; continue; fi
+  if [ "$tip" = "$trunk_tip" ]; then fresh="$fresh $b"; continue; fi
   # A dirty tree: the worker is working between commits, do not touch.
   if [ -n "$(git -C "$path" status --short 2>/dev/null)" ]; then fresh="$fresh $b"; continue; fi
   landed="$landed $b"
@@ -239,7 +242,7 @@ fi
 
 # ── 7. A worker launched and NOT STARTED ─────────────────────────────────────
 # A failure that cost three cases of two to three hours each (11 August:
-# ui-three-bugs, codex on framing, review-cut). The spec goes into the input
+# ui-three-bugs, framing, review-cut). The spec goes into the input
 # field and stays there: Orca shows `dispatched`, the process is alive, the
 # heartbeats go on, `worker-read` returns the task text, and not a single line
 # of work. It is not caught by eye, because the terminal tail looks plausible:
@@ -250,8 +253,13 @@ fi
 # NOTHING since, i.e. has not started. For a working worker the banner scrolled
 # off the edge long ago. Cured by pressing Enter: `terminal send --enter --text ""`.
 echo
+claude_bin=$(command -v claude 2>/dev/null || true)
+if [ -n "$claude_bin" ]; then
+  echo "claude on PATH: $claude_bin -> $(readlink "$claude_bin" 2>/dev/null || basename "$claude_bin"), version $("$claude_bin" --version 2>/dev/null | head -1)"
+fi
 stalled=""
 finished=""
+refused=""
 if command -v orca >/dev/null 2>&1; then
   for h in $(orca orchestration worker-list --json 2>/dev/null | python3 -c "
 import json,sys
@@ -263,28 +271,26 @@ except Exception:
     pass
 " 2>/dev/null); do
     tail40=$(orca terminal read --terminal "$h" --limit 40 2>/dev/null)
+    # The CLI refused the model (400 in the tail): dispatched and dead, not
+    # unstarted. Cured between waves by `claude update` (agents.md).
+    if printf '%s' "$tail40" | grep -q 'does not support this model'; then
+      refused="$refused $h"
+      continue
+    fi
     # ONE SIGN, and it was verified in both directions on one worker: for
     # review-cut, while stuck, the banner was in the tail; after pressing Enter,
     # zero matches, same as for the three other working ones. The guard can go
     # red and can go green.
     #
     # I tried a second sign and threw it away: the terminal's `latest cursor`
-    # counts pages, not lines, and counts DIFFERENTLY per provider: for working
-    # claude workers it equals 1, for codex it runs into thousands. A check on
-    # it gave four false positives out of four. A broad wrong guard is worse
-    # than a narrow right one: it teaches you not to believe red.
+    # counts pages, not lines, and for a working claude worker stays at 1. A
+    # check on it gave four false positives out of four. A broad wrong guard is
+    # worse than a narrow right one: it teaches you not to believe red.
     #
-    # What remains is an honestly named blind spot: on codex the sign is NOT
-    # VERIFIED: by the time of the check its banner has scrolled out of the
-    # buffer ("older output is no longer retained"), and we did not record the
-    # exact text in either of the two cases. So a codex worker is still checked
-    # by eye on the first cycle.
-    # `MCP startup incomplete` and `Use /skills` are the same banner of an
-    # unstarted worker, only codex reaches it AFTER the MCP servers fail (for
-    # us blender and godot-ai regularly fail to come up; they have nothing to
-    # do with the game). The day-log review stood like that for a whole cycle:
-    # the instrument was silent because it looked only for the agent greeting,
-    # and the tail ended with the MCP complaint.
+    # A blind spot, honestly named: the sign was verified on one worker and
+    # is silent whenever the banner is not in the last forty lines. So the
+    # first cycle after a launch still checks every worker by eye
+    # (START_PROMPT.md).
     # The same banner also sits in the tail of a FINISHED worker: having done
     # the work, it returns to the prompt, and the tail again ends with the
     # banner. The day-log review got onto the list that way a second time,
@@ -293,11 +299,11 @@ except Exception:
     # of its worktree has commits ahead of trunk. Hence two different verdicts
     # below, and they need opposite cures: Enter for one, collecting the work
     # for the other.
-    if printf '%s' "$tail40" | grep -qE 'Claude Code v[0-9]|Codex v[0-9]|Welcome to|MCP startup incomplete|Use /skills'; then
+    if printf '%s' "$tail40" | grep -qE 'Claude Code v[0-9]|Welcome to'; then
       # We tell them apart by the TRACES OF WORK above the banner, not by the
       # tree: Orca has no binding of a terminal to a worktree (`worktreeId` is
       # the project root for everyone). A finished one has its own commands in
-      # the tail (`Ran ...`), an unstarted one only the noise of MCP start-up.
+      # the tail (`Ran ...`), an unstarted one only the banner and the spec.
       if printf '%s' "$tail40" | grep -qE '(^|[^a-zA-Z])Ran [a-z]'; then
         finished="$finished $h"
       else
@@ -318,6 +324,12 @@ if [ -n "$finished" ]; then
   echo
   echo "FINISHED AND NOT REPORTED: banner in the tail, but there are traces of work: collect the work"
   for h in $finished; do echo "  $h  check the branch of its worktree: commit present, no letter"; done
+  problems=$((problems + 1))
+fi
+if [ -n "$refused" ]; then
+  echo
+  echo "MODEL REFUSED BY THE CLI: the claude binary is older than the model (400 in the tail)"
+  for h in $refused; do echo "  $h  cure: claude update between waves, then relaunch (agents.md)"; done
   problems=$((problems + 1))
 fi
 
@@ -391,8 +403,9 @@ if [ -n "$parked" ]; then
   echo "  Such a worktree does not prove a worker. Check task-list and decide on each."
 fi
 orphans=""
-for b in $(git for-each-ref --format='%(refname:short)' refs/heads | grep -v '^main$'); do
-  ahead=$(git rev-list --count "main..$b" 2>/dev/null || echo 0)
+# Trunk and its own ancestor `main` (the release branch) are never orphans.
+for b in $(git for-each-ref --format='%(refname:short)' refs/heads | grep -v -x -e "$TRUNK" -e main); do
+  ahead=$(git rev-list --count "$TRUNK..$b" 2>/dev/null || echo 0)
   [ "$ahead" -gt 0 ] || continue
   case " $live_branches " in *" $b "*) continue ;; esac
   orphans="$orphans $b:$ahead"

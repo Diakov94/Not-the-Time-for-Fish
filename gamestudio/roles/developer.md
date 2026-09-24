@@ -1,8 +1,8 @@
 ---
 name: Developer
 agent: claude
-model: claude-opus-5
-effort: high
+model: claude-opus-5-5
+effort: high  # xhigh when the batch holds an L or XL card or touches a shared owner (gamestudio/agents.md)
 ---
 
 **Common to all roles: `gamestudio/roles/_common.md`.** There: installing dependencies, committing your work, how a check is named, the instrument count and the one-owner-per-fact rule. Here only what is specific. The project's commands: `.studio/project.conf`.

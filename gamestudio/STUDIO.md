@@ -14,17 +14,17 @@ A game. Not instruments, not rules, not documents about rules.
 
 ```sh
 . .studio/project.conf
-prod=$(eval "$PROD_FIND"  | xargs wc -l | tail -1 | awk '{print $1}')
-style=$(eval "$STYLE_FIND" | xargs wc -l | tail -1 | awk '{print $1}')
-tst=$(eval "$TEST_FIND"  | xargs wc -l | tail -1 | awk '{print $1}')
-doc=$(eval "$DOC_FIND"   | xargs wc -l | tail -1 | awk '{print $1}')
+prod=$(eval "$PROD_FIND"  | xargs cat | wc -l | tr -d ' ')
+style=$(eval "$STYLE_FIND" | xargs cat | wc -l | tr -d ' ')
+tst=$(eval "$TEST_FIND"  | xargs cat | wc -l | tr -d ' ')
+doc=$(eval "$DOC_FIND"   | xargs cat | wc -l | tr -d ' ')
 ```
 
 `tst` or `doc` larger than `prod+style` is a blocker: the first task of the cycle is to cut. `tasks/` is not counted.
 
 **Tests only for critical scenarios and for bugs found by QA.** We write no process guards: 7,400 lines of them have already been deleted.
 
-**We keep no documents.** The spec lives in the task card and dies with it. The worker's report is the commit message. The only things that live on are `docs/design` (the game's norms), `docs/ui` (geometry contracts) and `docs/RULES.md` (a rule earned through a mistake: one line each).
+**We keep no documents.** The spec lives in the task card and dies with it. The worker's report is the commit message. The only things that live on are `docs/design` (the game's norms), `docs/ui` (geometry contracts) and `docs/RULES.md` (a rule earned through a mistake: one line each; written by the Producer only, a worker proposes a line in its report).
 
 **Create nothing outside the project.** Worktrees are `$WORKTREES_DIR/<name>` INSIDE the project (`.studio/project.conf`), and that folder must be excluded from EVERY gate. Otherwise the gates check other people's branches and go red on someone else's code: *Pilot, 11 August 2026*: a landing failed on 12 lint errors, not one of which belonged to trunk.
 
@@ -74,9 +74,9 @@ There is also a reason the role could never have worked: **trunk is checked out 
 
 **The order for landing one branch, and it is not shortened:**
 
-1. `git merge main` INTO THE TASK BRANCH, not the other way round. A branch whose base is older than trunk brings stale ENTRIES, not breakage, and that is the least visible evil;
+1. `git merge $TRUNK` INTO THE TASK BRANCH (trunk is `develop` in this repository; `TRUNK` in `.studio/project.conf`), not the other way round. A branch whose base is older than trunk brings stale ENTRIES, not breakage, and that is the least visible evil;
 2. the full `$GATES_CMD` run RIGHT THERE. Red here costs nothing: trunk has not moved;
-3. only then the merge into `main`.
+3. only then the landing on trunk: here a PR into `develop`, squash-merged (the repository allows only squash and rebase merges), and the source branch deleted after the merge.
 
 Otherwise the requirement "gates red: leave trunk as it was" cannot be met: the merge is already in.
 
@@ -92,13 +92,13 @@ Otherwise the requirement "gates red: leave trunk as it was" cannot be met: the 
 
 **What to look at in the diff, by risk, not top to bottom:**
 
-- **whether anything the spec forbids was touched.** One command over the zones from `.studio/project.conf`: `git diff --stat main..<branch> -- <rule zones>`. Empty output means the boundary held. That is how it was checked that the map-honesty fix did not make the game easier: `src/ai/tuning.ts` was not touched by a single line;
+- **whether anything the spec forbids was touched.** One command over the zones from `.studio/project.conf`: `git diff --stat $TRUNK..<branch> -- <rule zones>`. Empty output means the boundary held. That is how it was checked that the map-honesty fix did not make the game easier: `src/ai/tuning.ts` was not touched by a single line;
 - **whether a SECOND OWNER OF A FACT appeared.** This is the project's dominant class of defects: four breakages in a row within a day, and the worst of them lied to the player's face: the screen GUESSED the reason a route was refused from the target tile and called 29 of 51 non-hostile objects "no path here". A correct delivery names the owner itself: "the reason belongs to the passability rule, the warning to the AI actor, the log line to the engine event";
 - **extension or rewrite.** +11 lines in a core predicate is an extension; a rewritten predicate in the same card is a reason to ask why;
 - **the test goes red without the fix.** Remove the fix, confirm the test is red, put it back. Checked this way on 11 August: the stuck-turn guard went red on exactly two of its three assertions;
 - **instrument lines per game line.** A cheap measure that shows at once where the money went: 630 lines of throwaway test for a 52-line fix is twenty to one, and the instruments were thrown away whole.
 
-**Code from `gpt-5.6-sol` is read by eye, and green gates do not replace that.** An owner's concern from 11 August, confirmed by fact: in the delivery about intros, sol touched `src/app/session.ts`, the owner of saves, and the Producer landed the branch having checked only the gates and the "was `core` touched" boundary, which `src/app` was not part of. The change turned out to be correct, but it was read AFTER the merge.
+**Logic outside the UI zone in a UI Developer's delivery is read by eye, and green gates do not replace that.** An owner's concern from 11 August, confirmed by fact: in the delivery about intros, the UI worker touched `src/app/session.ts`, the owner of saves, and the Producer landed the branch having checked only the gates and the "was `core` touched" boundary, which `src/app` was not part of. The change turned out to be correct, but it was read AFTER the merge.
 
 The rule is mechanical, not "be more careful":
 
@@ -108,9 +108,9 @@ gamestudio/ui-diff-check.sh <branch> [base]
 
 It prints the files WITH LOGIC OUTSIDE THE UI ZONE. The zones are not hard-coded: the engine is detected (web/TS by `package.json`, Unity by `ProjectSettings`, Godot by `project.godot`), and they can be overridden with `.studio/zones.conf`: two lines, `LOGIC_GLOBS` and `UI_GLOBS`. This is part of the portable `gamestudio/`, and the next project on another engine gets the same rule without editing the instrument. **The Producer reads every file on that list as a diff before merging.** Empty means gates and screenshots are enough.
 
-The price of the rule was measured on the same day: of three sol deliveries, two gave an empty list (pure CSS and nine lines in `src/ui`), the third gave five files. So the reading is cheap and rarely kicks in, but it kicks in exactly where the risk is.
+The price of the rule was measured on the same day: of three UI deliveries, two gave an empty list (pure CSS and nine lines in `src/ui`), the third gave five files. So the reading is cheap and rarely kicks in, but it kicks in exactly where the risk is.
 
-Sol's zone is the look, the layout, the texts and the raster images. A `.ts` with logic in its delivery is not necessarily a mistake, but it is always a reason to read: the owner's directive is that it can be trusted with the interface only.
+The UI Developer's zone is the look, the layout, the texts and the vector assets. A `.ts` with logic in its delivery is not necessarily a mistake, but it is always a reason to read: the owner's directive is that the role is given the interface only, whatever model it runs on (`gamestudio/agents.md`).
 
 **With your own run, not theirs.** A "gates green" report is checked by your own gate run on the branch with trunk merged into it. On 11 August a worker honestly reported green on ITS OWN branch, and after merging with trunk the suite went red: that step exists for exactly this.
 
@@ -142,7 +142,7 @@ Four rules that keep the speed:
 Before assembling, count the branches' overlaps by `src` files:
 
 ```
-for b in <branches>; do git diff --name-only main...$b -- src; done   # then intersect
+for b in <branches>; do git diff --name-only $TRUNK...$b -- src; done   # then intersect
 ```
 
 On 11 August, across eleven branches, the overlap was **one** file (`src/render/adventure/index.ts`), so the cut by zones works and almost everything merges without conflicts. Branches with no overlap go first, overlapping ones last and one at a time.
@@ -186,13 +186,13 @@ In one line: **20 weights of XS/S/M is fine; 20 weights of L and XL is not.**
 
 ## Batch sizes: an owner's directive, in numbers
 
-| stage | size of one batch | how many in parallel | provider |
+| stage | size of one batch | how many in parallel | model |
 |---|---|---|---|
-| development | **15–20 weights of one zone**, no more than one XL and two L | by the number of zones, 6–10 | opus (code), sol (interface) |
-| integration | **all ready branches into one** | **1** | opus |
-| playtest | **one scenario and seed per worker** | **5** | luna |
-| fixing playtest bugs | **ALL bugs of one zone at once**, however many | 4–6 | opus / sol |
-| debt and ideas | **15–20 weights**, grouped by meaning; XS and S can be many | 2–3 | opus / sonnet |
+| development | **15–20 weights of one zone**, no more than one XL and two L | by the number of zones, 6–10 | opus 5.5 (code and interface) |
+| integration | **all ready branches into one** | **1** | the Producer, by hand (§4) |
+| playtest | **one scripted scenario and client count per worker** | **2 until the load is measured, then by Chromium count** | haiku 4.5 drives; the friend group, or one sonnet 5 scenario, judges |
+| fixing playtest bugs | **ALL bugs of one zone at once**, however many | 4–6 | opus 5.5 |
+| debt and ideas | **15–20 weights**, grouped by meaning; XS and S can be many | 2–3 | opus 5.5 / sonnet 5 |
 
 **An owner's directive: make the sizes BIGGER.** When in doubt between "split into two batches" and "hand out as one", hand out as one, until the sum of weights passes 20. There is one limit, the worker's context, and it shows itself (`% until auto-compact` in the tail). Until it shows, the batch is small.
 
@@ -200,20 +200,20 @@ The measurement this stands on: a batch of eight debt cards closed in one pass a
 
 **Never one card at a time.** Not in development, not in bug fixing. The only stage where "one" applies is integration: it is one by construction.
 
-**Before launching playtests, clean up.** An owner's directive. Close the terminals of lingering workers, remove merged worktrees and branches, check that `git status --short` is empty in every worktree being removed. The reason is not tidiness for its own sake: five browser playtests each bring up their own vite and Chromium, and if ten dead terminals with half-killed processes are hanging around, the playtests fail on a busy port and on load: exactly the way `shots` already failed on a timeout. Cleanup takes a minute and removes a whole class of false failures.
+**Before launching playtests, clean up.** An owner's directive. Close the terminals of lingering workers, remove merged worktrees and branches, check that `git status --short` is empty in every worktree being removed. The reason is not tidiness for its own sake: browser playtests each bring up their own vite, Chromium and three to eight clients, and if ten dead terminals with half-killed processes are hanging around, the playtests fail on a busy port and on load: exactly the way `shots` already failed on a timeout. Cleanup takes a minute and removes a whole class of false failures.
 
 ```
 # lingering terminals: everything not bound to a live worker
 orca terminal list --json     # against worker-list --json (dispatchStatus == dispatched)
 # merged worktrees and branches
-git worktree list; git branch --merged main
+git worktree list; git branch --merged $TRUNK   # lists trunk's own ancestors too (main here): delete by explicit name with -d, never main or develop
 ```
 
-**Playtests run five at a time on `gpt-5.6-luna`**: an owner's directive: the model is almost free against the weekly window, and acceptance by play is the only stage that caught what no green test saw. Five passes give five different scenarios for the price of one opus worker.
+**Playtests are driven by `claude-haiku-4-5` and judged elsewhere**: an owner's decision from 24 September 2026. Haiku, the cheapest model on the shared window, drives the headless test clients (`GAME.md`, `$HEADLESS_GAMES_CMD`) through a scripted scenario and reports numbers; the question "is it fun, is losing fair" is answered by the friend group at the milestone playtest (`GAME.md`), or by one Sonnet 5 scenario when the Producer asks for it. Acceptance by play is still the only stage that caught what no green test saw. In the pilot, on a cheap model with a window of its own, five passes cost about one opus worker; here every playtest also brings up vite, a Chromium and three to eight clients, so two run in parallel until the load and the spend under a wave are measured (`usage-snapshot.sh`, `PORTING.md`).
 
-Every playtest gets **its own scenario and its own seed**, otherwise five workers find the same bug. The cut, proven in practice: the first ten minutes with no explanations; a playthrough to the ending; a battle from start to the result screen; the city, hiring and the army; the map, the camera, the quest book and the touch layout.
+Every playtest gets **its own scenario and client count**, otherwise two workers find the same bug. The pilot's cut (the first ten minutes with no explanations; a playthrough to the ending; a battle to the result screen; the city; the map and the touch layout) is evidence that scenarios are cut by what the player does, not by the code. This game's cut is written together with the first headless clients: a round to the end at three and at eight players; a grab, the kennel and a rejoin; mines armed, sniffed and defused; a fish carried out under chase.
 
-**Bugs from playtests come back in batches by zone, not one at a time.** Five playtests yield dozens of findings; handing them out one at a time is going back to nine starts per task. Group by zone (`src/ui/battle`, `src/ui/adventure`, `src/core`, …) and hand out one batch per zone.
+**Bugs from playtests come back in batches by zone, not one at a time.** Playtests yield dozens of findings; handing them out one at a time is going back to nine starts per task. Group by zone (`src/ui/battle`, `src/ui/adventure`, `src/core`, …) and hand out one batch per zone.
 
 # 5. The queue: `tasks/`
 
@@ -233,7 +233,7 @@ Closed it: delete the file and add a line to `tasks/DONE.md`. Never silently del
 
 **All checks: no more than 3 minutes, ideally a minute.** If it grows, that is a cycle blocker.
 
-**The provider is pinned to the role by the owner's directive, not chosen by price:** code `claude-opus-5`, interface `gpt-5.6-sol`, architecture `claude-fable-5`, review `claude-opus-5`, acceptance `gpt-5.6-luna`. Savings come from **fewer starts**, not from a weaker model: on 11 August code from `gpt-5.6-sol` did not satisfy the owner, and that decision is not revisited for the sake of limits.
+**The model is pinned to the role by the owner's directive, not chosen by price:** code `claude-opus-5-5`, interface `claude-opus-5-5`, architecture `claude-fable-5-1`, acceptance `claude-haiku-4-5`; diff reading is the Producer's own session (`gamestudio/agents.md`). Effort is the one knob left: it is set per batch by the rule in `agents.md`, and on a BURNING verdict the Producer drops it one step before shrinking the wave, naming it in the ledger. Savings come from **fewer starts**, not from a weaker model: in the pilot, on 11 August, code from another provider's model did not satisfy the owner, and that decision is not revisited for the sake of limits. That is why the interface here runs on the same model as the code.
 
 **There is one measure of efficiency: worker launches per closed task.** It was nine. The target is no more than two: the batch and the acceptance. Counted by `worker-list` against the lines in `DONE.md`.
 
@@ -243,8 +243,8 @@ Closed it: delete the file and add a line to `tasks/DONE.md`. Never silently del
 
 Decides and passes verdicts; does not execute. Does not write production code, does not edit other people's tests, does not introduce instruments and rules instead of the game.
 
-**The Orca status column is not evidence.** A worker can be `dispatched` and dead: the model withdrawn, the provider at capacity, the spec never arrived. The verdict comes from the terminal tail and from the numbers in the worktree.
+**The Orca status column is not evidence.** A worker can be `dispatched` and dead: the model withdrawn, the provider overloaded, the spec never arrived. The verdict comes from the terminal tail and from the numbers in the worktree.
 
 **Every cycle, name the roles without tasks and why.** **A cycle ends with work running.**
 
-Escalate to the owner only at a decision gate: whether the work is needed at all. A model being unavailable, and mechanics within the frame of `GAME.md`, are not gates.
+Escalate to the owner only at a decision gate: whether the work is needed at all. A model being unavailable, and mechanics within the frame of `GAME.md`, are not gates; the weekly window at 100 % is one (extra usage or wait: the owner's money).

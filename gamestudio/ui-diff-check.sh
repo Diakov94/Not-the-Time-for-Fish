@@ -2,7 +2,7 @@
 #
 # WHAT IN A UI ROLE'S DELIVERY MUST BE READ BY EYE BEFORE MERGING.
 #
-# Why. The interface provider is trusted with the look and layout, not with the
+# Why. The UI role is trusted with the look and layout, not with the
 # game's rules (the owner's directive: it can be trusted with the interface
 # only). Green gates do not check that: on 11 August 2026 a UI worker touched
 # the module that owns saves, the branch landed on a green gate run, and the Producer read
@@ -12,7 +12,7 @@
 # is read as a diff before merging. Empty means gates and screenshots are enough.
 #
 # Usage:
-#   gamestudio/ui-diff-check.sh <branch> [base]
+#   gamestudio/ui-diff-check.sh <branch> [base]      # base defaults to trunk
 #
 # The zones are taken from `.studio/zones.conf` if it exists; otherwise they are
 # derived from the project's engine. The config file is two lines of shell
@@ -24,8 +24,13 @@
 set -u
 
 BRANCH="${1:?branch required}"
-BASE="${2:-main}"
 ROOT="$(git rev-parse --show-toplevel)"
+# shellcheck disable=SC1091
+[ -f "$ROOT/.studio/project.conf" ] && . "$ROOT/.studio/project.conf"
+# Trunk: from the profile (TRUNK), else the remote's default branch, else main.
+TRUNK="${TRUNK:-$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')}"
+TRUNK="${TRUNK:-main}"
+BASE="${2:-$TRUNK}"
 CONF="$ROOT/.studio/zones.conf"
 
 if [ -f "$CONF" ]; then

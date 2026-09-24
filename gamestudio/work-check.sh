@@ -21,6 +21,11 @@
 #   gamestudio/work-check.sh            # all child worktrees next to this one
 set -uo pipefail
 
+[ -f .studio/project.conf ] && . .studio/project.conf
+# Trunk: from the profile (TRUNK), else the remote's default branch, else main.
+TRUNK="${TRUNK:-$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')}"
+TRUNK="${TRUNK:-main}"
+
 classify() {
   python3 -c '
 import subprocess, sys, os
@@ -119,10 +124,10 @@ fi
 nearest_base() {
   local wt="$1" self="$2" best="" best_n=""
   local b mb n
-  # `main` goes first so that on an equal divergence the caption names it: a
-  # guard branch and main diverge from the working branch at the same point,
+  # Trunk (`$TRUNK`) goes first so that on an equal divergence the caption names it: a
+  # guard branch and trunk diverge from the working branch at the same point,
   # and calling the guard the base when it added nothing confuses for no reason.
-  for b in main $(git -C "$wt" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null); do
+  for b in "$TRUNK" $(git -C "$wt" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null); do
     [ "$b" = "$self" ] && continue
     mb=$(git -C "$wt" merge-base "$b" HEAD 2>/dev/null) || continue
     n=$(git -C "$wt" rev-list --count "$mb"..HEAD 2>/dev/null) || continue
@@ -136,8 +141,8 @@ echo "$roots" | while IFS= read -r wt; do
   [ -d "$wt" ] || continue
   branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
   baseref=$(nearest_base "$wt" "$branch")
-  [ -n "$baseref" ] || baseref=main
-  base=$(git -C "$wt" merge-base HEAD "$baseref" 2>/dev/null) || base=main
+  [ -n "$baseref" ] || baseref="$TRUNK"
+  base=$(git -C "$wt" merge-base HEAD "$baseref" 2>/dev/null) || base="$TRUNK"
   commits=$(git -C "$wt" rev-list --count "$base"..HEAD 2>/dev/null)
   dirty=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
   echo "$(basename "$wt")  branch $branch (from $baseref)  commits $commits, edited files $dirty"

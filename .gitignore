@@ -1,0 +1,8 @@
+# The studio's instruments write their ledgers next to the profile in .studio/
+# (gamestudio/PORTING.md); the ledgers carry usage numbers and are recreated by
+# a command. The profile and zones.conf are committed like code.
+/.studio/*.jsonl
+# Worker worktrees created by the Producer: the default WORKTREES_DIR
+# (gamestudio/agents.md); change it here if .studio/project.conf changes it.
+/.worktrees/
+.DS_Store
