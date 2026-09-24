@@ -22,6 +22,7 @@ function rig() {
     mark() {},
     next() {},
     report() {},
+    emote() {},
   });
   const frame = () => poll((now += FRAME));
   return { pad, pads, input, grabs, frame };

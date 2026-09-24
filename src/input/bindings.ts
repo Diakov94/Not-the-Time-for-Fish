@@ -4,9 +4,9 @@ import { settings } from '../settings/store.ts';
 // that do it, on the keyboard a KeyboardEvent code or `Mouse<button>`, on the gamepad a `Pad…` code
 // (gamepad.ts names them); the listeners test these codes and every screen that names a key asks `keyOf`.
 // `interact` is one key: tapped it interacts, held it sniffs or defuses. The camera is the mouse or the
-// right stick, not a code. The emote keys are card 125's. These are the defaults: the viewer's overrides
-// are the settings store's, applied on top by `resolve` at every use.
-export type Action = 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'sneak' | 'jump' | 'grab' | 'plant' | 'interact' | 'perk' | 'mark' | 'next' | 'report';
+// right stick, not a code. These are the defaults, final on both devices (card 125): the viewer's
+// overrides are the settings store's, applied on top by `resolve` at every use.
+export type Action = 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'sneak' | 'jump' | 'grab' | 'plant' | 'interact' | 'perk' | 'mark' | 'next' | 'report' | 'emote1' | 'emote2' | 'emote3' | 'emote4';
 export type Device = 'keyboard' | 'gamepad';
 type Table = Partial<Record<Action, string[]>>;
 
@@ -26,6 +26,10 @@ export const BINDINGS: { keyboard: Record<Action, string[]>; gamepad: Partial<Re
     mark: ['Mouse1'],
     next: ['Tab'], // the teammate a captured cat watches
     report: ['F9'], // the desync report
+    emote1: ['Digit1'],
+    emote2: ['Digit2'],
+    emote3: ['Digit3'],
+    emote4: ['Digit4'],
   },
   gamepad: {
     forward: ['PadStickUp'],
@@ -40,6 +44,10 @@ export const BINDINGS: { keyboard: Record<Action, string[]>; gamepad: Partial<Re
     interact: ['PadX'],
     perk: ['PadRB'],
     mark: ['PadView'],
+    emote1: ['PadUp'], // the d-pad clockwise from the top
+    emote2: ['PadRight'],
+    emote3: ['PadDown'],
+    emote4: ['PadLeft'],
   },
 };
 
@@ -92,9 +100,8 @@ const NAMES: Record<string, string> = {
   PadLeft: '←',
   PadRight: '→',
 };
+// A code's name, for the hints and for the settings screen's remap columns.
+export const nameOf = (code: string): string => NAMES[code] ?? code.replace(/^(Key|Digit|Pad)/, '');
 
 // The action's key in effect on the device used last; one the pad has no button for is named by the keyboard.
-export function keyOf(action: Action): string {
-  const code = (bound(last)[action] ?? bound('keyboard')[action]!)[0]!;
-  return NAMES[code] ?? code.replace(/^(Key|Digit|Pad)/, '');
-}
+export const keyOf = (action: Action): string => nameOf((bound(last)[action] ?? bound('keyboard')[action]!)[0]!);
