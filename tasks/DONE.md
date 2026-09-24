@@ -29,3 +29,6 @@
 - 27 round and match: one fold; prep 45.000 s; host migration 0–17 ms, no phase folded twice. Producer: dropping "only the host" turns the migration test red. Batch S2, 2026-09-24.
 - 28 secured fish, storages, prep exits: the fridge takes 3.017 s with 1 ping; the aquarium holds 0 alone and 0.517 s with a teammate. Batch S2, 2026-09-24.
 - 29 kennel, capture, rescue, dig-out: dig-out 60.000–60.017 s. Batch S2, 2026-09-24.
+- 35 runner for the MVP: scenarios by name; judges divergence, end tables, sides, doomed claims = 0. Batch H1, 2026-09-24.
+- 36 scenario grab-toss-wiggle-hit at 3 clients: 3 of 3 runs; hit frees in 18–20 ms, wiggle-free at 7.99–8.01 s, moving peak 0.241 m (limit 0.25). Batch H1, 2026-09-24.
+- 37 eight clients within budget: measured 289.6 kB/s down per client, relay 169.9 msg/s, 16.7 ticks/s; the budget itself is card 45. Batch H1, 2026-09-24.
