@@ -97,11 +97,11 @@ export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: numb
 }
 
 // One frame of the caller's loop, in real time: copies move toward their owners' poses, the sim
-// steps, and every TICK_MS a tick goes out.
+// steps and its touch claims go out, and every TICK_MS a tick goes out.
 export function frame(s: Session, dt: number, intent: Intent): void {
   const now = performance.now();
   interpolate(s.sim, s.receiver, now);
-  step(s.sim, dt, intent);
+  for (const claim of step(s.sim, dt, intent)) send(s, claim);
   if (now - s.lastTick < TICK_MS) return;
   s.lastTick = now;
   const t = tick(s.sim, s.rested);

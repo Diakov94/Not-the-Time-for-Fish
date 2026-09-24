@@ -1,10 +1,11 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
-import type { ClientId, Entities } from './entities.ts';
+import type { ClientId, Entities, NetId } from './entities.ts';
 import type { Level } from './level.ts';
 import { carry } from './grab.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
-import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
+import { newOwnershipTable, type Claim, type OwnershipTable } from './ownership.ts';
+import { touchClaims } from './touch.ts';
 
 export const STEP = 1 / 60;
 const GRAVITY = 9.81;
@@ -16,6 +17,9 @@ export type Sim = {
   entities: Entities;
   ownership: OwnershipTable;
   accumulator: number; // seconds of passed-in time not yet stepped
+  time: number; // seconds stepped: the clock of the touch-claim limit
+  inFlight: Set<NetId>; // props this client claimed or grabbed whose claim has not come back yet
+  touchedAt: Map<NetId, number>; // when this client last produced a touch claim for a prop
 };
 
 export async function init(): Promise<void> {
@@ -39,18 +43,33 @@ export function createWorld(level: Level, me: ClientId): Sim {
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
-  return { me, world, controller, entities: new Map(), ownership: newOwnershipTable(), accumulator: 0 };
+  return {
+    me,
+    world,
+    controller,
+    entities: new Map(),
+    ownership: newOwnershipTable(),
+    accumulator: 0,
+    time: 0,
+    inFlight: new Set(),
+    touchedAt: new Map(),
+  };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
-// `intent` is this client's player input, held for every step of the call.
-export function step(sim: Sim, dt: number, intent: Intent = IDLE): void {
+// `intent` is this client's player input, held for every step of the call. Returns the touch claims
+// the steps produced, for the caller to send.
+export function step(sim: Sim, dt: number, intent: Intent = IDLE): Claim[] {
+  const claims: Claim[] = [];
   sim.accumulator += dt;
   while (sim.accumulator >= STEP) {
     sim.accumulator -= STEP;
+    sim.time += STEP;
     const c = myCharacter(sim);
     if (c) drive(sim, c, intent);
     carry(sim);
     sim.world.step();
+    claims.push(...touchClaims(sim));
   }
+  return claims;
 }
