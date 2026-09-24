@@ -80,3 +80,4 @@
 - 104 emote event: born in src/sim/emotes.ts, lives only on the event list. Wave 0 SIM-SEAMS, 2026-09-24.
 - 105 worn in the roster: Player.worn per side, folded from look messages. Wave 0 SIM-SEAMS, 2026-09-24.
 - 106 zone grep for the new zones: art, settings, input and meta join the rule. Wave 0 SIM-SEAMS, 2026-09-24.
+- 140 the yacht map: exits 4 > dogs 3, carry 11.3 m, rails 4 m; no schema change. Wave 0 MAP-yacht, 2026-09-24.
