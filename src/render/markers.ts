@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OVERLAY } from '../art/palette.ts';
 import type { Sim } from '../sim/world.ts';
 
 // CONTEXT.md, Team marker (card 58): a spot a player marks by hand for its own team, drawn for every
@@ -36,8 +37,8 @@ export function drawMarkers(m: Markers, sim: Sim, scene: THREE.Scene, camera: TH
     if (e.type !== 'mark') continue;
     const g = new THREE.Group();
     for (const [geometry, colour] of [
-      [RIM, 0x111111],
-      [FACE, 0xffffff],
+      [RIM, OVERLAY.rim],
+      [FACE, OVERLAY.white],
     ] as const) {
       const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: colour, transparent: true, depthTest: false, side: THREE.DoubleSide }));
       mesh.renderOrder = 12;
