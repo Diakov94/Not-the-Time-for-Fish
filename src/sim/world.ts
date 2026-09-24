@@ -13,7 +13,7 @@ import { perkStep, type Perk } from './perks.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
-import { clock, newRound, removals, type Round } from './round.ts';
+import { clock, newRound, removals, type Refusal, type Round } from './round.ts';
 import { touchClaims } from './touch.ts';
 
 export const STEP = 1 / 60;
@@ -61,6 +61,7 @@ export type Sim = {
   digOut: number | null; // when this client's captured cat digs out, by its own clock
   gateUntil: number; // this client's time the kennel's gate shuts again after a rescue
   away: Map<ClientId, { name: string | null; at: number }>; // who left, as whom, and when by this client's clock
+  refused: Refusal | null; // why the fold refused this client's own latest hello (card 68)
   stunUntil: number; // when this client's cat's stun ends, by its own clock
   used: number; // mines this client's dog planted since its last resupply
   planting: Work | null; // this client's dog's plant in progress
@@ -132,6 +133,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     digOut: null,
     gateUntil: 0,
     away: new Map(),
+    refused: null,
     stunUntil: 0,
     used: 0,
     planting: null,

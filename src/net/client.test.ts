@@ -177,8 +177,8 @@ test('a second client with a name in use is refused within 500 ms and closed; th
   const refused = await connect(url, walls, name).then(() => undefined, (e: Refused) => e);
   const ms = performance.now() - t0;
   await play(500, () => a!.sim.ownership.gone.size > 0);
-  console.log(`a second "${name}": ${refused?.code} after ${ms.toFixed(0)} ms; left announced to the first: ${a!.sim.ownership.gone.size}`);
-  expect(refused).toMatchObject({ code: 'refused', player: name });
+  console.log(`a second "${name}": ${refused?.code} (${refused?.reason}) after ${ms.toFixed(0)} ms; left announced to the first: ${a!.sim.ownership.gone.size}`);
+  expect(refused).toMatchObject({ code: 'refused', player: name, reason: 'taken' });
   expect(ms).toBeLessThanOrEqual(500);
   expect(a!.sim.ownership.gone.size).toBe(1); // the relay's `left` for the refused socket: one member stays
   expect(playerOf(a!.sim.round, a!.sim.me)?.name).toBe(name);

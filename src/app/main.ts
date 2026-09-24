@@ -1,37 +1,78 @@
+import { Vector3 } from 'three';
 import { createAudio, hear } from '../audio/audio.ts';
 import { countryHouse } from '../content/country-house.ts';
-import { connect, frame, send, spawn } from '../net/client.ts';
+import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
-import { createView, draw } from '../render/view.ts';
-import { spawnPoint } from '../sim/build.ts';
-import { drainEvents } from '../sim/events.ts';
+import { RELAY_PATH } from '../relay/address.ts';
+import { createView, draw, type Target } from '../render/view.ts';
+import { isCharacter, type ClientId } from '../sim/entities.ts';
+import { drainEvents, markAt } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
+import { interact } from '../sim/heist.ts';
+import type { Phase, SimMessage } from '../sim/messages.ts';
+import { plant } from '../sim/mines.ts';
+import { IDLE } from '../sim/movement.ts';
 import { carried } from '../sim/ownership.ts';
+import { usePerk } from '../sim/perks.ts';
+import { advance, playerOf } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
 import { intent, listen } from './input.ts';
+import { lobbyScreen } from './screens/lobby.ts';
+import { resultsScreen } from './screens/results.ts';
 import { roomScreen } from './screens/room.ts';
 
-const RELAY_PORT = 8787; // `npm run relay` (src/relay/serve.ts)
 const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is stepped as this much
+// The phases the canvas is the screen for; the lobby and the results take the rest (card 48).
+const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
 
 // The Vite entry: it wires the zones and holds no game fact. The sim owns every pose, the entity table
 // and the fold; net carries them; render draws them; this file only moves input in and frames along.
 await init();
-const name = `Гравець ${1000 + Math.floor(Math.random() * 9000)}`; // until the room screen asks for one (card 50)
-const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, countryHouse, name));
+// The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
+const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
+const { session, room } = await roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, countryHouse, name), room }));
 const { sim } = session;
-// The level's cat spawn after those the characters already in the room hold, so two players stand apart.
-const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;
-const mine = spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
+// The host's button, in the lobby and the results: the round table's successor phase.
+const next = () => {
+  const m = advance(sim, session.host);
+  if (m) send(session, m);
+};
+const lobby = lobbyScreen(room, (m) => send(session, m), next);
+const results = resultsScreen(next);
+const hint = document.querySelector<HTMLElement>('.hint')!;
+// A client's character, whichever the sim spawned this round.
+const characterOf = (client: ClientId | null) => [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind))?.id;
+const own = () => characterOf(sim.me);
+// Spectating (card 51): the round table says this client's cat is captured. Whom the camera follows is
+// the app's one decision, made from the table every frame: the own character; while spectating, a free
+// teammate, the `tabs`-th of them by Tab, or with none free the kennel's centre.
+const spectating = () => (playerOf(sim.round, sim.me)?.captured ?? null) !== null;
+let tabs = 0;
+function target(): Target | undefined {
+  const me = playerOf(sim.round, sim.me);
+  if (!me || me.captured === null) return own();
+  const free = sim.round.roster.filter((p) => p.team === me.team && p.client !== sim.me && p.captured === null).flatMap((p) => characterOf(p.client) ?? []);
+  return free.length > 0 ? free[tabs % free.length] : sim.level.volumes.find((v) => v.role === 'kennel')?.p;
+}
+// Play: the canvas is the screen and the own character is not a spectator; only then the keys count.
+const acting = () => PLAY.includes(sim.round.phase) && !spectating();
 
 const canvas = document.querySelector('canvas')!;
-const input = listen(
-  canvas,
-  () => {
-    const m = carried(sim) ? throwCarried(sim) : grab(sim);
-    if (m) send(session, m);
+// A press's sim call, sent only in play; what it does is the sim's, by kind.
+const act = (call: () => SimMessage | null) => () => {
+  const m = acting() ? call() : null;
+  if (m) send(session, m);
+};
+const input = listen(canvas, own, {
+  grab: act(() => (carried(sim) ? throwCarried(sim) : grab(sim))),
+  plant: act(() => plant(sim)),
+  interact: act(() => interact(sim)),
+  perk: act(() => usePerk(sim)),
+  mark: act(() => markAt(sim, view.camera.position, view.camera.getWorldDirection(new Vector3()))),
+  next: () => {
+    if (spectating()) tabs++;
   },
-  () => {
+  report: () => {
     // The desync report: the dump the headless runner compares, as a file.
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(dump(sim), null, 2)], { type: 'application/json' }));
@@ -39,18 +80,26 @@ const input = listen(
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
-);
+});
 const view = createView(canvas, sim);
 const audio = createAudio();
 
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
 // between the last two of them.
 let last = performance.now();
+// The screen is the round table's phase, read every frame. The canvas is drawn only while it is the
+// screen; the keys move the character only in play, and the mouse is freed for the lobby's and the
+// results' buttons.
 requestAnimationFrame(function loop(now: number) {
-  frame(session, Math.min((now - last) / 1000, MAX_FRAME), intent(input));
+  const playing = PLAY.includes(sim.round.phase);
+  frame(session, Math.min((now - last) / 1000, MAX_FRAME), acting() ? intent(input, own()) : IDLE);
   last = now;
-  draw(view, sim, input.look, mine); // the camera's target: the own character until the app names another
+  if (playing) draw(view, sim, input.look, target());
   hear(audio, sim, view.camera);
+  hint.hidden = !playing;
+  if (!playing && document.pointerLockElement) document.exitPointerLock();
+  lobby(sim, session.host);
+  results(sim, session.host);
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });
