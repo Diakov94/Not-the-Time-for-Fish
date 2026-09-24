@@ -4,6 +4,7 @@ import type { ClientId, Entities, NetId } from './entities.ts';
 import type { Level } from './level.ts';
 import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
+import { smell, type Scent } from './scent.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
@@ -33,6 +34,8 @@ export type Sim = {
   impacts: Set<string>; // collider pairs pressing above the impact threshold in the last step
   pinged: Map<NetId, number>; // when a body this client simulates last pinged an impact
   stride: number; // m the own character has walked since its last step ping
+  scent: Map<NetId, Scent[]>; // each cat's and lure's trail as this client applied its poses (ADR 0010)
+  sniffing: boolean; // the own dog sniffs this step
 };
 
 export async function init(): Promise<void> {
@@ -80,6 +83,8 @@ export function createWorld(level: Level, me: ClientId): Sim {
     impacts: new Set(),
     pinged: new Map(),
     stride: 0,
+    scent: new Map(),
+    sniffing: false,
   };
 }
 
@@ -96,6 +101,7 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE): SimMessage[] 
     if (c) drive(sim, c, intent);
     carry(sim);
     sim.world.step(sim.queue);
+    smell(sim);
     out.push(...grabStep(sim), ...noises(sim, intent), ...touchClaims(sim));
   }
   return out;
