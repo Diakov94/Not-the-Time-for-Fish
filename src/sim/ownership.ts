@@ -202,14 +202,15 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities, host);
   // A message that ends an entity takes it out of play; the end of a mine, a trap or a pickup is an event
-  // where it lay; a blast acts on the bodies this client simulates, a pickup fills its picker's hand.
+  // where it lay, of its variant; a blast acts on the bodies this client simulates, a pickup fills its
+  // picker's hand.
   const trapEnd = m.type === 'sprung' || m.type === 'cleared' || m.type === 'pickup';
   if (accepted && (m.type === 'despawn' || m.type === 'blast' || m.type === 'defused' || trapEnd)) {
-    const { kind, body } = sim.entities.get(m.id)!;
+    const { kind, body, variant } = sim.entities.get(m.id)!;
     const p = body.translation();
     remove(sim, m.id);
-    if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from });
-    if (m.type === 'blast') blasted(sim, m, p);
+    if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from, ...(variant && { variant }) });
+    if (m.type === 'blast') blasted(sim, m, p, variant);
     if (trapEnd) trapEnded(sim, m, p, kind);
   }
   if (!accepted && !settled) return;

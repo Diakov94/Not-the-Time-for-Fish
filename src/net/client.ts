@@ -130,7 +130,7 @@ function answer(s: Session, to: ClientId, seq: number): void {
     from: s.sim.me,
     to,
     seq,
-    entities: [...entities.values()].map(({ id, kind, home, prop }) => ({ id, kind, home, prop })),
+    entities: [...entities.values()].map(({ id, kind, home, prop, variant }) => ({ id, kind, home, prop, variant })),
     table: { rows: [...ownership.rows], gone: [...ownership.gone] },
     round,
     elapsed: { phase: time - phaseAt, heist: time - heistAt },

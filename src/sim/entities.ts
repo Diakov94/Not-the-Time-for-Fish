@@ -9,6 +9,8 @@ export type NetId = string; // `<client id>:<counter>` (ADR 0006)
 export type ClientId = string;
 // ADR 0009: a character's side is its kind, `cat` or `dog`; the rest are the game's props.
 export type Kind = 'cat' | 'dog' | 'fish' | 'mine' | 'trap' | 'bag' | 'lure' | 'prop';
+// A mine's variant (card 129): the firecracker, or the water bomb.
+export type Variant = 'firecracker' | 'water';
 
 // The one owner of identity (ADR 0004). The pose and velocity live in `body`, never here.
 export type Entity = {
@@ -16,6 +18,7 @@ export type Entity = {
   kind: Kind;
   home: ClientId | null; // its player's client for a character, none for a prop
   prop?: number; // a content prop's index in the level's props: its shape, mass and label (ADR 0008)
+  variant?: Variant; // a mine's, from its spawn
   body: RigidBody;
 };
 
@@ -77,7 +80,7 @@ export function halfHeight(kind: Kind): number {
 }
 
 // A body to spawn, before it has an id; `spawnOf` gives it the next of this client's net ids.
-export type Body = Pick<Spawn, 'kind' | 'p' | 'q' | 'prop' | 'v'>;
+export type Body = Pick<Spawn, 'kind' | 'p' | 'q' | 'prop' | 'v' | 'variant'>;
 export function spawnOf(sim: Sim, b: Body): Spawn {
   return { type: 'spawn', from: sim.me, id: `${sim.me}:${sim.spawned++}`, home: isCharacter(b.kind) ? sim.me : null, ...b };
 }
@@ -98,7 +101,7 @@ export function spawnEntity(sim: Sim, s: Spawn): Entity {
   // Contacts that press above IMPACT weights are reported: the noise of an impact (ADR 0010).
   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
   collider.setContactForceEventThreshold(IMPACT * collider.mass() * -world.gravity.y);
-  const e: Entity = { id: s.id, kind: s.kind, home: s.home, ...(s.prop !== undefined && { prop: s.prop }), body };
+  const e: Entity = { id: s.id, kind: s.kind, home: s.home, ...(s.prop !== undefined && { prop: s.prop }), ...(s.variant && { variant: s.variant }), body };
   sim.entities.set(e.id, e);
   return e;
 }

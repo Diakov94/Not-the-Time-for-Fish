@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, Vector } from '@dimforge/rapier3d-compat';
-import { entityOf, isCharacter, type ClientId, type Entity, type NetId } from './entities.ts';
+import { entityOf, isCharacter, type ClientId, type Entity, type NetId, type Variant } from './entities.ts';
 import type { Mark, Noise, NoiseCause, Phase } from './messages.ts';
+import { wet } from './mines.ts';
 import { myCharacter, type Intent } from './movement.ts';
 import { simulatedHere } from './ownership.ts';
 import { perkOf } from './perks.ts';
@@ -18,7 +19,7 @@ export type SimEvent =
   | { type: 'emote'; n: number; from: ClientId }
   | { type: 'grab' | 'throw' | 'drop'; id: NetId; from: ClientId }
   | { type: 'hit'; dog: NetId; from: ClientId }
-  | { type: 'blast' | 'defused' | 'sprung' | 'cleared' | 'pickup'; id: NetId; p: Vector; from: ClientId } // an end, where it lay
+  | { type: 'blast' | 'defused' | 'sprung' | 'cleared' | 'pickup'; id: NetId; p: Vector; from: ClientId; variant?: Variant } // an end, where it lay, of its variant
   | { type: 'planted'; kind: 'mine' | 'trap'; id: NetId; p: Vector; from: ClientId } // a dog's mine or a cat's trap, where it was put
   | { type: 'secured' | 'captured' | 'rescue' | 'dugOut'; p: Vector; from: ClientId } // the fish, or the sender's character, where it was
   | { type: 'phase'; to: Phase; round: number; from: ClientId }; // the table turned, at `from`'s message (ADR 0007)
@@ -28,8 +29,8 @@ const LOUDEST_IMPACT = 100; // weights of force that are as loud as a blast
 const RESTING = 0.05; // m/s: a copy slower than this rests on its owner
 const IMPACT_GAP = 0.5; // s a body that pinged an impact stays quiet
 // A character's steps: one ping per stride of travel on the ground. A dog is always loud; a sneaking cat
-// is silent, and so is a cat under Ninja. A dog's stride is shorter, so a walking dog pings at least as
-// often as a sprinting cat.
+// is silent, and so is a cat under Ninja, unless it is wet (card 129): then every stride pings at a dog's
+// loudness. A dog's stride is shorter, so a walking dog pings at least as often as a sprinting cat.
 const STEPS = { cat: { stride: 2, loud: 0.15 }, dog: { stride: 1.2, loud: 0.3 } };
 
 // The loop's end of a frame: every view has read the list.
@@ -94,7 +95,8 @@ export function noises(sim: Sim, intent: Intent): Noise[] {
     if (sim.stride >= s.stride) {
       sim.stride -= s.stride;
       const p = c.body.translation();
-      if (c.kind === 'dog' || !(intent.sneak || perkOf(sim) === 'ninja')) out.push({ type: 'noise', from: sim.me, p, loud: s.loud, cause: 'step' });
+      const soaked = c.kind === 'cat' && wet(sim) > 0;
+      if (soaked || c.kind === 'dog' || !(intent.sneak || perkOf(sim) === 'ninja')) out.push({ type: 'noise', from: sim.me, p, loud: soaked ? STEPS.dog.loud : s.loud, cause: 'step' });
     }
   }
   return out;
