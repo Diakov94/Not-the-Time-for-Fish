@@ -3,6 +3,7 @@ import type { Ball, Capsule, Collider, Cuboid, RigidBody, Shape, Vector } from '
 import * as THREE from 'three';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEP, type Sim } from '../sim/world.ts';
+import { drawLevel } from './level.ts';
 
 // Where the camera orbits its target from: the app's mouse input sets it.
 export type Look = { yaw: number; pitch: number }; // yaw 0 looks along +z; pitch > 0 looks down
@@ -17,6 +18,7 @@ export type View = {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   objects: Map<NetId, THREE.Object3D>;
+  doors: THREE.Object3D[]; // the level's door panels, index for index with the sim's door bodies
 };
 
 // An entity is drawn as its body is shaped: the sim's collider is the one owner of every kind's size.
@@ -32,12 +34,12 @@ const NOSE = new THREE.BoxGeometry(0.15, 0.15, 0.2); // shows a character's faci
 const CRATE = new THREE.MeshStandardMaterial({ color: 0xb07a45 });
 const MINE = new THREE.MeshStandardMaterial({ color: 0xf28c28 }); // this player's character
 const THEIRS = new THREE.MeshStandardMaterial({ color: 0x3f7fd0 });
-const LEVEL = new THREE.MeshStandardMaterial({ color: 0x9aa59a });
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
 const EYE = 1; // m: that point's height above the character's centre
 const LENS = new RAPIER.Ball(0.2); // what the camera keeps clear of a wall: twice its near plane
 const NO_TURN = { x: 0, y: 0, z: 0, w: 1 };
 
+// The level drawn is the content the sim's world was built from (`sim.level`).
 export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -47,21 +49,11 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
   const sun = new THREE.DirectionalLight(0xffffff, 2);
   sun.position.set(4, 10, -3);
   scene.add(sun);
-  // The level's static geometry is the world's colliders without a body, drawn as they stand.
-  sim.world.forEachCollider((c) => {
-    if (c.parent()) return;
-    const h = (c.shape as Cuboid).halfExtents;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2 * h.x, 2 * h.y, 2 * h.z), LEVEL);
-    const p = c.translation();
-    const q = c.rotation();
-    mesh.position.set(p.x, p.y, p.z);
-    mesh.quaternion.set(q.x, q.y, q.z, q.w);
-    scene.add(mesh);
-  });
+  const doors = drawLevel(scene, sim.level);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
   camera.position.set(0, 12, -14);
   camera.lookAt(0, 0, 0);
-  return { renderer, scene, camera, objects: new Map() };
+  return { renderer, scene, camera, objects: new Map(), doors };
 }
 
 const size = new THREE.Vector2();
@@ -81,7 +73,8 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     camera.updateProjectionMatrix();
   }
   const lag = STEP - sim.accumulator;
-  for (const e of sim.entities.values()) place(objects.get(e.id) ?? add(view, sim, e), e, lag);
+  for (const e of sim.entities.values()) place(objects.get(e.id) ?? add(view, sim, e), e.body, lag);
+  sim.doors.forEach((b, i) => place(view.doors[i]!, b, lag));
   for (const [id, o] of objects) {
     if (sim.entities.has(id)) continue;
     scene.remove(o);
@@ -107,8 +100,7 @@ function add(view: View, sim: Sim, e: Entity): THREE.Object3D {
 // it from exactly there in the last step (kinematic copies, the carried prop and the driven character to
 // 1e-8 m; a falling dynamic body to 1 mm, from gravity inside the step). So the frame shows the sim's
 // previous and current poses interpolated, and nothing keeps a pose between frames.
-function place(o: THREE.Object3D, e: Entity, lag: number): void {
-  const b = e.body;
+function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
   const p = b.translation();
   const v = b.linvel();
   const q = b.rotation();
