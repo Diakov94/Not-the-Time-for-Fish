@@ -2,12 +2,14 @@ import { beforeAll, expect, test } from 'vitest';
 import { countryHouse } from '../content/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
 import { forward, join, leave, newRoom, type Out } from '../relay/room.ts';
-import { spawnOf, type ClientId, type NetId } from './entities.ts';
+import { halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';
 import type { Left, SimMessage } from './messages.ts';
 import { drainEvents } from './events.ts';
 import { IDLE, type Intent } from './movement.ts';
+import { grab, throwCarried } from './grab.ts';
 import { receive } from './ownership.ts';
 import { advance, knobs, playsAs } from './round.ts';
+import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
 beforeAll(init);
@@ -17,8 +19,9 @@ type Client = { sim: Sim; host: ClientId; phases: { to: string; round: number; t
 
 // Clients behind the relay's own room logic (src/relay/room.ts), every message delivered to every member
 // at once in the relay's order: time passes only in the sims, one fixed step at a time. A client that joins
-// late folds the order so far first, as a joiner's `state` hands it over.
-function relay(level = prototypeRoom) {
+// late folds the order so far first, as a joiner's `state` hands it over. With `poses`, every client's
+// entities reach the others' copies after each step, a tick per step.
+function relay(level = prototypeRoom, poses = false) {
   const room = newRoom();
   const clients: Client[] = [];
   const history: [SimMessage | Left, ClientId][] = [];
@@ -64,10 +67,19 @@ function relay(level = prototypeRoom) {
   };
   // Each step: every client steps with the host it knows and sends what the step produced.
   const run = (steps: number, intent: (sim: Sim) => Intent = () => IDLE) => {
-    for (let i = 0; i < steps; i++) for (const c of [...clients]) for (const m of step(c.sim, STEP, intent(c.sim), c.host)) send(c.sim, m);
+    for (let i = 0; i < steps; i++) {
+      for (const c of [...clients]) for (const m of step(c.sim, STEP, intent(c.sim), c.host)) send(c.sim, m);
+      if (!poses) continue;
+      for (const c of clients) {
+        for (const e of c.sim.entities.values()) {
+          if (c.sim.ownership.rows.get(e.id)?.owner !== c.sim.me) continue;
+          for (const d of clients) if (d !== c) applySnapshot(d.sim, c.sim.me, readSnapshot(e));
+        }
+      }
+    }
   };
-  const until = (done: () => boolean, max: number) => {
-    for (let i = 0; i < max && !done(); i++) run(1);
+  const until = (done: () => boolean, max: number, intent?: (sim: Sim) => Intent) => {
+    for (let i = 0; i < max && !done(); i++) run(1, intent);
   };
   // n clients that said hello, each answered by the host.
   const players = (n: number) =>
@@ -78,7 +90,7 @@ function relay(level = prototypeRoom) {
       return sim;
     });
   const client = (sim: Sim) => clients.find((c) => c.sim === sim)!;
-  return { clients, add, send, drop, run, until, players, client, sent: () => sent, sims: () => clients.map((c) => c.sim) };
+  return { clients, history, add, send, drop, run, until, players, client, sent: () => sent, sims: () => clients.map((c) => c.sim) };
 }
 
 const hello = (sim: Sim, name: string): SimMessage => ({ type: 'hello', from: sim.me, name });
@@ -294,4 +306,81 @@ test('a 2-2 match goes to the team whose last fish came sooner; 0-0 is a draw; t
   expect(lobby).toEqual({ phase: 'lobby', score: { A: 0, B: 1 } });
   expect(drawn).toEqual({ match: 'draw', score: { A: 0, B: 1 } });
   expect(agree(r)).toBe(true);
+});
+
+// This client's own character, put where a test wants it, facing `yaw`.
+function stand(sim: Sim, x: number, z: number, yaw: number): Entity {
+  const me = [...sim.entities.values()].find((e) => e.home === sim.me)!;
+  me.body.setTranslation({ x, y: 0.46, z }, true);
+  me.body.setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }, true);
+  return me;
+}
+
+test('secured is born at the holder inside the hideout: a fish carried in counts on both clients; one thrown in, once a cat holds it there', () => {
+  const r = relay(countryHouse, true);
+  const [cat, dog] = r.players(2); // one cat (the host) and one dog
+  toHeist(r);
+  const count = () => [cat!, dog!].map((s) => s.round.secured.length).join();
+  const sent = () => r.history.filter(([m]) => m.type === 'secured').length;
+  const fishAt = (z: number) => {
+    const f = spawnOf(cat!, { kind: 'fish', p: { x: 0, y: halfHeight('fish'), z } });
+    r.send(cat!, f);
+    return f.id;
+  };
+  const south = (s: Sim): Intent => ({ move: { x: 0, z: s === cat ? -1 : 0 }, sprint: false, jump: false });
+  // Carried from the yard through the gate into the hideout.
+  stand(cat!, 0, -12.8, Math.PI);
+  const first = fishAt(-13.6);
+  r.run(10);
+  r.send(cat!, grab(cat!)!);
+  const before = count();
+  r.until(() => cat!.round.secured.length > 0, 4 * 60, south);
+  const carried = count();
+  // Thrown in from the exit: it lies in the hideout, unheld, and nothing counts it.
+  stand(cat!, 0, -17.2, Math.PI);
+  const second = fishAt(-17.9);
+  r.run(10);
+  r.send(cat!, grab(cat!)!);
+  r.run(5);
+  r.send(cat!, throwCarried(cat!)!);
+  r.run(120);
+  const lying = cat!.entities.get(second)!.body.translation();
+  const thrown = { count: count(), sent: sent() };
+  r.send(cat!, { type: 'secured', from: cat!.me, fish: second, at: 1 }); // a client that does not hold it
+  const refused = count();
+  // A cat holds it there: it counts.
+  stand(cat!, lying.x, lying.z + 0.8, Math.PI);
+  r.run(2);
+  r.send(cat!, grab(cat!)!);
+  r.run(2);
+  console.log(
+    `secured on cat/dog: before ${before}; carried in ${carried}; thrown in (lies at z = ${lying.z.toFixed(2)}): ${thrown.count}, ` +
+      `${thrown.sent} secured sent; a non-holder's secured: ${refused}; held there: ${count()}; fish ${first} in any table: ` +
+      `${[cat!, dog!].some((s) => s.entities.has(first))}`,
+  );
+  expect([before, carried]).toEqual(['0,0', '1,1']);
+  expect(lying.z).toBeLessThan(-20); // inside the hideout
+  expect(thrown).toEqual({ count: '1,1', sent: 1 });
+  expect(refused).toBe('1,1');
+  expect(count()).toBe('2,2');
+  expect([cat!, dog!].some((s) => s.entities.has(first) || s.ownership.rows.has(first))).toBe(false);
+  expect(agree(r)).toBe(true);
+});
+
+test('in prep a cat pressing into the gate from the hideout moves 0 m through it, in heist it passes; a dog passes in neither', () => {
+  const past = (kind: 'cat' | 'dog', to: 'prep' | 'heist') => {
+    const sim = createWorld(countryHouse, 'A');
+    receive(sim, { type: 'phase', from: 'A', to: 'prep', round: 1 }, 'A');
+    if (to === 'heist') receive(sim, { type: 'phase', from: 'A', to, round: 1 }, 'A');
+    const z = kind === 'cat' ? -19 : -13;
+    receive(sim, spawnOf(sim, { kind, p: { x: 0, y: halfHeight(kind), z } }), 'A');
+    for (let i = 0; i < 180; i++) step(sim, STEP, { move: { x: 0, z: kind === 'cat' ? 1 : -1 }, sprint: false, jump: false });
+    const end = [...sim.entities.values()].find((e) => e.kind === kind)!.body.translation().z;
+    return kind === 'cat' ? end + 16 : -16 - end; // m past the fence line, in the walking direction
+  };
+  const through = { cat: [past('cat', 'prep'), past('cat', 'heist')], dog: [past('dog', 'prep'), past('dog', 'heist')] };
+  console.log(`m past the gate's fence line after 3 s walking at it, prep / heist: cat ${through.cat.map((d) => d.toFixed(2)).join(' / ')}, dog ${through.dog.map((d) => d.toFixed(2)).join(' / ')}`);
+  expect(through.cat[0]).toBeLessThanOrEqual(0);
+  expect(through.cat[1]).toBeGreaterThan(3);
+  for (const d of through.dog) expect(d).toBeLessThanOrEqual(0);
 });

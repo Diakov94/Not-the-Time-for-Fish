@@ -11,8 +11,9 @@ const DOOR_CLEARANCE = 0.02; // m the panel keeps off the floor and off the jamb
 // What a content level becomes in the world (ADR 0008). Statics are fixed colliders; a `dogs` blocker is
 // met by dog bodies only. Volumes are sensors on one fixed body, in the level's order, so a volume's
 // index names it. Debris is a local dynamic body on every client, never an entity. A door is its panel
-// on a vertical hinge, swung by whoever pushes it, local until card 41 gives doors their rules.
-export type Built = { volumes: Collider[]; debris: { prop: number; body: RigidBody }[]; doors: RigidBody[] };
+// on a vertical hinge, swung by whoever pushes it, local until card 41 gives doors their rules. Every exit
+// also gets a cats blocker, a solid of its box that only cats meet, off until the round says prep.
+export type Built = { volumes: Collider[]; exits: Collider[]; debris: { prop: number; body: RigidBody }[]; doors: RigidBody[] };
 
 export function build(world: World, level: Level): Built {
   for (const { p, half, blocks } of level.statics) {
@@ -23,6 +24,11 @@ export function build(world: World, level: Level): Built {
   const volumes = level.volumes.map(({ p, half }) =>
     world.createCollider(RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(p.x, p.y, p.z).setSensor(true), fixed),
   );
+  const exits = level.volumes.flatMap(({ role, p, half }) => {
+    if (role !== 'exit') return [];
+    const desc = RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(p.x, p.y, p.z);
+    return [world.createCollider(desc.setCollisionGroups(GROUPS.catsBlocker).setEnabled(false), fixed)];
+  });
   const debris = level.props.flatMap((prop, i) => {
     if (prop.synced) return [];
     const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(prop.p.x, prop.p.y, prop.p.z));
@@ -38,7 +44,7 @@ export function build(world: World, level: Level): Built {
     world.createImpulseJoint(RAPIER.JointData.revolute(hinge, local, { x: 0, y: 1, z: 0 }), fixed, body, true);
     return body;
   });
-  return { volumes, debris, doors };
+  return { volumes, exits, debris, doors };
 }
 
 // A point's body: lifted by the kind's own half height, facing the point's yaw.

@@ -11,8 +11,9 @@ export type Left = { type: 'left'; id: ClientId; host: ClientId };
 // A prop the sender threw met `dog` (ADR 0009).
 export type Hit = { type: 'hit'; from: ClientId; dog: NetId };
 // Events, not folded (ADR 0010): a noise ping born at the sender, and a team marker for the sender's side.
-// A noise names its cause, set where it is born: a character's step, an impact, a mine's blast, a sprung trap.
-export type NoiseCause = 'step' | 'impact' | 'blast' | 'trap';
+// A noise names its cause, set where it is born: a character's step, an impact, a mine's blast, a sprung trap,
+// a door storage opened.
+export type NoiseCause = 'step' | 'impact' | 'blast' | 'trap' | 'door';
 export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number; cause: NoiseCause };
 export type Mark = { type: 'mark'; from: ClientId; p: Vector };
 // The round's (ADR 0007): a joining client's name, the host's team for a name, a player's look for a side.
@@ -29,6 +30,8 @@ export type Secured = { type: 'secured'; from: ClientId; fish: NetId; at: number
 export type Captured = { type: 'captured'; from: ClientId; at: number };
 export type Rescue = { type: 'rescue'; from: ClientId };
 export type DugOut = { type: 'dugOut'; from: ClientId };
+// A door storage (the level's volume index) a cat worked open.
+export type Opened = { type: 'opened'; from: ClientId; storage: number };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut;
+export type SimMessage = Spawn | Claim | Release | Hit | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened;

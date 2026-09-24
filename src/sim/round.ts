@@ -1,6 +1,6 @@
 import { levelBodies, spawnPoint } from './build.ts';
 import { spawnOf, type ClientId, type NetId } from './entities.ts';
-import type { Captured, DugOut, Hello, Left, Look, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
+import type { Captured, DugOut, Hello, Left, Look, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
 import type { Sim } from './world.ts';
 
@@ -19,13 +19,14 @@ export type Round = {
   phase: Phase;
   round: number; // 0 in the lobby, 1 or 2 within a match
   secured: { fish: NetId; at: number }[]; // this round's, in order
+  opened: number[]; // this round's door storages worked open, by volume index
   results: Result[]; // this match's ended rounds
   match: Team | 'draw' | null; // the outcome of the last match, from the end of its round 2
   score: Record<Team, number>; // the session's matches won, for the life of the room
 };
 
-export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut;
-const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut']);
+export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened;
+const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened']);
 export const isRound = (m: { type: string }): m is RoundMessage => ROUND.has(m.type);
 
 const LOOKS = 3; // per side (GAME.md, Characters)
@@ -43,7 +44,7 @@ const KNOBS = [
 export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
 
 export function newRound(): Round {
-  return { roster: [], phase: 'lobby', round: 0, secured: [], results: [], match: null, score: { A: 0, B: 0 } };
+  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], results: [], match: null, score: { A: 0, B: 0 } };
 }
 
 export const playerOf = (r: Round, client: ClientId): Player | undefined => r.roster.find((p) => p.client === client);
@@ -179,7 +180,7 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       r.round = m.round;
       if (m.to === 'overtime' && !fishHeld(t, entities)) end(r, 'timer');
       if (m.to !== 'prep') return true;
-      r.secured = [];
+      [r.secured, r.opened] = [[], []];
       for (const q of r.roster) q.captured = null;
       if (m.round === 1) [r.results, r.match] = [[], null];
       return true;
@@ -206,6 +207,10 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
     case 'dugOut':
       if (!inPlay(r) || !p || p.captured === null) return false;
       p.captured = null;
+      return true;
+    case 'opened':
+      if (!stealing(r) || !p || playsAs(r, m.from) !== 'cat' || r.opened.includes(m.storage)) return false;
+      r.opened.push(m.storage);
       return true;
   }
 }
