@@ -2,13 +2,13 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, EventQueue, KinematicCharacterController, RigidBody, Vector, World } from '@dimforge/rapier3d-compat';
 import type { Level } from '../content/level.ts';
 import { build } from './build.ts';
-import type { ClientId, Entities, NetId } from './entities.ts';
+import type { ClientId, Entities, NetId, Variant } from './entities.ts';
 import { roundStep } from './heist.ts';
 import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
 import { mineStep, stunned } from './mines.ts';
 import { smell, type Scent } from './scent.ts';
-import { pickups } from './traps.ts';
+import { pickups, slips } from './traps.ts';
 import { perkStep, type Perk } from './perks.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
@@ -21,7 +21,8 @@ const GRAVITY = 9.81;
 
 export type Sim = {
   me: ClientId; // the client this sim runs on
-  level: Level; // the content level the world is built from (ADR 0008)
+  level: Level; // the content level the world is built from (ADR 0008): the one given, or the round's map
+  levels: Readonly<Record<string, Level>>; // the maps this client can build, by name: the ones the host may pick (card 128)
   world: World;
   controller: KinematicCharacterController; // drives this client's own character
   entities: Entities;
@@ -63,12 +64,13 @@ export type Sim = {
   away: Map<ClientId, { name: string | null; at: number }>; // who left, as whom, and when by this client's clock
   refused: Refusal | null; // why the fold refused this client's own latest hello (card 68)
   stunUntil: number; // when this client's cat's stun ends, by its own clock
+  wetUntil: number; // when this client's cat a water bomb splashed dries, by its own clock (card 129)
   used: number; // mines this client's dog planted since its last resupply
   planting: Work | null; // this client's dog's plant in progress
   defusing: (Work & { id: NetId }) | null; // this client's cat's defuse in progress, of mine `id`
   resupplyAt: number | null; // since when this client's dog has stood in the doghouse
   ending: Set<NetId>; // entities this client sent the message that ends them for (a blast, a defuse, ...)
-  trap: boolean; // this client's cat has a trap in hand
+  trap: Extract<Variant, 'noise' | 'slip'> | null; // the trap in this client's cat's hand, by variant; null for none
   doorWork: { door: number; until: number } | null; // the own cat's work at a shut house door
   barged: Set<number>; // house doors this client's dog barged open, ahead of the round table
   perk: { kind: Perk; until: number | null } | null; // this client's perk slot: until when, null for one use
@@ -86,29 +88,29 @@ export async function init(): Promise<void> {
   await RAPIER.init();
 }
 
-export function createWorld(level: Level, me: ClientId): Sim {
+// What a level builds (ADR 0008): Rapier's world with the level in it, and the controller that drives this
+// client's own character there.
+function built(level: Level) {
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = STEP;
   const { volumes, exits, gates, debris, doors } = build(world, level);
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
+  return { level, world, controller, volumes, exits, gates, debris, doors };
+}
+
+export function createWorld(level: Level, me: ClientId, levels: Sim['levels'] = {}): Sim {
   return {
     me,
-    level,
-    world,
-    controller,
+    levels,
+    ...built(level),
     entities: new Map(),
     ownership: newOwnershipTable(),
     accumulator: 0,
     time: 0,
     inFlight: new Set(),
     touchedAt: new Map(),
-    volumes,
-    exits,
-    gates,
-    debris,
-    doors,
     spawned: 0,
     leap: null,
     lunge: null,
@@ -137,12 +139,13 @@ export function createWorld(level: Level, me: ClientId): Sim {
     away: new Map(),
     refused: null,
     stunUntil: 0,
+    wetUntil: 0,
     used: 0,
     planting: null,
     defusing: null,
     resupplyAt: null,
     ending: new Set(),
-    trap: true,
+    trap: 'noise',
     doorWork: null,
     barged: new Set(),
     perk: null,
@@ -152,6 +155,18 @@ export function createWorld(level: Level, me: ClientId): Sim {
     carrierPing: null,
     emoteUntil: 0,
   };
+}
+
+// The world follows the round table's map (card 128), at prep and at a joiner's state: a map this client
+// has a level for and the world was not built from is built anew in its place, the old world freed. No
+// entity lives in it then: prep has cleared the entity and ownership tables (ADR 0007), and a joiner has
+// adopted nothing yet.
+export function follow(sim: Sim): void {
+  const level = sim.round.map === null ? undefined : sim.levels[sim.round.map];
+  if (!level || level === sim.level) return;
+  sim.world.free();
+  Object.assign(sim, built(level));
+  sim.impacts.clear();
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
@@ -165,13 +180,13 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientI
     sim.accumulator -= STEP;
     sim.time += STEP;
     const c = myCharacter(sim);
-    const act = stunned(sim) ? IDLE : intent; // a stunned cat's intent is not its own
+    const act = stunned(sim) ? IDLE : intent; // a stunned cat's or a slipped dog's intent is not its own
     if (c) drive(sim, c, act);
     carry(sim);
     sim.world.step(sim.queue);
     smell(sim);
     perkStep(sim);
-    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
+    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...slips(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
   }
   return out;
 }

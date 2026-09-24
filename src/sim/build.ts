@@ -57,12 +57,13 @@ function onPoint(pt: Point, kind: Kind): Pick<Body, 'p' | 'q'> {
 }
 
 // What the host spawns for a level: its synced props, a fish at every `fish` point, a trap, no one's
-// yet, at every `trapPickup` point and a mystery bag at every `bag` point.
+// yet, at every `trapPickup` point, noise makers and slip traps by turns in the level's order (card 130),
+// and a mystery bag at every `bag` point.
 export function levelBodies(level: Level): Body[] {
   return [
     ...level.props.flatMap((prop, i) => (prop.synced ? [{ kind: 'prop' as const, p: prop.p, prop: i }] : [])),
     ...level.points.filter((pt) => pt.role === 'fish').map((pt) => ({ kind: 'fish' as const, ...onPoint(pt, 'fish') })),
-    ...level.points.filter((pt) => pt.role === 'trapPickup').map((pt) => ({ kind: 'trap' as const, ...onPoint(pt, 'trap') })),
+    ...level.points.filter((pt) => pt.role === 'trapPickup').map((pt, i) => ({ kind: 'trap' as const, ...onPoint(pt, 'trap'), variant: i % 2 === 0 ? ('noise' as const) : ('slip' as const) })),
     ...level.points.filter((pt) => pt.role === 'bag').map((pt) => ({ kind: 'bag' as const, ...onPoint(pt, 'bag') })),
   ];
 }

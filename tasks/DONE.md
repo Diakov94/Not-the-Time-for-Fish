@@ -84,3 +84,4 @@
 - 140 the yacht map: exits 4 > dogs 3, carry 11.3 m, rails 4 m; no schema change. Wave 0 MAP-yacht, 2026-09-24.
 - 138 the farm map: every anatomy number holds; the schema lacks a fence role (reported). Wave 0 MAP-farm, 2026-09-24.
 - 136 the market map: every anatomy number holds (exits 4 > dogs 3, farthest storage 12.8 m from the hatch). Wave 0 MAP-market, 2026-09-24.
+- 128 map in the round table; 129 water bomb (soaks: a wet cat pings for 20 s); 130 slip trap (a banana peel slips a dog 1.5 s). Wave 1 SIM1, 2026-09-24.
