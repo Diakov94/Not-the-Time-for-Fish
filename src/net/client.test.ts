@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, expect, test } from 'vitest';
 import { startRelay, type Relay } from '../relay/node.ts';
-import { grab } from '../sim/grab.ts';
+import { drainEvents } from '../sim/events.ts';
+import { grab, throwCarried } from '../sim/grab.ts';
 import { prototypeRoom, type Level } from '../sim/level.ts';
 import { IDLE, type Intent } from '../sim/movement.ts';
 import { init } from '../sim/world.ts';
@@ -69,7 +70,7 @@ const same = (a: Session, b: Session) => JSON.stringify(facts(a)) === JSON.strin
 
 test('a crate moved on one client shows on the other within 150 ms', async () => {
   const [a, b] = await room(2);
-  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  const id = spawn(a!, 'prop', { x: 0, y: 0.5, z: 0 });
   await play(2000, () => b!.sim.entities.has(id) && a!.rested.has(id));
   const onA = a!.sim.entities.get(id)!.body;
   const onB = b!.sim.entities.get(id)!.body;
@@ -91,7 +92,7 @@ test('a crate moved on one client shows on the other within 150 ms', async () =>
 
 test('a resting crate produces 0 ticks per second', async () => {
   const [a] = await room(2);
-  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  const id = spawn(a!, 'prop', { x: 0, y: 0.5, z: 0 });
   await play(2000, () => a!.rested.has(id));
   const before = a!.ticks;
   await play(1000);
@@ -100,9 +101,9 @@ test('a resting crate produces 0 ticks per second', async () => {
 
 test("a third client joining mid-run holds the host's table and entities within 500 ms, each pose from its owner", async () => {
   const [a, b] = await room(2, prototypeRoom);
-  spawn(a!, 'character', { x: -3, y: 1, z: 0 });
-  spawn(b!, 'character', { x: 0, y: 1, z: 4.6 }); // faces +z, the crate at (0, 0.5, 6) in reach
-  const crates = () => [...a!.sim.entities.values()].filter((e) => e.kind === 'crate');
+  spawn(a!, 'cat', { x: -3, y: 1, z: 0 });
+  spawn(b!, 'cat', { x: 0, y: 1, z: 4.6 }); // faces +z, the crate at (0, 0.5, 6) in reach
+  const crates = () => [...a!.sim.entities.values()].filter((e) => e.kind === 'prop');
   await play(2000, () => b!.sim.entities.size === 12 && crates().every((e) => e.body.isSleeping()));
   const claim = grab(b!.sim);
   send(b!, claim!);
@@ -130,7 +131,7 @@ test("a third client joining mid-run holds the host's table and entities within 
 
 test("a joiner's copy of a moving crate appears at its owner's pose, not rising from under the floor", async () => {
   const [a] = await room(1);
-  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  const id = spawn(a!, 'prop', { x: 0, y: 0.5, z: 0 });
   await play(500, () => a!.sim.entities.has(id));
   a!.sim.entities.get(id)!.body.setLinvel({ x: 4, y: 0, z: 0 }, true);
   const c = await join();
@@ -144,8 +145,9 @@ test("a joiner's copy of a moving crate appears at its owner's pose, not rising 
 
 test('a client that left before the join: its departure travels with the state, so a later release agrees', async () => {
   const [a, b, d] = await room(3);
-  const cat = spawn(d!, 'character', { x: 3, y: 1, z: 0 });
-  await play(1000, () => sessions.every((s) => s.sim.entities.has(cat)));
+  const cat = spawn(d!, 'cat', { x: 3, y: 1, z: 0 });
+  spawn(b!, 'dog', { x: -3, y: 1, z: 0 }); // B's side, so its hold claim on the cat is accepted
+  await play(1000, () => sessions.every((s) => s.sim.entities.size === 2));
   leave(d!);
   await play(1000, () => a!.sim.ownership.gone.size === 1);
   const c = await join();
@@ -230,8 +232,8 @@ test('two joiners owed a state when the host leaves hold deep-equal tables withi
 
 test('a character walking into a crate another client owns moves it more than 0.2 m on both clients within 1 s', async () => {
   const [a, b] = await room(2);
-  const crate = spawn(a!, 'crate', { x: 0, y: 0.5, z: 3 });
-  spawn(b!, 'character', { x: 0, y: 1, z: 1.5 }); // 0.65 m short of the crate
+  const crate = spawn(a!, 'prop', { x: 0, y: 0.5, z: 3 });
+  spawn(b!, 'cat', { x: 0, y: 1, z: 1.5 }); // 0.65 m short of the crate
   await play(2000, () => a!.sim.entities.size === 2 && b!.sim.entities.size === 2 && a!.rested.has(crate));
   const onA = a!.sim.entities.get(crate)!.body;
   const onB = b!.sim.entities.get(crate)!.body;
@@ -256,9 +258,9 @@ test('a character walking into a crate another client owns moves it more than 0.
 // B holds a crate still, and A's character is set to walk into it: the fold rejects every touch claim of A's.
 async function holdCrate() {
   const [a, b] = await room(2);
-  spawn(b!, 'character', { x: 0, y: 1, z: 3 });
-  const crate = spawn(b!, 'crate', { x: 0, y: 0.5, z: 4.5 });
-  spawn(a!, 'character', { x: 0, y: 1, z: 7 });
+  spawn(b!, 'cat', { x: 0, y: 1, z: 3 });
+  const crate = spawn(b!, 'prop', { x: 0, y: 0.5, z: 4.5 });
+  spawn(a!, 'cat', { x: 0, y: 1, z: 7 });
   await play(2000, () => a!.sim.entities.size === 3 && b!.rested.has(crate));
   send(b!, grab(b!.sim)!);
   await play(500, () => a!.sim.ownership.rows.get(crate)?.held === true);
@@ -302,4 +304,75 @@ test("a rejected touch claim: the prop returns to its owner's snapshots within 1
   expect(returns.length).toBeGreaterThanOrEqual(2);
   expect(rejectedAt).toBeNull();
   expect(Math.max(...returns)).toBeLessThanOrEqual(150);
+});
+
+// When each session's fold first shows the cat held, and then free again.
+function holdTimes(cat: string) {
+  const heldAt = new Map<Session, number>();
+  const freeAt = new Map<Session, number>();
+  const each = (now: number) => {
+    for (const s of sessions) {
+      const held = s.sim.ownership.rows.get(cat)?.held;
+      if (held && !heldAt.has(s)) heldAt.set(s, now);
+      if (!held && heldAt.has(s) && !freeAt.has(s)) freeAt.set(s, now);
+    }
+  };
+  return { heldAt, freeAt, each };
+}
+
+test("a grabbed cat is free on both clients 8 s after the grab's message, by the carrier's clock", { timeout: 15000 }, async () => {
+  const [a, b] = await room(2);
+  const cat = spawn(a!, 'cat', { x: 0, y: 1, z: 0 });
+  spawn(b!, 'dog', { x: 0, y: 1, z: -1.2 });
+  await play(2000, () => a!.sim.entities.size === 2 && b!.sim.entities.size === 2);
+  send(b!, { type: 'claim', from: b!.sim.me, id: cat, hold: true });
+  const { heldAt, freeAt, each } = holdTimes(cat);
+  await play(9000, () => freeAt.size === 2, each);
+  const after = [a!, b!].map((s) => (freeAt.get(s)! - heldAt.get(s)!) / 1000);
+  console.log(`cat free ${after.map((t) => t.toFixed(3)).join(' / ')} s after the grab's message`);
+  expect(freeAt.size).toBe(2);
+  for (const t of after) expect(Math.abs(t - 8)).toBeLessThanOrEqual(0.15);
+});
+
+test('a crate thrown at the carrying dog frees the cat on all three clients within 150 ms of the hit', async () => {
+  const [a, b, c] = await room(3);
+  const cat = spawn(a!, 'cat', { x: 0, y: 1, z: 0 });
+  spawn(b!, 'dog', { x: 0, y: 1, z: -1.2 });
+  spawn(c!, 'cat', { x: 3.5, y: 1, z: -1.2 });
+  spawn(c!, 'prop', { x: 3.5, y: 0.5, z: -0.2 }); // ahead of C's cat, which faces +z
+  await play(2000, () => sessions.every((s) => s.sim.entities.size === 4));
+  send(b!, { type: 'claim', from: b!.sim.me, id: cat, hold: true });
+  await play(500, () => sessions.every((s) => s.sim.ownership.rows.get(cat)?.held));
+  send(c!, grab(c!.sim)!);
+  await play(400);
+  await play(250, undefined, undefined, (s) => (s === c ? west : IDLE)); // C turns toward the dog
+  let hitAt = Infinity;
+  const send0 = c!.ws.send.bind(c!.ws);
+  c!.ws.send = (d) => {
+    if (JSON.parse(String(d)).type === 'hit') hitAt = performance.now();
+    send0(d);
+  };
+  send(c!, throwCarried(c!.sim)!);
+  const { freeAt, each } = holdTimes(cat);
+  await play(1500, () => freeAt.size === 3, each);
+  const ms = Math.max(...freeAt.values()) - hitAt;
+  console.log(`cat free on all three ${ms.toFixed(0)} ms after the hit left the thrower`);
+  expect(freeAt.size).toBe(3);
+  expect(ms).toBeLessThanOrEqual(150);
+});
+
+test("two clients' crates shoved into each other: one noise for the impact, heard on both from the echo", async () => {
+  const [a, b] = await room(2);
+  const x = spawn(a!, 'prop', { x: -1.5, y: 0.5, z: 0 });
+  const y = spawn(b!, 'prop', { x: 1.5, y: 0.5, z: 0 });
+  await play(3000, () => a!.rested.has(x) && b!.rested.has(y) && sessions.every((s) => s.sim.entities.size === 2));
+  for (const s of sessions) drainEvents(s.sim);
+  a!.sim.entities.get(x)!.body.setLinvel({ x: 4, y: 0, z: 0 }, true);
+  b!.sim.entities.get(y)!.body.setLinvel({ x: -4, y: 0, z: 0 }, true);
+  await play(1000);
+  // Each list holds every noise of the relay's stream: noise reaches a list only from the echo.
+  const heard = (s: Session) => s.sim.events.filter((e) => e.type === 'noise' && Math.abs(e.p.x) < 3);
+  console.log(`noise for the impact: ${heard(a!).map((e) => e.from).join(', ')} on A; ${heard(b!).length} on B`);
+  expect(heard(a!).length).toBe(1);
+  expect(heard(b!).length).toBe(1);
 });

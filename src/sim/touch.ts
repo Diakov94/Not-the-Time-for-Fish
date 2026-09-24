@@ -1,7 +1,7 @@
-import type { Collider } from '@dimforge/rapier3d-compat';
-import type { Entity } from './entities.ts';
+import { entityOf, isCharacter, type Entity } from './entities.ts';
+import type { Claim } from './messages.ts';
 import { myCharacter } from './movement.ts';
-import { setBodyTypes, simulatedHere, type Claim } from './ownership.ts';
+import { setBodyTypes, simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
 const TOUCH_GAP = 0.5; // seconds between two touch claims of this client for one prop
@@ -12,21 +12,16 @@ const TOUCH_GAP = 0.5; // seconds between two touch claims of this client for on
 // the claims. This client's character meets a prop copy through the character controller; a dynamic
 // body meets one through the contact graph.
 export function touchClaims(sim: Sim): Claim[] {
-  const entityOf = (c: Collider | null | undefined): Entity | undefined => {
-    const b = c?.parent();
-    for (const e of sim.entities.values()) if (b && e.body.handle === b.handle) return e;
-    return undefined;
-  };
   const touched = new Set<Entity>();
   const c = myCharacter(sim);
   for (let i = 0; c && i < sim.controller.numComputedCollisions(); i++) {
-    const e = entityOf(sim.controller.computedCollision(i)?.collider);
+    const e = entityOf(sim.entities, sim.controller.computedCollision(i)?.collider);
     if (e) touched.add(e);
   }
   for (const e of sim.entities.values()) {
-    if (e.kind === 'character' || simulatedHere(sim, e)) continue;
+    if (isCharacter(e.kind) || simulatedHere(sim, e)) continue;
     sim.world.contactPairsWith(e.body.collider(0), (other) => {
-      const o = entityOf(other);
+      const o = entityOf(sim.entities, other);
       if (!o || !simulatedHere(sim, o)) return;
       sim.world.contactPair(e.body.collider(0), other, (m) => {
         if (m.numContacts() > 0) touched.add(e);
@@ -35,7 +30,7 @@ export function touchClaims(sim: Sim): Claim[] {
   }
   const claims: Claim[] = [];
   for (const e of touched) {
-    if (e.kind === 'character' || simulatedHere(sim, e) || sim.ownership.rows.get(e.id)?.owner === sim.me) continue;
+    if (isCharacter(e.kind) || simulatedHere(sim, e) || sim.ownership.rows.get(e.id)?.owner === sim.me) continue;
     if (sim.time - (sim.touchedAt.get(e.id) ?? -Infinity) < TOUCH_GAP) continue;
     sim.touchedAt.set(e.id, sim.time);
     sim.inFlight.add(e.id);

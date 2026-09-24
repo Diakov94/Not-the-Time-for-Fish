@@ -1,5 +1,6 @@
-import type { ClientId, Kind, NetId, Spawn } from '../sim/entities.ts';
-import type { Claim, Left, Ownership, Release } from '../sim/ownership.ts';
+import type { ClientId, Kind, NetId } from '../sim/entities.ts';
+import type { Left, SimMessage } from '../sim/messages.ts';
+import type { Ownership } from '../sim/ownership.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
 
 // ADR 0006's messages from clients. `from` never travels in the payload: the relay stamps the sender
@@ -15,7 +16,7 @@ export type State = {
   entities: { id: NetId; kind: Kind; home: ClientId | null }[];
   table: { rows: [NetId, Ownership][]; gone: ClientId[] };
 };
-export type GameMessage = Spawn | Claim | Release | Tick | State;
+export type GameMessage = SimMessage | Tick | State;
 
 // ADR 0005's messages from the relay as a client reads them; `seq` is the relay's order.
 export type Welcome = { type: 'welcome'; you: ClientId; members: ClientId[]; host: ClientId };

@@ -19,3 +19,8 @@
 - 18 anatomy: 3 storages holding 5 fish, hideout, tunnel, doghouse, kennel with its hatch at 2.5 m, spawns, bags, pickups. Batch C1, 2026-09-24.
 - 19 hiding spots, routes, props, doors: 6 spots 0.65 m wide, 4 cat routes, 26 synced props, 26 debris. Batch C1, 2026-09-24.
 - bug-net-stateless-host: a stateless host spawns the level 17 ms after the `left`; an owed joiner matches in 16 ms. Producer: both tests red without the fix. Batch C1, 2026-09-24.
+- 20 sides as kinds, mayHold, fish: one predicate in src/sim/ownership.ts, used by the fold and grab. Producer: letting a dog hold anything turns the side-rule test red. Batch S1, 2026-09-24.
+- 21 lunge-grab, toss, wiggle-free, hit-to-free: acceptance met; a dog holds a cat 0.75 m ahead. Batch S1, 2026-09-24.
+- 22 movement asymmetry, sneak, climb, carry: one speed table; cat 0.5 m wide and 0.9 m tall, dog 0.8 m and 1.4 m; dog walk 4 m/s, carrying 2 m/s. Batch S1, 2026-09-24.
+- 23 noise pings, markers, the event list: one ping per impact (ADR 0010 amended). Batch S1, 2026-09-24.
+- 24 scent trails and sniff: each client's own pose history. Batch S1, 2026-09-24.
