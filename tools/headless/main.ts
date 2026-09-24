@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { Level } from '../../src/content/level.ts';
-import { MOVING_MAX, RESTING_MAX, run, VISIBLE, type Scenario } from './run.ts';
+import { MOVING_MAX, RESTING_MAX, run, STALL_MS, VISIBLE, type Scenario } from './run.ts';
 
 // Found by file name, no record lists them (ADR 0011): a scenario is `scenarios/<name>.ts` with its
 // Scenario as the default export (the bots' helpers there have none); a map is
@@ -53,10 +53,13 @@ const f = (x: number, w = 8) => x.toFixed(1).padStart(w);
 const turned = Object.entries(knobs).filter(([k, v]) => v !== (k === 'heist' ? undefined : 1));
 console.log(`headless: ${values.scenario}${values.map ? ` on ${values.map}` : ''}, ${clients} clients, ${seconds} s (${scenario.about})${turned.map(([k, v]) => `, ${k} ${v}`).join('')}`);
 console.log(`sides: ${r.clients.map((c) => `${c.id} ${c.side}`).join(', ')}; ${r.sidesAgree ? 'the same' : 'NOT the same'} on every client`);
-console.log('entity    kind       moving m  resting m  exact -100 ms m (not judged)');
-for (const d of r.divergence) console.log(`${d.id.padEnd(9)} ${d.kind.padEnd(9)} ${m(d.moving)}  ${m(d.resting)}  ${m(d.exact)}`);
-const worst = (k: 'moving' | 'resting') => Math.max(...r.divergence.map((d) => d[k]));
+console.log('entity    kind       moving m  stalls m  resting m  exact -100 ms m (not judged)');
+for (const d of r.divergence) console.log(`${d.id.padEnd(9)} ${d.kind.padEnd(9)} ${m(d.moving)}  ${m(d.stalled)}  ${m(d.resting)}  ${m(d.exact)}`);
+const worst = (k: 'moving' | 'stalled' | 'resting') => Math.max(...r.divergence.map((d) => d[k]));
 console.log(`max: moving ${worst('moving').toFixed(3)} m (limit ${MOVING_MAX}), resting ${worst('resting').toFixed(3)} m (limit ${RESTING_MAX})`);
+console.log(
+  `the runner's own stalls (frames over ${STALL_MS} ms apart): ${r.stalls.n}, the longest ${r.stalls.longest.toFixed(0)} ms; through them, a copy against its owner's path since the stall began: ${worst('stalled').toFixed(3)} m (limit ${MOVING_MAX})`,
+);
 const visible = r.visible.reduce((n, v) => n + v.n, 0);
 console.log(
   `visible desyncs (a copy > ${VISIBLE.off} m off its owner's path for > ${VISIBLE.for / 1000} s): ${visible} (limit ${VISIBLE.max})${r.visible.map((v) => `; ${v.id} ${v.kind} ${v.n}`).join('')}`,
