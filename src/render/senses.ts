@@ -1,5 +1,6 @@
 import type { Ball, Capsule, Shape } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { OVERLAY } from '../art/palette.ts';
 import type { NetId } from '../sim/entities.ts';
 import { sideOf } from '../sim/ownership.ts';
 import { sniffed } from '../sim/scent.ts';
@@ -15,8 +16,8 @@ import type { Sim } from '../sim/world.ts';
 const MARKS = 512; // the most trail marks drawn at once
 const FADE = 30; // s: a mark this old is drawn at its faintest (the sniff window, GAME.md)
 const PING_TIME = 2; // s
-const NEW = new THREE.Color(0xfff4c0);
-const OLD = new THREE.Color(0x3a2a10);
+const NEW = new THREE.Color(OVERLAY.fresh);
+const OLD = new THREE.Color(OVERLAY.stale);
 
 export type Senses = { trail: THREE.InstancedMesh; rim: THREE.InstancedMesh; pings: { ring: THREE.Object3D; born: number }[] };
 
@@ -29,7 +30,7 @@ export function createSenses(scene: THREE.Scene): Senses {
     scene.add(o);
     return o;
   };
-  return { trail: marks(new THREE.MeshBasicMaterial()), rim: marks(new THREE.MeshBasicMaterial({ color: 0x111111 })), pings: [] };
+  return { trail: marks(new THREE.MeshBasicMaterial()), rim: marks(new THREE.MeshBasicMaterial({ color: OVERLAY.rim })), pings: [] };
 }
 
 // How far a body's centre is above its bottom, so a sample of its pose marks the floor under it.
@@ -44,8 +45,8 @@ const CORE = new THREE.RingGeometry(0.55, 0.8, 24);
 function ring(loud: number): THREE.Object3D {
   const g = new THREE.Group();
   for (const [geometry, colour] of [
-    [EDGE, 0x111111],
-    [CORE, 0xffffff],
+    [EDGE, OVERLAY.rim],
+    [CORE, OVERLAY.white],
   ] as const) {
     const m = new THREE.MeshBasicMaterial({ color: colour, transparent: true, depthTest: false, side: THREE.DoubleSide });
     g.add(new THREE.Mesh(geometry, m));

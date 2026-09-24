@@ -7,11 +7,11 @@ import { DELAY_MS, TICK_MS } from '../../src/net/ticks.ts';
 import { startRelay } from '../../src/relay/node.ts';
 import type { ClientId, Kind, NetId } from '../../src/sim/entities.ts';
 import { drainEvents, type SimEvent } from '../../src/sim/events.ts';
-import type { Claim, Team } from '../../src/sim/messages.ts';
+import type { Claim } from '../../src/sim/messages.ts';
 import { whisker } from '../../src/sim/mines.ts';
 import { IDLE, type Intent } from '../../src/sim/movement.ts';
 import { fold, sideOf, type Identities } from '../../src/sim/ownership.ts';
-import { advance, catsTeam, duration, knobs, newRound, type Round } from '../../src/sim/round.ts';
+import { advance, duration, knobs, type Round } from '../../src/sim/round.ts';
 import { init } from '../../src/sim/world.ts';
 import { joinHeadless, playHeadless, type HeadlessClient, type Player, type Thing } from './client.ts';
 
@@ -23,16 +23,16 @@ export const VISIBLE = { off: 0.5, for: 1000, max: 1 };
 const FRAME_MS = 1000 / 60; // the runner's loop: a 60 Hz display's frames
 
 // A scenario, one file each: the level, what its host spawns beside the level's crates, and each
-// client's player by join order (the first joins as the host). Its judge adds its own checks to the
-// shared ones and prints its own numbers. A round scenario starts in the lobby: the host sides every
-// player as its `side` (ADR 0007's reassignment by hand) and starts the round, the characters enter at
-// prep, and the run ends once `rounds` rounds are over on every client, or after the run's seconds.
+// client's player by join order (the first joins as the host) on the level the game runs. Its judge adds its own checks to the
+// shared ones and prints its own numbers. A round scenario starts in the lobby: once every client holds
+// every name the host starts the round, the fold sides every player at prep (ADR 0014's rotation, not the
+// scenario's `side`), the characters enter then, and the run ends once `rounds` rounds are over on every client, or after the run's seconds.
 // `seconds` and `heist`: the run's length and the heist's when the command names none.
 export type Scenario = {
   about: string;
   level: Level;
   things?: Thing[];
-  player: (i: number) => Player;
+  player: (i: number, level: Level) => Player;
   judge?: (r: Run) => Verdict;
   round?: boolean;
   seconds?: number;
@@ -252,10 +252,6 @@ function minTicks(samples: Sample[], c: number, from: number, to: number): numbe
   return min;
 }
 
-// The team that plays `side` in the round the lobby starts.
-const FIRST_CATS = catsTeam(newRound());
-const teamFor = (side: Player['side']): Team => (side === 'cat' ? FIRST_CATS : FIRST_CATS === 'A' ? 'B' : 'A');
-
 // One connection of the game: its seat (the player), its session, its Wire; `in` from the frame it shows
 // every entity its owner's pose (a rejoin first holds the host's world at no pose), `gone` once closed;
 // the span it was in the game, and its tick intervals of at most two network ticks (the rate it ticks at
@@ -283,7 +279,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
   try {
     for (let i = 0; i < clients; i++) {
       opened.push(performance.now());
-      seats.push(await joinHeadless(url, scenario.level, `p${i}`, scenario.player(i), i === 0 ? scenario.things : [], !scenario.round));
+      seats.push(await joinHeadless(url, scenario.level, `p${i}`, scenario.player(i, scenario.level), i === 0 ? scenario.things : [], !scenario.round));
       link(seats[i]!, 'in');
     }
     const samples: Sample[] = [];
@@ -296,18 +292,16 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       entityIds(ref.sim) === entityIds(sim) &&
       [...sim.entities.keys()].every((id) => sim.ownership.rows.get(id)?.owner === sim.me || (receiver.get(id)?.[0]?.at ?? Infinity) <= now - DELAY_MS - 2 * FRAME_MS);
     // A lobby game starts once every client shows the host's world with every character in it; a round
-    // game once every client's roster sides every player as the scenario does.
-    const teamOf = (s: Session, c: HeadlessClient) => s.sim.round.roster.find((p) => p.name === c.name)?.team;
-    const sided = (s: Session) => seats.every((c) => teamOf(s, c) === teamFor(c.player.side));
+    // game once every client's roster names every player (the fold sides them at prep).
+    const named = (s: Session) => seats.every((c) => s.sim.round.roster.some((p) => p.name === c.name));
     const ready = (now: number) =>
-      scenario.round ? seats.every((c) => sided(c.session)) : seats.every((c) => shows(c.session, seats[0]!.session, now) && ids.every((id) => sideOf(c.session.sim.entities, id)));
+      scenario.round ? seats.every((c) => named(c.session)) : seats.every((c) => shows(c.session, seats[0]!.session, now) && ids.every((id) => sideOf(c.session.sim.entities, id)));
     const present = () => links.filter((l) => l.state === 'in');
     const over = () => present().every((l) => l.session.sim.round.results.length >= rounds && l.session.sim.round.phase === 'over');
     const joined = performance.now();
     let start = Infinity;
     let prev = joined;
     let next = joined;
-    let asked = false; // the host sent the scenario's sides
     let pressed = ''; // the phase and round the host last pressed its button in
     let cpu = process.cpuUsage();
     const now0 = performance.now.bind(performance);
@@ -316,11 +310,6 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       await new Promise((r) => setTimeout(r, Math.max(0, next - performance.now())));
       const now = performance.now();
       if (now - next > 100) next = now; // behind by more than a few frames: no burst to catch up
-      const first = seats[0]!.session;
-      if (start === Infinity && scenario.round && !asked && seats.every((c) => teamOf(first, c))) {
-        asked = true;
-        for (const c of seats) if (teamOf(first, c) !== teamFor(c.player.side)) send(first, { type: 'roster', from: first.sim.me, name: c.name, team: teamFor(c.player.side) });
-      }
       if (start === Infinity && ready(now)) {
         start = now;
         cpu = process.cpuUsage();
@@ -380,6 +369,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const used = process.cpuUsage(cpu);
     await new Promise((r) => setTimeout(r, 100)); // what is still in flight is folded everywhere
     const here = present();
+    const sides = (s: Session) => seats.map((c) => s.sim.round.roster.find((p) => p.name === c.name)?.side);
     const traffic = links.map((l, i) => {
       const [from, to] = [Math.max(l.from, start), Math.min(l.to, prev)];
       const span = Math.max(to - from, 1) / 1000;
@@ -410,7 +400,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       divergence: div,
       visible,
       clients: traffic,
-      sidesAgree: scenario.round ? here.every((l) => sided(l.session)) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i).side)),
+      sidesAgree: scenario.round ? here.every((l) => JSON.stringify(sides(l.session)) === JSON.stringify(sides(here[0]!.session))) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
       tablesAgree: ends.every((t) => isDeepStrictEqual(t, ends[0])),
       roundsAgree: tables.every((t) => isDeepStrictEqual(t, tables[0])),
       claims: claims.length,

@@ -1,9 +1,10 @@
-import { countryHouse } from '../../../src/content/country-house.ts';
+import { countryHouse } from '../../../src/content/maps/country-house.ts';
 import type { Entity } from '../../../src/sim/entities.ts';
 import { IDLE } from '../../../src/sim/movement.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Turn, Verdict } from '../run.ts';
-import { captive, capturedMe, flat, fridgeTrip, go, heldNow, hold, IN_CAGE, phase, place, pounce, rescue, ROUTE, simOf, tableTrip, toss, until, type P } from './house.ts';
+import { captive, capturedMe, flat, go, heldNow, hold, phase, place, pounce, rescue, simOf, toss, until, type P } from './bots.ts';
+import { fridgeTrip, IN_CAGE, ROUTE, tableTrip } from './house.ts';
 
 type Script = Generator<Press, void>;
 const p = (x: number, z: number): P => ({ x, z });
@@ -61,7 +62,7 @@ function* dog(c: HeadlessClient): Script {
   yield* go(c, [p(-2.2, 12.5), p(-9.6, 12.5), p(-9.6, 6.5)], { sprint: true });
   yield* until(c, () => phase(c) === 'heist', { ...IDLE, sniff: true });
   if (!(yield* pounce(c, 8, 60))) throw new Error('no cat came up the west lane');
-  yield* toss(c);
+  yield* toss(c, ROUTE.carryToCage);
   yield* go(c, [p(-2.2, 12.5), p(8.8, 12.5), LURK], { sprint: true });
   const sim = simOf(c);
   const withFish = (e: Entity) => [...sim.ownership.rows].some(([id, row]) => row.held && row.owner === e.home && sim.entities.get(id)?.kind === 'fish');
@@ -155,7 +156,7 @@ function judge(r: Run): Verdict {
 // Card 65 at four clients (one dog, three cats by the auto-balance): a fish carried out under chase; a grab,
 // the kennel, a closed tab and a rejoin by name; a rescue; the host's tab closed and the clock with the
 // next host. The heist is shortened so the round ends by its timer.
-export const chaseKennelRescueRejoin: Scenario = {
+const chaseKennelRescueRejoin: Scenario = {
   about: 'a fish out under chase; a grab, the kennel, a rejoin, a rescue; the host leaves',
   level: countryHouse,
   player: (i) => ({ side: i === 1 ? 'dog' : 'cat', script }),
@@ -164,3 +165,4 @@ export const chaseKennelRescueRejoin: Scenario = {
   seconds: 150,
   heist: 45,
 };
+export default chaseKennelRescueRejoin;
