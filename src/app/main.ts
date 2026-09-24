@@ -1,6 +1,7 @@
+/// <reference types="vite/client" />
 import { Vector3 } from 'three';
 import { createAudio, hear } from '../audio/audio.ts';
-import { countryHouse } from '../content/country-house.ts';
+import type { Level } from '../content/level.ts';
 import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { createHud, drawHud } from '../hud/hud.ts';
@@ -18,12 +19,21 @@ import { carried } from '../sim/ownership.ts';
 import { usePerk } from '../sim/perks.ts';
 import { advance, playerOf } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
-import { intent, listen } from './input.ts';
+import { intent, listen } from '../input/keyboard.ts';
 import { lobbyScreen } from './screens/lobby.ts';
 import { resultsScreen } from './screens/results.ts';
 import { roomScreen } from './screens/room.ts';
 
 const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is stepped as this much
+// The maps by name (ADR 0011): a map is src/content/maps/<name>.ts exporting its Level as <name> in
+// camelCase, found by this glob; no index lists them. The world starts in the country house; the host may
+// pick any of them in the lobby (card 128).
+const maps = Object.fromEntries(
+  Object.entries(import.meta.glob<Record<string, Level>>(['../content/maps/*.ts', '!../content/maps/*.test.ts'], { eager: true })).map(([path, m]) => {
+    const name = path.slice(path.lastIndexOf('/') + 1, -'.ts'.length);
+    return [name, m[name.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())]!];
+  }),
+);
 // The phases the canvas is the screen for; the lobby and the results take the rest (card 48).
 const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
 
@@ -32,7 +42,7 @@ const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
 await init();
 // The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
 const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
-const { session, room } = await roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, countryHouse, name), room }));
+const { session, room } = await roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, maps['country-house']!, name, maps), room }));
 const { sim } = session;
 // The host's button, in the lobby and the results: the round table's successor phase.
 const next = () => {
