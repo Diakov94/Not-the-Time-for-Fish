@@ -1,4 +1,4 @@
-import { CRATE_HALF, prototypeRoom } from '../../../src/sim/level.ts';
+import { prototypeRoom } from '../../../src/content/prototype-room.ts';
 import type { Intent } from '../../../src/sim/movement.ts';
 import type { Step } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
@@ -7,6 +7,7 @@ const sprint = (z: number): Intent => ({ move: { x: 0, z }, sprint: true, jump: 
 
 const LANES = Array.from({ length: 8 }, (_, i) => -8.75 + 2.5 * i); // eight lanes 2.5 m apart across the 20 m room
 const COLUMN = [-2.2, -1.1, 0, 1.1, 2.2]; // five crates down each lane, 0.1 m apart
+const CRATE = prototypeRoom.props[0]!; // the content room's 1 m crate, resting on the floor
 
 // Every cat sprints north 0.8 s and back 0.4 s, over and over: it drives its lane's column to the north
 // wall and keeps ramming it, so what it shoved is shoved again before it could sleep (Rapier's 2 s).
@@ -28,7 +29,7 @@ function judge({ samples, start }: Run): Verdict {
 // ADR 0005's arithmetic at GAME.md's largest room: eight cats and 40 synced crates, all shoving for the run.
 export const eightClients: Scenario = {
   about: 'eight cats ram 40 crates to the north wall, again and again',
-  level: { ...prototypeRoom, crates: LANES.flatMap((x) => COLUMN.map((z) => ({ x, y: CRATE_HALF, z }))) },
+  level: { ...prototypeRoom, props: LANES.flatMap((x) => COLUMN.map((z) => ({ ...CRATE, p: { x, y: CRATE.p.y, z } }))) },
   player: (i) => ({ side: 'cat', at: { x: LANES[i % LANES.length]!, y: 1, z: -8 }, script: SCRIPT }),
   judge,
 };

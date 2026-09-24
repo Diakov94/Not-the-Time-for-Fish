@@ -1,5 +1,6 @@
-import { isCharacter, type ClientId, type Kind, type NetId } from '../sim/entities.ts';
-import type { Level } from '../sim/level.ts';
+import type { Level } from '../content/level.ts';
+import { levelBodies } from '../sim/build.ts';
+import { spawnOf, type ClientId, type Kind, type NetId } from '../sim/entities.ts';
 import type { Intent } from '../sim/movement.ts';
 import { adopt, receive } from '../sim/ownership.ts';
 import { createWorld, step, type Sim } from '../sim/world.ts';
@@ -13,7 +14,6 @@ export type Session = {
   owed: Set<ClientId>; // joiners whose `joined` this client saw and whose `state` it has not
   rested: Rested;
   receiver: Receiver;
-  spawned: number; // this client's net id counter: ids are `<client>:<n>`
   lastTick: number;
   ticks: number; // tick messages sent, for the headless runner's count
 };
@@ -35,10 +35,10 @@ export function connect(url: string, level: Level): Promise<Session> {
       const at = performance.now();
       if (m.type === 'welcome') {
         const sim = createWorld(level, m.you);
-        s = { sim, ws, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), spawned: 0, lastTick: 0, ticks: 0 };
+        s = { sim, ws, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), lastTick: 0, ticks: 0 };
         if (m.host !== m.you) return;
         held = null;
-        for (const p of level.crates) spawn(s, 'prop', p);
+        for (const b of levelBodies(level)) send(s, spawnOf(sim, b));
         resolve(s);
       } else if (!held) handle(s, m, at);
       else if (m.type === 'left' && m.host === s.sim.me) {
@@ -47,7 +47,7 @@ export function connect(url: string, level: Level): Promise<Session> {
         // after a state at its `seq`, which answers every joiner still owed, and then the level spawns.
         for (const [h, hAt] of [...held, [m, at] as const]) handle(s, h, hAt, m.seq);
         held = null;
-        for (const p of level.crates) spawn(s, 'prop', p);
+        for (const b of levelBodies(level)) send(s, spawnOf(s.sim, b));
         resolve(s);
       } else if (m.type !== 'state' || m.to !== s.sim.me) held.push([m, at]);
       else {
@@ -83,14 +83,14 @@ function handle(s: Session, m: Incoming, at: number, after = 0): void {
       const hostLeft = m.id === s.host;
       s.host = m.host; // from here on this client answers joiners if it is the one named
       s.owed.delete(m.id);
-      if (m.seq > after) receive(s.sim, m);
+      if (m.seq > after) receive(s.sim, m, s.host);
       // A host's states precede its `left` in the relay's order, so the joiners still owed one were never
       // answered: the next host owes them the state as it stands after this `left` (ADR 0006, Join).
       if (hostLeft && s.host === s.sim.me) for (const id of s.owed) answer(s, id, m.seq);
       return;
     }
   }
-  if (m.seq > after) receive(s.sim, m);
+  if (m.seq > after) receive(s.sim, m, s.host);
 }
 
 // The host's duty on `joined`: the entities and the table as they stand after that message.
@@ -101,7 +101,7 @@ function answer(s: Session, to: ClientId, seq: number): void {
     from: s.sim.me,
     to,
     seq,
-    entities: [...entities.values()].map(({ id, kind, home }) => ({ id, kind, home })),
+    entities: [...entities.values()].map(({ id, kind, home, prop }) => ({ id, kind, home, prop })),
     table: { rows: [...ownership.rows], gone: [...ownership.gone] },
   });
 }
@@ -111,9 +111,9 @@ export function send(s: Session, m: GameMessage): void {
 }
 
 export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: number }): NetId {
-  const id = `${s.sim.me}:${s.spawned++}`;
-  send(s, { type: 'spawn', from: s.sim.me, id, kind, home: isCharacter(kind) ? s.sim.me : null, p });
-  return id;
+  const m = spawnOf(s.sim, { kind, p });
+  send(s, m);
+  return m.id;
 }
 
 // One frame of the caller's loop, in real time: copies move toward their owners' poses, the sim
@@ -121,7 +121,7 @@ export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: numb
 export function frame(s: Session, dt: number, intent: Intent): void {
   const now = performance.now();
   interpolate(s.sim, s.receiver, now);
-  for (const claim of step(s.sim, dt, intent)) send(s, claim);
+  for (const claim of step(s.sim, dt, intent, s.host)) send(s, claim);
   if (now - s.lastTick < TICK_MS) return;
   s.lastTick = now;
   const t = tick(s.sim, s.rested);

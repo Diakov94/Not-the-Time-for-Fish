@@ -1,5 +1,5 @@
 import { beforeAll, expect, test } from 'vitest';
-import { prototypeRoom } from './level.ts';
+import { prototypeRoom } from '../content/prototype-room.ts';
 import { IDLE } from './movement.ts';
 import { receive } from './ownership.ts';
 import { sniffed } from './scent.ts';
@@ -10,8 +10,8 @@ beforeAll(init);
 
 test("a sniffing dog smells a cat's trail 20 s after it passed, and nothing after 30 s", () => {
   const sim = createWorld(prototypeRoom, 'B');
-  receive(sim, { type: 'spawn', from: 'B', id: 'B:0', kind: 'dog', home: 'B', p: { x: 0, y: 1, z: -3 } });
-  receive(sim, { type: 'spawn', from: 'A', id: 'A:0', kind: 'cat', home: 'A', p: { x: -5, y: 0.46, z: 0 } });
+  receive(sim, { type: 'spawn', from: 'B', id: 'B:0', kind: 'dog', home: 'B', p: { x: 0, y: 1, z: -3 } }, 'B');
+  receive(sim, { type: 'spawn', from: 'A', id: 'A:0', kind: 'cat', home: 'A', p: { x: -5, y: 0.46, z: 0 } }, 'B');
   const sniff = { ...IDLE, sniff: true };
   const wait = (s: number) => {
     for (let i = 0; i < s * 60; i++) step(sim, STEP, sniff);

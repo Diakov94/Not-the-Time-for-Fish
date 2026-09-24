@@ -1,8 +1,8 @@
 import { beforeAll, expect, test } from 'vitest';
 import type { RigidBody, Vector } from '@dimforge/rapier3d-compat';
-import { isCharacter, type ClientId, type Kind } from './entities.ts';
+import { prototypeRoom } from '../content/prototype-room.ts';
+import { CRATE_HALF, isCharacter, type ClientId, type Kind } from './entities.ts';
 import { anchor, grab, handOf, throwCarried } from './grab.ts';
-import { CRATE_HALF, prototypeRoom } from './level.ts';
 import { IDLE, yawOf, type Intent } from './movement.ts';
 import { receive, type FoldMessage } from './ownership.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
@@ -30,7 +30,7 @@ function room<T extends ClientId[]>(...clients: T) {
   const sims = clients.map((me) => createWorld(prototypeRoom, me)) as { [K in keyof T]: Sim };
   const relay = (m: FoldMessage | null) => {
     expect(m).not.toBeNull();
-    for (const sim of sims) receive(sim, m!);
+    for (const sim of sims) receive(sim, m!, clients[0]!);
   };
   let n = 0;
   const spawn = (from: ClientId, kind: Kind, p: Vector) => {

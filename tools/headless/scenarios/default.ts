@@ -1,12 +1,13 @@
-import { prototypeRoom } from '../../../src/sim/level.ts';
+import { countryHouse } from '../../../src/content/country-house.ts';
+import { spawnPoint } from '../../../src/sim/build.ts';
 import { IDLE, type Intent } from '../../../src/sim/movement.ts';
 import type { Step } from '../client.ts';
 import type { Scenario } from '../run.ts';
 
 const walk = (z: number): Intent => ({ move: { x: 0, z }, sprint: false, jump: false });
 
-// A cat's script: walk to the crate ahead, grab it, carry it back, throw it, push it on, then walk north
-// into the crate of the second row, which the host owns, and push it to the wall.
+// A cat's script: from its spawn in the country house's hideout it walks north, grabs, walks back, throws,
+// and walks north to the fence.
 const CAT: Step[] = [
   [0, walk(1), null],
   [0.6, IDLE, 'grab'],
@@ -16,19 +17,22 @@ const CAT: Step[] = [
   [3.4, walk(1), null],
   [7.0, IDLE, null],
 ];
-// A dog's: it cannot hold a crate, so it shoves both of its lane's to the wall, then sniffs.
+// A dog's: from its spawn in the yard it walks north to the fence, then sniffs.
 const DOG: Step[] = [
   [0, walk(1), null],
   [4.0, { ...IDLE, sniff: true }, null],
   [7.0, IDLE, null],
 ];
-const LANES = [-6, -3, 0, 3, 6]; // the crate columns of the Prototype room
+const side = (i: number) => (i % 3 === 2 ? 'dog' : 'cat');
 
-// The Prototype's game, the gates' 10 s at two clients: each character starts in its lane 4 m south of
-// the first crate, facing it. Every third player is a dog (1 of 3, 2 of 6), until card 25's roster sides
-// the players.
+// The gates' 10 s at two clients, on the country house: each character enters at its side's level spawn
+// point, the n-th player of a side at its n-th point, so two players who enter at once stand apart. Every
+// third player is a dog (1 of 3, 2 of 6), until card 25's roster sides the players.
 export const defaultGame: Scenario = {
-  about: 'walk, grab, carry, throw, push; a dog shoves and sniffs',
-  level: prototypeRoom,
-  player: (i) => ({ side: i % 3 === 2 ? 'dog' : 'cat', at: { x: LANES[i % LANES.length]!, y: 1, z: 2 }, script: i % 3 === 2 ? DOG : CAT }),
+  about: 'walk, grab, throw in the hideout; a dog walks and sniffs',
+  level: countryHouse,
+  player: (i) => {
+    const n = Array.from({ length: i }, (_, j) => side(j)).filter((s) => s === side(i)).length;
+    return { side: side(i), at: spawnPoint(countryHouse, side(i), n)!, script: side(i) === 'dog' ? DOG : CAT };
+  },
 };

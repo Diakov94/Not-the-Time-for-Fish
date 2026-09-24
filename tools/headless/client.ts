@@ -1,8 +1,8 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
+import type { Level } from '../../src/content/level.ts';
 import { connect, frame, send, spawn, type Session } from '../../src/net/client.ts';
 import type { Kind } from '../../src/sim/entities.ts';
 import { grab, throwCarried } from '../../src/sim/grab.ts';
-import type { Level } from '../../src/sim/level.ts';
 import { IDLE, type Intent } from '../../src/sim/movement.ts';
 
 // A line of a player's script, in seconds from the start of the run: from `at` on the intent is held,

@@ -1,7 +1,7 @@
 import { beforeAll, expect, test } from 'vitest';
 import RAPIER, { type Vector } from '@dimforge/rapier3d-compat';
+import { prototypeRoom } from '../content/prototype-room.ts';
 import { isCharacter, type Kind } from './entities.ts';
-import { prototypeRoom } from './level.ts';
 import { IDLE, SPEED, type Intent } from './movement.ts';
 import { receive } from './ownership.ts';
 import { createWorld, init, step, STEP } from './world.ts';
@@ -13,7 +13,7 @@ function room() {
   let n = 0;
   const add = (kind: Kind, p: Vector) => {
     const id = `A:${n++}`;
-    receive(sim, { type: 'spawn', from: 'A', id, kind, home: isCharacter(kind) ? 'A' : null, p });
+    receive(sim, { type: 'spawn', from: 'A', id, kind, home: isCharacter(kind) ? 'A' : null, p }, 'A');
     return sim.entities.get(id)!.body;
   };
   return { sim, add };

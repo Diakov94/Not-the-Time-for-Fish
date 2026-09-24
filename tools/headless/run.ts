@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
+import type { Level } from '../../src/content/level.ts';
 import { dump, type Dump } from '../../src/net/dump.ts';
 import type { GameMessage } from '../../src/net/protocol.ts';
 import { DELAY_MS, TICK_MS } from '../../src/net/ticks.ts';
 import { startRelay } from '../../src/relay/node.ts';
 import type { ClientId, Kind } from '../../src/sim/entities.ts';
 import { drainEvents, type SimEvent } from '../../src/sim/events.ts';
-import type { Level } from '../../src/sim/level.ts';
 import type { Claim } from '../../src/sim/messages.ts';
 import { fold, sideOf, type Identities } from '../../src/sim/ownership.ts';
 import { init } from '../../src/sim/world.ts';

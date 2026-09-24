@@ -1,4 +1,4 @@
-import { prototypeRoom } from '../../../src/sim/level.ts';
+import { prototypeRoom } from '../../../src/content/prototype-room.ts';
 import { IDLE, type Intent } from '../../../src/sim/movement.ts';
 import { mayHold, sideOf } from '../../../src/sim/ownership.ts';
 import type { Step } from '../client.ts';

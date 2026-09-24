@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Capsule, Collider, Vector } from '@dimforge/rapier3d-compat';
 import { entityOf, isCharacter, type Entity, type Kind } from './entities.ts';
+import { locked, stored } from './heist.ts';
 import type { Claim, Hit, Release, SimMessage } from './messages.ts';
 import { myCharacter, speedsOf, yawOf } from './movement.ts';
 import { carried, mayHold, setBodyTypes, simulatedHere } from './ownership.ts';
@@ -53,12 +54,24 @@ export function grab(sim: Sim): Claim | null {
 
 // Card 05's grab. A grabbed prop is simulated here until the claim comes back, as a touched one is. The
 // side rule applies before the cast (ADR 0009): what this character may not hold is not there for it,
-// so a claim the fold would refuse is never made.
+// so a claim the fold would refuse is never made; nor is a fish in a storage still shut to this cat. A
+// cat at a storage takes its fish out rather than casting at it.
 function reach(sim: Sim, c: Entity): Claim | null {
+  const e = (c.kind === 'cat' && stored(sim, c)) || ahead(sim, c);
+  if (!e) return null;
+  if (!isCharacter(e.kind) && !simulatedHere(sim, e)) {
+    sim.inFlight.add(e.id);
+    setBodyTypes(sim);
+  }
+  return { type: 'claim', from: sim.me, id: e.id, hold: true };
+}
+
+// The first entity the forward shape cast meets that this character may hold.
+function ahead(sim: Sim, c: Entity): Entity | undefined {
   const yaw = yawOf(c.body.rotation());
   const holdable = (col: Collider) => {
     const e = entityOf(sim.entities, col);
-    return !e || mayHold(c.kind, e.kind);
+    return !e || (mayHold(c.kind, e.kind) && !locked(sim, e, c));
   };
   // The probe is as tall as the character from just above its feet, so a fish on the floor is in reach.
   const body = c.body.collider(0).shape as Capsule;
@@ -72,18 +85,12 @@ function reach(sim: Sim, c: Entity): Claim | null {
     REACH,
     true,
     RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-    undefined,
+    c.body.collider(0).collisionGroups(), // what the character passes, its reach passes
     undefined,
     c.body,
     holdable,
   );
-  const e = entityOf(sim.entities, hit?.collider);
-  if (!e) return null;
-  if (!isCharacter(e.kind) && !simulatedHere(sim, e)) {
-    sim.inFlight.add(e.id);
-    setBodyTypes(sim);
-  }
-  return { type: 'claim', from: sim.me, id: e.id, hold: true };
+  return entityOf(sim.entities, hit?.collider);
 }
 
 // Runs every fixed step after the carrier moved: the carried entity is a kinematic follower sent to
