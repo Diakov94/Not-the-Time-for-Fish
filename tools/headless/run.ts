@@ -17,6 +17,9 @@ import { joinHeadless, playHeadless, type HeadlessClient, type Player, type Thin
 
 export const MOVING_MAX = 0.25; // m: a copy against its owner's path around DELAY_MS earlier
 export const RESTING_MAX = 0.02; // m: a copy of an entity at rest on its owner for 1 s or more
+// GAME.md's visible desync, as card 66 defines it for the runner: a copy more than `off` m from its owner's
+// path for more than `for` ms; at most `max` in a run. A second, coarser judge beside the two above.
+export const VISIBLE = { off: 0.5, for: 1000, max: 1 };
 const FRAME_MS = 1000 / 60; // the runner's loop: a 60 Hz display's frames
 
 // A scenario, one file each: the level, what its host spawns beside the level's crates, and each
@@ -36,9 +39,11 @@ export type Scenario = {
   heist?: number;
 };
 export type Verdict = { lines: string[]; ok: boolean };
-// A round scenario's knobs, neither a norm of the game: the heist's length (every client's phase start is
-// moved back at its heist's fold, so the host's clock ends it sooner), and how many rounds it plays.
-export type Options = { heist?: number; rounds?: number };
+// The runner's knobs, none of them a norm of the game: the tick sender's rate and the interpolation delay
+// as fractions of TICK_MS's rate and DELAY_MS (card 66's negatives; `ticks: 0` sends none, card 11's), the
+// heist's length for a round scenario (card 63: every client's phase start is moved back at its heist's
+// fold, so the host's clock ends it sooner), and how many rounds a round scenario plays.
+export type Options = { ticks?: number; delay?: number; heist?: number; rounds?: number };
 
 // Every frame of the game, per connection in join order (a rejoin is a connection of its own): its dump
 // (its fold's table and every pose; null while it is not in the game), the events it drained, the ticks it
@@ -61,6 +66,7 @@ export type Divergence = { id: string; kind: string; moving: number; resting: nu
 export type Traffic = { id: ClientId; side?: Kind; ticks: number; minTicks: number; rate: number; up: number; down: number; events: number };
 export type Result = {
   divergence: Divergence[];
+  visible: { id: NetId; kind: Kind; n: number }[]; // visible desyncs by entity
   clients: Traffic[];
   sidesAgree: boolean; // every client sees every client's side as the scenario gave it
   tablesAgree: boolean; // every client's fold table deep-equal to the host's at the end
@@ -128,13 +134,16 @@ function offPath(p: V, frames: Frame[], id: NetId, t0: number, t1: number): numb
 // before (`exact`, printed but not judged, is the simulated pose exactly DELAY_MS before). An entity at rest
 // on its owner for 1 s is resting, and its copy is held against the owner's pose now, unless the copy's
 // client has a claim on it in flight: that client simulates the prop itself until the fold decides
-// (ADR 0006), so the prop is moving there. `seen` keeps every entity's identity for the doomed-claim judge,
-// since a round's entities end before the run does.
+// (ADR 0006), so the prop is moving there. A copy further than VISIBLE.off from that path or pose is off;
+// an entity off on any client for longer than VISIBLE.for is one visible desync. `seen` keeps every
+// entity's identity for the doomed-claim judge, since a round's entities end before the run does.
 function judges(ids: ClientId[]) {
   const seen = new Map<NetId, Pick<DumpRow, 'kind' | 'home'>>();
   const frames: Frame[] = [];
   const div = new Map<NetId, Divergence>();
   const restSince: Map<NetId, number>[] = []; // per connection: since when its body of each entity has slept
+  const offSince = new Map<NetId, { at: number; counted: boolean }>();
+  const visible = new Map<NetId, { id: NetId; kind: Kind; n: number }>();
   const see = (t: number, dumps: (Dump | null)[]) => {
     const rows = dumps.map((d) => d && new Map(d.entities.map((e) => [e.id, e])));
     const own = new Map<NetId, number>();
@@ -147,6 +156,7 @@ function judges(ids: ClientId[]) {
       for (const row of r?.values() ?? []) if (row.rest) next.set(row.id, restSince[c]?.get(row.id) ?? t);
       restSince[c] = next;
     }
+    const off = new Map<NetId, Kind>();
     for (const [k, r] of rows.entries()) {
       for (const row of r?.values() ?? []) {
         const d = div.get(row.id) ?? { id: row.id, kind: row.kind, moving: 0, resting: 0, exact: 0 };
@@ -155,19 +165,32 @@ function judges(ids: ClientId[]) {
         const now = rows[o]?.get(row.id);
         if (!now || row.owner === ids[k]) continue; // this client owns it in its own view, or nobody in the game simulates it
         const since = restSince[o]!.get(row.id);
+        let far: number;
         if (since !== undefined && t - since >= 1000 && !row.inFlight) {
-          d.resting = Math.max(d.resting, dist(row.p, now.p));
-          continue;
+          far = dist(row.p, now.p);
+          d.resting = Math.max(d.resting, far);
+        } else {
+          const then = poseAt(frames, row.id, t - DELAY_MS);
+          if (!then) continue;
+          far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, t - DELAY_MS + TICK_MS)!;
+          d.moving = Math.max(d.moving, far);
+          d.exact = Math.max(d.exact, dist(row.p, then));
         }
-        const then = poseAt(frames, row.id, t - DELAY_MS);
-        if (!then) continue;
-        d.moving = Math.max(d.moving, offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, t - DELAY_MS + TICK_MS)!);
-        d.exact = Math.max(d.exact, dist(row.p, then));
+        if (far > VISIBLE.off) off.set(row.id, row.kind);
       }
+    }
+    for (const id of offSince.keys()) if (!off.has(id)) offSince.delete(id);
+    for (const [id, kind] of off) {
+      const o = offSince.get(id) ?? { at: t, counted: false };
+      offSince.set(id, o);
+      if (o.counted || t - o.at <= VISIBLE.for) continue;
+      o.counted = true;
+      const v = visible.get(id) ?? { id, kind, n: 0 };
+      visible.set(id, { ...v, n: v.n + 1 });
     }
   };
   const byId = <T extends { id: string }>(m: Map<string, T>) => [...m.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
-  return { see, divergence: () => byId(div), identities: (): Identities => seen };
+  return { see, divergence: () => byId(div), visible: () => byId(visible), identities: (): Identities => seen };
 }
 
 // A dump whose rows that did not change since the connection's last one are that one's rows, so a long
@@ -241,9 +264,9 @@ type Link = { c: HeadlessClient; session: Session; wire: Wire; state: 'joining' 
 
 // The headless game: the Node relay on an ephemeral port, one scripted client per player of the scenario
 // for `seconds` of real time at 60 frames a second, every connection's dump sampled each frame and judged
-// online, then the shared judges and the scenario's. `ticks: false` disables the tick sender.
-export async function run(scenario: Scenario, clients: number, seconds: number, ticks = true, o: Options = {}): Promise<Result> {
-  const { heist, rounds = 1 } = o;
+// online, then the shared judges and the scenario's.
+export async function run(scenario: Scenario, clients: number, seconds: number, o: Options = {}): Promise<Result> {
+  const { ticks = 1, delay = 1, heist, rounds = 1 } = o;
   await init();
   const relay = await startRelay();
   const url = `ws://localhost:${relay.port}/headless`;
@@ -287,6 +310,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     let asked = false; // the host sent the scenario's sides
     let pressed = ''; // the phase and round the host last pressed its button in
     let cpu = process.cpuUsage();
+    const now0 = performance.now.bind(performance);
     while (prev - start < seconds * 1000 && !(scenario.round && start < Infinity && over())) {
       next += FRAME_MS;
       await new Promise((r) => setTimeout(r, Math.max(0, next - performance.now())));
@@ -302,7 +326,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
         cpu = process.cpuUsage();
         for (const l of links) Object.assign(l.wire, { up: 0, down: 0, in: 0, sent: [] });
         for (const l of links) l.from = now;
-        if (!ticks) for (const l of links) l.session.lastTick = Infinity; // the tick sender never fires again
+        if (ticks === 0) for (const l of links) l.session.lastTick = Infinity; // the tick sender never fires again
       }
       if (start === Infinity && now - joined > 5000) throw new Error('the clients never all held every entity');
       // The host's button, once per phase: a round game starts at once, and its next round when one is over.
@@ -318,8 +342,11 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
         if (!c.session) continue; // its new tab is still connecting
         const l = links.findLast((x) => x.c === c)!;
         const sent = c.session.ticks;
+        if (delay !== 1) performance.now = () => now0() + DELAY_MS * (1 - delay); // interpolation shows a pose this much later
         const act = playHeadless(c, (now - start) / 1000, dt);
+        performance.now = now0;
         if (c.session.ticks > sent) {
+          if (ticks > 0 && ticks < 1) c.session.lastTick += TICK_MS * (1 / ticks - 1);
           if (now - l.ticks.last <= 2 * TICK_MS) [l.ticks.sum, l.ticks.n] = [l.ticks.sum + now - l.ticks.last, l.ticks.n + 1];
           l.ticks.last = now;
         }
@@ -374,12 +401,14 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const tables = here.map((l) => l.session.sim.round);
     const claims = links.flatMap((l) => l.wire.sent.map((x) => x.m)).filter((m): m is Claim => m.type === 'claim');
     const div = judge.divergence();
+    const visible = judge.visible();
     const errors = seats.flatMap((c) => (c.error ? [`${c.name}'s script stopped: ${c.error}`] : []));
     const seatOf = links.map((l) => seats.indexOf(l.c));
     const ended = links.map((l) => (l.state === 'in' ? l.session.sim.round : null));
     const verdict = scenario.judge?.({ samples, wires: links.map((l) => l.wire), ids, seats: seatOf, opened, ends: ended, start, ...(heist !== undefined && { heist }) }) ?? { lines: [], ok: true };
     const r = {
       divergence: div,
+      visible,
       clients: traffic,
       sidesAgree: scenario.round ? here.every((l) => sided(l.session)) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i).side)),
       tablesAgree: ends.every((t) => isDeepStrictEqual(t, ends[0])),
@@ -390,7 +419,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       relayOut,
       cpu: (used.user + used.system) / 1000 / (prev - start),
     };
-    const bad = div.some((d) => d.moving > MOVING_MAX || d.resting > RESTING_MAX);
+    const bad = div.some((d) => d.moving > MOVING_MAX || d.resting > RESTING_MAX) || visible.reduce((n, v) => n + v.n, 0) > VISIBLE.max;
     const ok = !bad && r.sidesAgree && r.tablesAgree && r.roundsAgree && r.doomed === 0 && errors.length === 0 && verdict.ok;
     return { ...r, verdict: { lines: [...errors, ...verdict.lines], ok: verdict.ok }, code: ok ? 0 : 1 };
   } finally {

@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { MOVING_MAX, RESTING_MAX, run, type Scenario } from './run.ts';
+import { MOVING_MAX, RESTING_MAX, run, VISIBLE, type Scenario } from './run.ts';
 import { chaseKennelRescueRejoin } from './scenarios/chase-kennel-rescue-rejoin.ts';
 import { defaultGame } from './scenarios/default.ts';
 import { eightClients } from './scenarios/eight-clients.ts';
@@ -18,7 +18,7 @@ const scenarios: Record<string, Scenario> = {
 
 // `npm run headless -- --scenario <name> --clients N --seconds S`: no browser, no jsdom; exit 1 when a
 // judge fails, 2 for a scenario it does not know. A round scenario takes `--heist S` (the heist's length)
-// and `--rounds N`.
+// and `--rounds N`; `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay.
 const { values } = parseArgs({
   options: {
     scenario: { type: 'string', default: 'default' },
@@ -26,6 +26,8 @@ const { values } = parseArgs({
     seconds: { type: 'string' },
     heist: { type: 'string' },
     rounds: { type: 'string', default: '1' },
+    'tick-rate': { type: 'string', default: '1' },
+    delay: { type: 'string', default: '1' },
   },
 });
 const scenario = scenarios[values.scenario];
@@ -36,9 +38,9 @@ if (!scenario) {
 const clients = Number(values.clients);
 const seconds = Number(values.seconds ?? scenario.seconds ?? 20);
 const heist = values.heist === undefined ? scenario.heist : Number(values.heist);
-const knobs = { rounds: Number(values.rounds), ...(heist !== undefined && { heist }) };
+const knobs = { ticks: Number(values['tick-rate']), delay: Number(values.delay), rounds: Number(values.rounds), ...(heist !== undefined && { heist }) };
 const t0 = performance.now();
-const r = await run(scenario, clients, seconds, true, knobs);
+const r = await run(scenario, clients, seconds, knobs);
 const m = (x: number) => x.toFixed(3).padStart(8);
 const f = (x: number, w = 8) => x.toFixed(1).padStart(w);
 const turned = Object.entries(knobs).filter(([k, v]) => v !== (k === 'heist' ? undefined : 1));
@@ -48,6 +50,10 @@ console.log('entity    kind       moving m  resting m  exact -100 ms m (not judg
 for (const d of r.divergence) console.log(`${d.id.padEnd(9)} ${d.kind.padEnd(9)} ${m(d.moving)}  ${m(d.resting)}  ${m(d.exact)}`);
 const worst = (k: 'moving' | 'resting') => Math.max(...r.divergence.map((d) => d[k]));
 console.log(`max: moving ${worst('moving').toFixed(3)} m (limit ${MOVING_MAX}), resting ${worst('resting').toFixed(3)} m (limit ${RESTING_MAX})`);
+const visible = r.visible.reduce((n, v) => n + v.n, 0);
+console.log(
+  `visible desyncs (a copy > ${VISIBLE.off} m off its owner's path for > ${VISIBLE.for / 1000} s): ${visible} (limit ${VISIBLE.max})${r.visible.map((v) => `; ${v.id} ${v.kind} ${v.n}`).join('')}`,
+);
 console.log(`tables at the end: ${r.tablesAgree ? 'deep-equal' : 'NOT equal'} on ${clients} clients, round tables ${r.roundsAgree ? 'deep-equal' : 'NOT equal'}; doomed claims ${r.doomed} of ${r.claims}`);
 console.log('client   side   ticks/s  min in 1 s  ticking/s  up kB/s  down kB/s  events');
 for (const c of r.clients) {
