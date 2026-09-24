@@ -11,8 +11,8 @@ import { interact } from './heist.ts';
 import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
-import { receive } from './ownership.ts';
-import { advance, knobs, playerOf, playsAs } from './round.ts';
+import { newOwnershipTable, receive } from './ownership.ts';
+import { advance, foldRound, knobs, newRound, playerOf, playsAs, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -133,6 +133,30 @@ test("the host moves a name at that message on every client; a non-host's roster
   for (const s of r.sims()) expect(teams(s)).toBe(before);
   r.send(a!, { type: 'roster', from: a!.me, name: c!.me, team: 'B' });
   for (const s of r.sims()) expect(s.round.roster.find((p) => p.name === c!.me)?.team).toBe('B');
+});
+
+// A side's looks are its characters in the roster (card 100): six per side, the fold refuses a seventh.
+test('the fold accepts looks 0 to 5 on either side and refuses 6', () => {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  foldRound(r, { type: 'hello', from: 'A', name: 'P0' }, 'A', t, new Map());
+  for (const side of ['cat', 'dog'] as const) {
+    const looks = [0, 1, 2, 3, 4, 5, 6].map((look) => foldRound(r, { type: 'look', from: 'A', side, look, worn: {} }, 'A', t, new Map()));
+    expect(looks).toEqual([true, true, true, true, true, true, false]);
+    expect(r.roster[0]!.looks[side]).toBe(5);
+  }
+});
+
+// What a player wears is the round table's, per side, whatever id it names (ADR 0013); the next look
+// overwrites it.
+test('the fold stores what a look wears per side, and the next look overwrites it', () => {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const fold = (m: RoundMessage) => foldRound(r, m, 'A', t, new Map());
+  fold({ type: 'hello', from: 'A', name: 'P0' });
+  fold({ type: 'look', from: 'A', side: 'cat', look: 1, worn: { hat: 'ushanka' } });
+  fold({ type: 'look', from: 'A', side: 'dog', look: 2, worn: { accessory: 'sunflower' } });
+  expect(r.roster[0]!.worn).toEqual({ cat: { hat: 'ushanka' }, dog: { accessory: 'sunflower' } });
+  fold({ type: 'look', from: 'A', side: 'cat', look: 1, worn: { accessory: 'medal' } });
+  expect(r.roster[0]!.worn).toEqual({ cat: { accessory: 'medal' }, dog: { accessory: 'sunflower' } });
 });
 
 test('a known name whose client left rejoins on its team from a new client; a name in use is refused everywhere', () => {
