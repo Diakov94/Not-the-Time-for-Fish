@@ -42,3 +42,4 @@
 - 44 hello and rejoin: a taken name is refused with {code: 'refused'} in 5–7 ms. Batch N1, 2026-09-24.
 - 45 snapshot budget for eight: 58.8–60.6 kB/s down per client (budget 100; before 289.6). Batch N1, 2026-09-24.
 - 46 dead socket leaves: a silent socket is terminated and `left` follows; before, none within 60 s. Batch N1, 2026-09-24.
+- bug: one impact gave two noise pings under load; "at rest" is now the owner's reported speed. 100 ms frames: 0/10 → 10/10 one ping; the new test case red 10/10 without the fix. Trunk blocker, 2026-09-24.
