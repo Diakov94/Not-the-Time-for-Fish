@@ -6,7 +6,7 @@ import type { ClientId } from '../../sim/entities.ts';
 import type { Look, Roster, Side, Team } from '../../sim/messages.ts';
 import { catsTeam, lookOf, playerOf, type Player } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { paint, score, settingsButton, tag, TEAM, VOICE } from './parts.ts';
+import { leaveButton, paint, score, settingsButton, tag, TEAM, VOICE } from './parts.ts';
 
 const SIDE: Record<Side, string> = { cat: 'Коти', dog: 'Пси' };
 // The maps as players name them, by the map's file name (ADR 0011); a map not named here shows that.
@@ -62,9 +62,10 @@ const portrait = (id: string) => {
 // draws the table's roster as two columns, the team that plays cats in the first round and the one that
 // plays dogs, each name with its character for that side, and under each column the side's six
 // characters, the roster's (content), one row to pick from, each with its portrait and name, the picked
-// one's signature detail beneath. It turns clicks into the sim's messages: the player's own look per side,
-// and for the host a name moved to the other team and the start. It keeps no roster and decides no team;
-// it is redrawn when what it shows changes. Which look a player has is the round table's (`lookOf`).
+// one's signature detail beneath, and a way out of the room. It turns clicks into the sim's messages:
+// the player's own look per side, and for the host a name moved to the other team and the start. It
+// keeps no roster and decides no team; it is redrawn when what it shows changes. Which look a player has
+// is the round table's (`lookOf`).
 export function lobbyScreen(room: string, send: (m: Roster | Look) => void, start: () => void): (sim: Sim, host: ClientId) => void {
   const screen = tag('div', { className: 'screen lobby' });
   document.body.append(screen);
@@ -119,7 +120,7 @@ export function lobbyScreen(room: string, send: (m: Roster | Look) => void, star
     const cats = catsTeam(r);
     const map = `Мапа: ${MAPS[mapOf(sim)] ?? mapOf(sim)}`;
     screen.replaceChildren(
-      tag('header', {}, tag('h1', { textContent: `Кімната ${room}` }), ...(r.match === null ? [] : [tag('p', { className: 'score', textContent: score(r) })]), settingsButton()),
+      tag('header', {}, tag('h1', { textContent: `Кімната ${room}` }), ...(r.match === null ? [] : [tag('p', { className: 'score', textContent: score(r) })]), settingsButton(), leaveButton()),
       tag('div', { className: 'teams' }, column(cats, 'cat'), column(cats === 'A' ? 'B' : 'A', 'dog')),
       hosting
         ? tag(

@@ -28,6 +28,10 @@ export function settingsButton(): HTMLButtonElement {
   return b;
 }
 
+// Leaving the room (card 120) reloads the page: the browser closes the socket, the relay tells the others
+// `left` (their roster keeps the name, out of the room), and the page starts again at the room screen.
+export const leaveButton = () => tag('button', { type: 'button', className: 'leave', textContent: 'Вийти з кімнати', onclick: () => location.reload() });
+
 // The screens' colours as CSS variables on the root, which index.html's styles read: palette slots
 // (ADR 0011), the team pair in this viewer's variant (ADR 0012), and a band of cross-stitched diamonds,
 // the embroidered cloth of GAME.md's art direction. Painted again when the variant changes.

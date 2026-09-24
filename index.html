@@ -64,6 +64,7 @@
         font-weight: 900;
       }
       .band {
+        flex: none;
         align-self: stretch;
         height: 1.1em;
         background: var(--band) repeat-x left / auto 100%;
@@ -170,6 +171,12 @@
       .lobby h1 {
         flex: 1;
         font-size: 1.8em;
+      }
+      .lobby header button {
+        flex: none;
+      }
+      .lobby .score {
+        color: var(--star);
       }
       .lobby .teams {
         display: grid;
@@ -286,13 +293,68 @@
         padding: 0.5em 1.4em;
         font-size: 1.15em;
       }
-      .host {
+      .screen button.leave {
+        background: var(--cherry);
+        color: var(--paper);
+      }
+      .results {
+        gap: 0.6em;
+      }
+      .results > * {
+        box-sizing: border-box;
+        width: min(100%, 44em);
+      }
+      .results h1 {
+        width: auto;
+      }
+      .results .band {
+        align-self: center;
+      }
+      .results .rounds {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1em;
+      }
+      .panel {
         display: flex;
         flex-direction: column;
+        gap: 0.4em;
+        padding: 0.6em 1em;
+        background: color-mix(in srgb, var(--ink) 25%, transparent);
+        border: 0.12em solid color-mix(in srgb, var(--linen) 25%, transparent);
+        border-radius: 1em;
+      }
+      .panel h2 {
+        align-self: flex-start;
+        padding: 0.15em 0.6em;
+        border-radius: 0.4em;
+      }
+      .panel .label {
+        font-size: 0.8em;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.85;
+      }
+      .results .match {
         align-items: center;
-        gap: 6px;
-        padding: 8px 16px;
-        border: 1px solid var(--star);
+        text-align: center;
+      }
+      .results .match h2 {
+        align-self: center;
+        font-size: 1.4em;
+      }
+      .results .score {
+        color: var(--star);
+      }
+      .results footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1em;
+      }
+      .results .start {
+        padding: 0.5em 1.4em;
+        font-size: 1.15em;
       }
       .hint {
         position: fixed;
@@ -300,8 +362,14 @@
         left: 8px;
         margin: 0;
         padding: 6px 10px;
-        background: color-mix(in srgb, var(--ink) 50%, transparent);
+        color: var(--paper);
+        background: color-mix(in srgb, var(--ink) 60%, transparent);
+        border-radius: 8px;
         font-size: 14px;
+        font-weight: 600;
+      }
+      .hint.seen {
+        display: none;
       }
     </style>
   </head>
