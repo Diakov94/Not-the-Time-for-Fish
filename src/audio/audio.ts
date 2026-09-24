@@ -1,20 +1,22 @@
 import type { Vec3 } from '../content/level.ts';
+import { volumeAt } from '../sim/build.ts';
 import { isCharacter, type ClientId, type Entity, type NetId } from '../sim/entities.ts';
 import type { SimEvent } from '../sim/events.ts';
 import { SPEED } from '../sim/movement.ts';
 import type { Sim } from '../sim/world.ts';
+import { ambience, surround, type Ambience } from './ambience.ts';
 import { pant, SOUNDS, whiteNoise, type Kit, type Pant, type Sound } from './sfx.ts';
 
 // Where the listener stands and faces: the camera's pose (render's camera is one).
 export type Ear = { position: Vec3; quaternion: Vec3 & { w: number } };
 
-type Graph = { kit: Kit & { ctx: AudioContext }; master: GainNode; meters: AnalyserNode[]; pants: Map<NetId, Pant & { at: PannerNode }> };
+type Graph = { kit: Kit & { ctx: AudioContext }; master: GainNode; meters: AnalyserNode[]; pants: Map<NetId, Pant & { at: PannerNode }>; ambience: Ambience };
 
-// The game's sound, a view of the sim (ADR 0008): every frame it reads the event list and the entity
-// table and keeps no fact beyond the voices it plays. The graph is made on the first click (the
-// browser's autoplay rule); M mutes it, a per-viewer setting. With `?audio` in the address a dev readout
-// shows the master bus's peak, the worst lag from an impact's frame to its sound leaving the speakers,
-// and what `hear` costs the main thread per frame.
+// The game's sound, a view of the sim (ADR 0008): every frame it reads the event list, the entity and
+// ownership tables and the sim's volume query, and keeps no fact beyond the voices it plays. The graph is
+// made on the first click (the browser's autoplay rule); M mutes it, a per-viewer setting. With `?audio`
+// in the address a dev readout shows the master bus's peak, the worst lag from an impact's frame to its
+// sound leaving the speakers, and what `hear` costs the main thread per frame.
 export type Audio = { graph: Graph | null; muted: boolean; readout: HTMLElement | null; peak: number; lag: number; cost: { sum: number; max: number; frames: number } };
 
 const REF = 2; // m: a voice nearer than this is at full level; farther, it falls as REF / distance
@@ -53,7 +55,8 @@ function start(muted: boolean): Graph {
     channels.connect(meter, i);
     return meter;
   });
-  return { kit: { ctx, noise: whiteNoise(ctx) }, master, meters, pants: new Map() };
+  const kit = { ctx, noise: whiteNoise(ctx) };
+  return { kit, master, meters, pants: new Map(), ambience: ambience(kit, master) };
 }
 
 // Once per frame, after the sim stepped and before the loop drains the event list.
@@ -64,6 +67,9 @@ export function hear(audio: Audio, sim: Sim, ear: Ear): void {
   listen(g.kit.ctx.listener, ear);
   for (const ev of sim.events) play(audio, g, sim, ev, now);
   breathe(g, sim);
+  // The player's body in the house, by the sim's volume query; the yard while it has no body.
+  const me = characterOf(sim, sim.me);
+  surround(g.ambience, g.kit, me !== undefined && volumeAt(sim, 'house', me.body.translation()) >= 0);
   const cost = performance.now() - now;
   audio.cost = { sum: audio.cost.sum + cost, max: Math.max(audio.cost.max, cost), frames: audio.cost.frames + 1 };
   if (audio.readout) show(audio, g);
@@ -91,13 +97,15 @@ function sound(g: Graph, s: Sound, p: Vec3, loud: number): number {
   return t;
 }
 
-// A client's character: who made a step.
+// A client's character: who made a step, or the player's own body.
 const characterOf = (sim: Sim, client: ClientId): Entity | undefined =>
   [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind));
 
 function play(audio: Audio, g: Graph, sim: Sim, ev: SimEvent, now: number): void {
   if (ev.type === 'noise' && ev.cause === 'step') {
-    sound(g, characterOf(sim, ev.from)?.kind === 'dog' ? 'dogStep' : 'catStep', ev.p, ev.loud);
+    const c = characterOf(sim, ev.from);
+    if (c?.kind === 'dog') sound(g, 'dogStep', ev.p, ev.loud * dogBoost(sim, c));
+    else sound(g, 'catStep', ev.p, ev.loud);
   } else if (ev.type === 'noise') {
     const t = sound(g, 'impact', ev.p, ev.loud);
     const out = g.kit.ctx.getOutputTimestamp(); // the context's time leaving the speakers now, and when
@@ -106,6 +114,13 @@ function play(audio: Audio, g: Graph, sim: Sim, ev: SimEvent, now: number): void
     const e = sim.entities.get(ev.id);
     if (e) sound(g, ev.type === 'grab' && e.kind === 'fish' ? 'pickup' : ev.type, e.body.translation(), 1);
   }
+}
+
+// A dog's step is louder the faster it goes than a walk, and twice as loud while it carries (card 53).
+function dogBoost(sim: Sim, dog: Entity): number {
+  const v = dog.body.linvel();
+  const carrying = [...sim.ownership.rows.values()].some((r) => r.owner === dog.home && r.held);
+  return Math.max(1, Math.hypot(v.x, v.z) / SPEED.dog.walk) * (carrying ? 2 : 1);
 }
 
 // Every dog pants where it stands, faster and louder the faster it runs; its voice ends with it.
