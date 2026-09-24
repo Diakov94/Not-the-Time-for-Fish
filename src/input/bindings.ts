@@ -71,6 +71,9 @@ const deviceOf = (code: string): Device => (code.startsWith('Pad') ? 'gamepad' :
 // Read from the store at every use, so a save is in effect from the next press and the next frame.
 const bound = (device: Device) => resolve(BINDINGS[device], settings().bindings[device]);
 
+// Both devices' tables in effect, for the settings screen's remap columns.
+export const tables = () => ({ keyboard: bound('keyboard'), gamepad: bound('gamepad') });
+
 // The codes that do `action` now, on either device.
 export const codesOf = (action: Action): string[] => [...(bound('keyboard')[action] ?? []), ...(bound('gamepad')[action] ?? [])];
 

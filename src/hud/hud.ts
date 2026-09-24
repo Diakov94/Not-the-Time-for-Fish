@@ -1,5 +1,6 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
 import { TEAM } from '../art/palette.ts';
+import '../input/remap.ts';
 import { livePings } from '../render/senses.ts';
 import { project, type Target, type View } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
@@ -44,7 +45,8 @@ export type Hud = {
 };
 
 // The settings overlay (ADR 0012) mounts itself on import, before any room; it learns the team pairs and
-// whether a round is in play (the HUD is shown) from the HUD.
+// whether a round is in play (the HUD is shown) from the HUD, and the bindings from the input zone's
+// remap.ts, loaded here with it.
 offerView({ pairs: TEAM, playing: () => document.querySelector('.hud:not([hidden])') !== null });
 
 export function createHud(): Hud {
