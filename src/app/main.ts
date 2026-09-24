@@ -87,13 +87,14 @@ const audio = createAudio();
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
 // between the last two of them.
 let last = performance.now();
-// The screen is the round table's phase, read every frame; the keys move the character only while the
-// canvas is the screen, and the mouse is freed for the lobby's and the results' buttons.
+// The screen is the round table's phase, read every frame. The canvas is drawn only while it is the
+// screen; the keys move the character only in play, and the mouse is freed for the lobby's and the
+// results' buttons.
 requestAnimationFrame(function loop(now: number) {
   const playing = PLAY.includes(sim.round.phase);
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), acting() ? intent(input, own()) : IDLE);
   last = now;
-  draw(view, sim, input.look, target());
+  if (playing) draw(view, sim, input.look, target());
   hear(audio, sim, view.camera);
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
