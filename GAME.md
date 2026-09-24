@@ -288,8 +288,8 @@ Distribution: a private link on a self-hosted domain; friends join by room code.
 - **Build tool:** Vite.
 - **Key libraries / plugins:**
   - Rapier (WASM) for physics.
-  - A lightweight ECS: bitecs or miniplex (TBD).
-  - A WebSocket room relay: PartyKit or Cloudflare Durable Objects (TBD).
+  - No ECS library in the Prototype: a plain entity table; miniplex if its refutation sign shows ([ADR 0004](docs/adr/0004-no-ecs-for-the-prototype.md)).
+  - A WebSocket room relay: one room module, hosted on Node for development and tests; a Cloudflare Durable Object is proposed for the friend group, the owner decides at the Vertical Slice ([ADR 0005](docs/adr/0005-relay-node-for-development-durable-objects-later.md)).
 - **Version control & asset pipeline:** Git. Models are glTF produced by the concept → procedural skeleton → code-detail pipeline; no image model. Audio is generated at runtime.
 - **Development:** built by a multi-agent AI system. Text-based formats and clear module boundaries are required.
 
@@ -376,7 +376,7 @@ Dates are TBD. Progress is measured by readiness, not by calendar. From Vertical
 | Both teams share one voice channel and leak information. | L | Lobby reminder to split channels. |
 | WebGPU support or stability varies between browsers. | L | WebGL2 fallback path; test on Chrome, Firefox and Edge. |
 | Final perk list, mine/trap types, dog name spellings. | L | Decide during Vertical Slice playtests. |
-| ECS library and relay provider choice. | L | Decide during Prototype. |
+| ECS library and relay provider choice. | L | Decided for the Prototype: no ECS (ADR 0004); room module on Node, Durable Object proposed for the friend group (ADR 0005). |
 | Prep feels idle for cats. | L | Prep is 45 s; cats pick their exit and may pre-plant a trap. Tune in playtests. |
 | The country-house map anatomy may not generalize to other themes. | L | The high-rise in Beta is the test; zone rules in Map Anatomy are theme-agnostic by design. |
 | Dogs camp the exits and win on the timer. | M | Exits always outnumber dogs, so one is unguarded; traps and the Decoy perk pull dogs off an exit; tune in Vertical Slice. |
@@ -411,3 +411,4 @@ Dates are TBD. Progress is measured by readiness, not by calendar. From Vertical
 | 2026-09-23 | Review pass: overtime covers every held fish; noise pings are events from the causing client even for local-only debris; room (the group behind a code) vs lobby (its screen); one mine and one trap type in MVP; the success criterion counts matches; exits always outnumber dogs. | Removes contradictions between sections and closes gaps a first playtest would hit. |
 | 2026-09-23 | Nobody climbs the fence: exits are the only way in or out for cats, with or without a fish. A trap is set off by hand by the cat that planted it, one trap in play per cat, same button as planting. Only cats carry and throw props; dogs push, barge and carry grabbed cats. | Mines matter on the way in as well as out, the trap is a real distraction rather than an alarm, and the sides stay distinct in how they touch the world. |
 | 2026-09-24 | Art pipeline without an image model: concept (text and SVG) → procedural skeleton → detail by code (palette shaders, procedural patterns, SVG decals, Blender renders). | The studio runs on Claude models only, which generate no raster; flat-shaded low-poly needs none. |
+| 2026-09-24 | Prototype architecture: six code zones with the simulation runnable in Node, no ECS library, one relay room module hosted on Node for development, ownership as one fold over the relay's order (ADRs 0003–0006). | Retires the ECS and relay TBDs the Prototype was to decide; a browser-free simulation keeps headless test clients and playtests cheap. |
