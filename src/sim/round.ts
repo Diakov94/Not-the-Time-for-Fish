@@ -1,3 +1,4 @@
+import { ofSide } from '../content/characters.ts';
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
 import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
 import type { Captured, Despawn, DugOut, Hello, Left, Look, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
@@ -34,7 +35,6 @@ export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Capt
 const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened', 'door']);
 export const isRound = (m: { type: string }): m is RoundMessage => ROUND.has(m.type);
 
-const LOOKS = 3; // per side (GAME.md, Characters)
 const TO_WIN = 3; // fish secured
 const PREP = 45; // s
 const OVERTIME = 60; // s at most
@@ -72,7 +72,7 @@ export function positionOf(r: Round, p: Player): number {
 }
 
 export function lookOf(r: Round, p: Player, side: Side): number {
-  return p.looks[side] ?? positionOf(r, p) % LOOKS;
+  return p.looks[side] ?? positionOf(r, p) % ofSide(side).length;
 }
 
 // GAME.md's auto-balance, about one dog per two cats: 3 → 1 vs 2, 4 → 1 vs 3, 5 → 2 vs 3, 6 → 2 vs 4,
@@ -177,7 +177,7 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       return true;
     }
     case 'look':
-      if (!p || !Number.isInteger(m.look) || m.look < 0 || m.look >= LOOKS) return false;
+      if (!p || !Number.isInteger(m.look) || m.look < 0 || m.look >= ofSide(m.side).length) return false;
       p.looks[m.side] = m.look;
       return true;
     case 'left':

@@ -1,15 +1,10 @@
+import { ofSide } from '../../content/characters.ts';
 import type { ClientId } from '../../sim/entities.ts';
 import type { Look, Roster, Side, Team } from '../../sim/messages.ts';
 import { catsTeam, lookOf, playerOf, type Player } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
 import { score, tag, TEAM } from './parts.ts';
 
-// Each side's characters by look (GAME.md, Characters: the first three of each list, the order render
-// builds its looks in). Which look a player has is the round table's (`lookOf`); the screen names it.
-const CHARACTERS: Record<Side, string[]> = {
-  cat: ['Проффесор', 'Золотий Батон', 'Страус з Межигір’я'],
-  dog: ['ГАВ-БУ', 'НАБУ-ГАВ', 'ДБР-р-р'],
-};
 const SIDE: Record<Side, string> = { cat: 'Коти', dog: 'Пси' };
 const MAP = 'Дача'; // the MVP's one map, the country house: shown as picked
 
@@ -17,7 +12,8 @@ const MAP = 'Дача'; // the MVP's one map, the country house: shown as picked
 // draws the table's roster as two columns, the team that plays cats in the first round and the one that
 // plays dogs, each name with its character for that side, and turns clicks into the sim's messages: the
 // player's own look per side, and for the host a name moved to the other team and the start. It keeps no
-// roster and decides no team; it is redrawn when what it shows changes.
+// roster and decides no team; it is redrawn when what it shows changes. The characters are the roster's
+// (content), a look indexing its side's list; which look a player has is the round table's (`lookOf`).
 export function lobbyScreen(room: string, send: (m: Roster | Look) => void, start: () => void): (sim: Sim, host: ClientId) => void {
   const screen = tag('div', { className: 'screen lobby' });
   document.body.append(screen);
@@ -35,7 +31,7 @@ export function lobbyScreen(room: string, send: (m: Roster | Look) => void, star
       const other: Team = team === 'A' ? 'B' : 'A';
       const moves = () => send({ type: 'roster', from: sim.me, name: p.name, team: other });
       const e = hosting ? tag('button', { type: 'button', title: 'Перевести в іншу команду', onclick: moves }) : tag('p');
-      e.append(tag('b', { textContent: p.name }), ` ${CHARACTERS[side][lookOf(r, p, side)]}`);
+      e.append(tag('b', { textContent: p.name }), ` ${ofSide(side)[lookOf(r, p, side)]!.name}`);
       if (notes.length) e.append(tag('small', { textContent: ` (${notes.join(', ')})` }));
       return e;
     };
@@ -46,7 +42,7 @@ export function lobbyScreen(room: string, send: (m: Roster | Look) => void, star
         'p',
         { className: 'looks' },
         side === 'cat' ? 'Ваш кіт: ' : 'Ваш пес: ',
-        ...CHARACTERS[side].map((name, look) =>
+        ...ofSide(side).map(({ name }, look) =>
           tag('button', { type: 'button', textContent: name, ariaPressed: String(me !== undefined && lookOf(r, me, side) === look), onclick: () => send({ type: 'look', from: sim.me, side, look }) }),
         ),
       );
