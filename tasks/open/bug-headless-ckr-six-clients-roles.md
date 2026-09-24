@@ -1,3 +1,5 @@
+zone: tools/headless
+size: XS
 # chase-kennel-rescue-rejoin scenario fails with 6 clients: array bounds error
 
 tools/headless
