@@ -1,6 +1,6 @@
 // ADR 0011: the roster of characters, the concept as data, in GAME.md's order (Characters). A character
 // differs from the others of its side in looks and emotes only; a player's look is an index into its
-// side's list. `id` is ASCII, the name of the character's file under src/art/characters; `name` and
+// side's list. `id` is ASCII, the file name art gives the character (ADR 0011); `name` and
 // `signature` (its one signature detail) are shown to players; `palette` names the palette's slots its
 // fur, its belly (a dog's muzzle) and its accent are drawn in; `emotes` names its one to four emotes, the
 // `n` of an emote indexing it.
