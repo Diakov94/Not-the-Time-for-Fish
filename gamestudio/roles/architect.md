@@ -11,7 +11,7 @@ effort: xhigh
 
 ## Owns
 
-Decisions about HOW to do things: the analysis of a zone before a batch, the choice of approach, ADRs in `docs/decisions/` (briefly: the decision, the price of what was rejected, how it is checked). Called when a task touches several zones at once, or when the approach is not obvious and a mistake is expensive.
+Decisions about HOW to do things: the analysis of a zone before a batch, the choice of approach, ADRs in `docs/adr/` (briefly: the decision, the price of what was rejected, how it is checked). Called when a task touches several zones at once, or when the approach is not obvious and a mistake is expensive.
 
 ## Forbidden
 
