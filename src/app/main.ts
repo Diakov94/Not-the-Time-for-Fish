@@ -17,7 +17,7 @@ import { carried } from '../sim/ownership.ts';
 import { usePerk } from '../sim/perks.ts';
 import { advance, playerOf } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
-import { intent, listen } from './input.ts';
+import { intent, listen } from '../input/keyboard.ts';
 import { lobbyScreen } from './screens/lobby.ts';
 import { resultsScreen } from './screens/results.ts';
 import { roomScreen } from './screens/room.ts';
