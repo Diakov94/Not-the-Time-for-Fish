@@ -1,11 +1,11 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
-import type { Claim, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
+import type { Claim, Despawn, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
 import { isRound, receiveRound, settle, turned, type RoundMessage } from './round.ts';
 import type { Sim } from './world.ts';
 
-// ADR 0006's and 0009's messages, in the relay's order.
-export type FoldMessage = Spawn | Claim | Release | Left | Hit;
+// ADR 0006's, 0007's and 0009's messages, in the relay's order.
+export type FoldMessage = Spawn | Claim | Release | Left | Hit | Despawn;
 
 export type Ownership = { owner: ClientId; held: boolean };
 
@@ -35,8 +35,9 @@ export function sideOf(entities: Identities, client: ClientId): Kind | undefined
 
 // Folds one message of the relay's order into the table and says whether it was accepted. The table
 // depends on nothing but the messages and the entity table's identities, so every client that folds
-// the same order holds the same table.
-export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities): boolean {
+// the same order holds the same table. `host` is the host the relay names as of the message: only its
+// `despawn` counts.
+export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, host?: ClientId): boolean {
   const homeOr = (id: NetId, fallback: ClientId): ClientId => {
     const home = entities.get(id)?.home ?? null;
     return home !== null && !t.gone.has(home) ? home : fallback;
@@ -86,6 +87,9 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities): b
       }
       return freed;
     }
+    case 'despawn':
+      // Only the host removes an entity (ADR 0007): its row goes, and `receive` drops the entity.
+      return m.from === host && t.rows.delete(m.id);
   }
 }
 
@@ -134,12 +138,8 @@ export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void 
 export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   const { phase, round } = sim.round;
   const accepted = (m.type === 'left' || isRound(m)) && receiveRound(sim, m, host);
-  if (m.type === 'secured' && accepted) {
-    sim.world.removeRigidBody(sim.entities.get(m.fish)!.body);
-    sim.entities.delete(m.fish);
-    sim.ownership.rows.delete(m.fish);
-  }
-  if (!isRound(m)) apply(sim, m);
+  if (m.type === 'secured' && accepted) remove(sim, m.fish);
+  if (!isRound(m)) apply(sim, m, host);
   settle(sim.round, sim.ownership, sim.entities);
   if (sim.round.phase === phase && sim.round.round === round) return;
   if (sim.round.phase === 'prep') {
@@ -153,8 +153,16 @@ export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   turned(sim, host, m.type === 'left' ? m.id : m.from);
 }
 
+// An entity leaves play at the message that ends it, on every client: its body, its identity, its row.
+function remove(sim: Sim, id: NetId): void {
+  sim.world.removeRigidBody(sim.entities.get(id)!.body);
+  sim.entities.delete(id);
+  sim.ownership.rows.delete(id);
+  sim.inFlight.delete(id);
+}
+
 // ADR 0006's and 0010's messages. A noise is an event for everyone; a mark only for the marker's side.
-function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left): void {
+function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: ClientId): void {
   if (m.type === 'noise' || m.type === 'mark') {
     if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
     return;
@@ -162,7 +170,8 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left): void {
   if (m.type === 'spawn') spawnEntity(sim, m);
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
-  const accepted = fold(sim.ownership, m, sim.entities);
+  const accepted = fold(sim.ownership, m, sim.entities, host);
+  if (accepted && m.type === 'despawn') remove(sim, m.id);
   if (!accepted && !settled) return;
   setBodyTypes(sim);
   if (!accepted) return;

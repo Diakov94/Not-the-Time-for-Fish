@@ -10,7 +10,7 @@ import { smell, type Scent } from './scent.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
-import { clock, newRound, type Round } from './round.ts';
+import { clock, newRound, removals, type Round } from './round.ts';
 import { touchClaims } from './touch.ts';
 
 export const STEP = 1 / 60;
@@ -55,6 +55,7 @@ export type Sim = {
   capturing: boolean; // this client's cat sent `captured` and the table has not answered
   digOut: number | null; // when this client's captured cat digs out, by its own clock
   gateUntil: number; // this client's time the kennel's gate shuts again after a rescue
+  away: Map<ClientId, { name: string | null; at: number }>; // who left, as whom, and when by this client's clock
 };
 
 export async function init(): Promise<void> {
@@ -107,13 +108,14 @@ export function createWorld(level: Level, me: ClientId): Sim {
     capturing: false,
     digOut: null,
     gateUntil: 0,
+    away: new Map(),
   };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
 // `intent` is this client's player input, held for every step of the call. Returns the messages the
-// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims, the host's clock) and the
-// fold's outbox, for the caller to send. `host` is the host the relay names now.
+// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims, the host's clock and
+// removals) and the fold's outbox, for the caller to send. `host` is the host the relay names now.
 export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientId): SimMessage[] {
   const out: SimMessage[] = sim.outbox.splice(0);
   sim.accumulator += dt;
@@ -125,7 +127,7 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientI
     carry(sim);
     sim.world.step(sim.queue);
     smell(sim);
-    out.push(...grabStep(sim), ...noises(sim, intent), ...touchClaims(sim), ...roundStep(sim), ...clock(sim, host));
+    out.push(...grabStep(sim), ...noises(sim, intent), ...touchClaims(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
   }
   return out;
 }

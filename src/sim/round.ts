@@ -1,6 +1,6 @@
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
-import { isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
-import type { Captured, DugOut, Hello, Left, Look, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
+import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
+import type { Captured, Despawn, DugOut, Hello, Left, Look, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
 import type { Sim } from './world.ts';
 
@@ -34,6 +34,7 @@ const TO_WIN = 3; // fish secured
 const PREP = 45; // s
 const OVERTIME = 60; // s at most
 const GATE_OPEN = 5; // s the kennel's gate stays open after a rescue, for the freed cats to walk out
+const AWAY = 60; // s a gone player's character stays, frozen, before the host removes it (GAME.md, Disconnects)
 
 // The balance knobs by player count (GAME.md, Multiplayer): the heist timer, mines per dog, the dig-out
 // time, one row per 3-4, 5-6 and 7-8 players (names in the roster).
@@ -217,11 +218,15 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
 }
 
 // `receive`'s part for the round. The host's decision is a message like any other: it answers a name
-// with no team by the auto-balance, when the hello arrives or when a `left` makes it the host. A rescue
-// opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once captured,
-// starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the tunnel exit.
+// with no team by the auto-balance, when the hello arrives or when a `left` makes it the host. Every
+// client notes each `left` by its own clock, with the leaver's name, for the host's removal duty. A
+// rescue opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once
+// captured, starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the
+// tunnel exit. This client's own hello with a known name mid-round is a rejoin: its character enters.
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
+  const leaver = m.type === 'left' ? playerOf(sim.round, m.id) : undefined;
   if (!foldRound(sim.round, m, host, sim.ownership, sim.entities)) return false;
+  if (m.type === 'left') sim.away.set(m.id, { name: leaver?.name ?? null, at: sim.time });
   if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
   if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;
   if (playerOf(sim.round, sim.me)?.captured === null) sim.digOut = null;
@@ -231,6 +236,7 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
     if (me && exit) me.body.setTranslation(exit, true);
     sim.leap = null;
   }
+  if (m.type === 'hello' && m.from === sim.me && inPlay(sim.round)) enter(sim);
   if (host === sim.me && (m.type === 'hello' || m.type === 'left')) {
     for (const p of sim.round.roster) {
       if (p.team !== null || (m.type === 'hello' && p.name !== m.name)) continue;
@@ -253,10 +259,37 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
   sim.securing.clear();
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
+  enter(sim);
+}
+
+// This client's character enters the round, of the side the roster gives it: at its side's spawn point,
+// or on the kennel's floor if the roster holds it captured (a rejoin), digging out on a timer of its own
+// from now. A name with no team yet waits for the next prep.
+function enter(sim: Sim): void {
+  const r = sim.round;
   const p = playerOf(r, sim.me);
   const side = playsAs(r, sim.me);
-  const at = p && side && spawnPoint(sim.level, side, positionOf(r, p));
-  if (side && at) sim.outbox.push(spawnOf(sim, { kind: side, p: at }));
+  if (!p || !side) return;
+  const kennel = sim.level.volumes.find((v) => v.role === 'kennel');
+  const floor = kennel && { x: kennel.p.x, y: kennel.p.y - kennel.half.y + halfHeight(side), z: kennel.p.z };
+  const at = p.captured !== null ? floor : spawnPoint(sim.level, side, positionOf(r, p));
+  if (at) sim.outbox.push(spawnOf(sim, { kind: side, p: at }));
+  if (p.captured !== null) sim.digOut = sim.time + knobs(r).digOut;
+}
+
+// The host's removal duty, every step: the character of a player that left goes AWAY s after the `left`
+// by this client's clock, or at once when its name is back from a new client, whose own character
+// replaces it. Every client notes the `left`s, so the duty moves with the host.
+export function removals(sim: Sim, host: ClientId | undefined): Despawn[] {
+  if (host !== sim.me) return [];
+  const out: Despawn[] = [];
+  for (const [client, { name, at }] of sim.away) {
+    const back = sim.round.roster.some((p) => p.name === name && p.client !== null);
+    if (!back && sim.time - at < AWAY - 1e-9) continue;
+    sim.away.delete(client);
+    for (const e of sim.entities.values()) if (e.home === client && isCharacter(e.kind)) out.push({ type: 'despawn', from: sim.me, id: e.id });
+  }
+  return out;
 }
 
 // The host's clock duty, every step: the phase whose time is up gives way to its successor, once.

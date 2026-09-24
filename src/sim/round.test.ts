@@ -462,3 +462,38 @@ test("a free cat's interact at the latch frees both captured cats on every clien
   expect(dug).toBe(0);
   expect(agree(r)).toBe(true);
 });
+
+test('a captured cat that leaves and rejoins by name mid-heist: its old body is gone, it is back in the kennel captured on every client, and digs out 60 s after the rejoin', { timeout: 30000 }, () => {
+  const r = relay(countryHouse, true);
+  const [, , cat] = r.players(3); // P2 plays a cat
+  toHeist(r);
+  stand(cat!, 0, 10, Math.PI); // on the kennel's floor
+  r.run(2);
+  const old = own(cat!).id;
+  const caught = capturedOn(r, cat!).join();
+  r.drop(cat!);
+  r.run(20 * 60);
+  const back = r.add();
+  r.send(back, hello(back, 'P2'));
+  const t0 = new Map(r.sims().map((s) => [s, s.time]));
+  let steps = 0;
+  const settled = () => r.sims().every((s) => !s.entities.has(old) && [...s.entities.values()].some((e) => e.home === back.me));
+  for (; steps < 30 && !settled(); steps++) r.run(1);
+  const at = own(back).body.translation();
+  const kinds = r.sims().map((s) => [...s.entities.values()].find((e) => e.home === back.me)?.kind).join();
+  const captured = capturedOn(r, back).join();
+  r.until(() => playerOf(back.round, back.me)!.captured === null, 61 * 60);
+  const dug = back.time - t0.get(back)!;
+  console.log(
+    `captured before leaving: ${caught}; after the hello: old body in any table ${r.sims().some((s) => s.entities.has(old) || s.ownership.rows.has(old))}, ` +
+      `the new ${kinds} after ${steps} step(s) at (${at.x.toFixed(2)}, ${at.y.toFixed(2)}, ${at.z.toFixed(2)}), in the kennel ${inKennel(at)}, captured ${captured}; dug out ${dug.toFixed(3)} s after the rejoin`,
+  );
+  expect(caught).toBe('true,true,true');
+  expect(steps).toBeLessThanOrEqual(30); // 500 ms
+  expect(r.sims().some((s) => s.entities.has(old) || s.ownership.rows.has(old))).toBe(false);
+  expect(kinds).toBe('cat,cat,cat');
+  expect(inKennel(at)).toBe(true);
+  expect(captured).toBe('true,true,true');
+  expect(Math.abs(dug - 60)).toBeLessThanOrEqual(0.1);
+  expect(agree(r)).toBe(true);
+});
