@@ -32,3 +32,8 @@
 - 35 runner for the MVP: scenarios by name; judges divergence, end tables, sides, doomed claims = 0. Batch H1, 2026-09-24.
 - 36 scenario grab-toss-wiggle-hit at 3 clients: 3 of 3 runs; hit frees in 18–20 ms, wiggle-free at 7.99–8.01 s, moving peak 0.241 m (limit 0.25). Batch H1, 2026-09-24.
 - 37 eight clients within budget: measured 289.6 kB/s down per client, relay 169.9 msg/s, 16.7 ticks/s; the budget itself is card 45. Batch H1, 2026-09-24.
+- 38 rejoin mid-round and removal after 60 s. Batch S3, 2026-09-24.
+- 39 mines: plant, blast, defuse, whisker cue, resupply; entity rows ended only by the fold. Producer: "only a cat ends a mine" has no test (a dog's client never sends blast or defused). Batch S3, 2026-09-24.
+- 40 traps: planted, set off, cleared, pickups. Batch S3, 2026-09-24.
+- 41 hiding spots, doors and barricades; the round table holds the open house doors. Batch S3, 2026-09-24.
+- 42 perks: mystery bags and the eight effects; the slot is the picker's client's alone. Batch S3, 2026-09-24.
