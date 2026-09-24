@@ -235,11 +235,12 @@ function bag(r: number): THREE.Object3D {
 }
 
 // A prop looks like its content label when render knows it, else it is its collider's shape, coloured by
-// its label or in DEFAULT; a prop content does not describe (a test's crate) has no label.
+// its label or in DEFAULT; a prop content does not describe (a test's crate) has no label. A label's shape
+// is its frame, turned to the box's longer side, so it hangs in a group the view poses with the body.
 function prop(shape: Shape, label: string | undefined): THREE.Object3D {
   const half = 'halfExtents' in shape ? (shape as Cuboid).halfExtents : undefined;
   const look = label && half ? shaped(label, { p: { x: 0, y: 0, z: 0 }, half }) : undefined;
-  return look ?? new THREE.Mesh(geometry(shape), material((label && COLOUR[label]) || DEFAULT));
+  return look ? new THREE.Group().add(look) : new THREE.Mesh(geometry(shape), material((label && COLOUR[label]) || DEFAULT));
 }
 
 const KINDS: Partial<Record<Kind, (shape: Shape) => THREE.Object3D>> = {

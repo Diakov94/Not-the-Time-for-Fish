@@ -2,6 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, RigidBody, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
+import { hidden } from '../sim/hiding.ts';
+import { yawOf } from '../sim/movement.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
 import { buildLook, debrisLook, lookOf } from './looks.ts';
@@ -29,12 +31,18 @@ export type View = {
   juice: Juice;
   work: Work;
   markers: Markers;
+  peek: Peek;
 };
+// The last peek pose, until when the camera blends from it back to the orbit, and the own cat's look the
+// peek put out of sight.
+type Peek = { from: THREE.Vector3; turn: THREE.Quaternion; until: number; unseen: THREE.Object3D | null };
 
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
 const EYE = 1; // m: that point's height above the character's centre
 const LENS = new RAPIER.Ball(0.2); // what the camera keeps clear of a wall: twice its near plane
 const NO_TURN = { x: 0, y: 0, z: 0, w: 1 };
+const PEEK_EYE = 0.25; // m above the cat's centre: its head, under a 0.8 m box's top
+const BLEND = 0.25; // s from the peek view back to the orbit
 
 // The level drawn is the content the sim's world was built from (`sim.level`).
 export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
@@ -55,7 +63,7 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
     scene.add(o);
     return o;
   });
-  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers() };
+  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers(), peek: { from: new THREE.Vector3(), turn: new THREE.Quaternion(), until: -Infinity, unseen: null } };
   // Every effect's shader compiles now, not on the frame that first shows it (card 57: the first blast's
   // frame took 96 ms): one of each is added and the hidden overlays shown while the scene compiles.
   const effects = samples();
@@ -100,7 +108,16 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
   const shake = drawJuice(view.juice, sim, scene, camera, at);
-  if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined, shake);
+  const e = typeof target === 'string' ? sim.entities.get(target) : undefined;
+  if (view.peek.unseen) view.peek.unseen.visible = true;
+  view.peek.unseen = null;
+  if (o && e?.kind === 'cat' && e.home === sim.me && hidden(sim, e)) peek(view, sim, o, e);
+  else if (at) {
+    follow(camera, sim, at, o ? EYE : 0, look, e?.body, shake);
+    const k = Math.max(0, (view.peek.until - sim.time) / BLEND);
+    camera.position.lerp(view.peek.from, k * k * (3 - 2 * k));
+    camera.quaternion.slerp(view.peek.turn, k * k * (3 - 2 * k));
+  }
   drawSenses(view.senses, sim, scene, camera);
   drawWork(view.work, sim, objects, camera);
   drawMarkers(view.markers, sim, scene, camera);
@@ -120,7 +137,7 @@ function add(view: View, sim: Sim, e: Entity): THREE.Object3D {
 // it from exactly there in the last step (kinematic copies, the carried prop and the driven character to
 // 1e-8 m; a falling dynamic body to 1 mm, from gravity inside the step). So the frame shows the sim's
 // previous and current poses interpolated, and nothing keeps a pose between frames.
-function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
+export function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
   const p = b.translation();
   const v = b.linvel();
   const q = b.rotation();
@@ -129,6 +146,25 @@ function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
   o.quaternion.set(q.x, q.y, q.z, q.w);
   const turn = Math.hypot(w.x, w.y, w.z);
   if (turn > 0) o.quaternion.premultiply(back.setFromAxisAngle(axis.set(w.x / turn, w.y / turn, w.z / turn), -turn * lag));
+}
+
+// GAME.md, Camera (card 56): while the sim's `hidden` says the player's own cat is in a hiding spot, the
+// camera leaves the orbit for a fixed view from the cat's head, inside the spot, looking level toward
+// where the cat last stood outside one (the sim's `outside`): out of the way it came in, never through
+// the spot's walls. The cat's own look is out of sight meanwhile. Leaving, the camera blends back to the
+// orbit over BLEND.
+function peek(view: View, sim: Sim, o: THREE.Object3D, cat: Entity): void {
+  const { camera, peek } = view;
+  camera.position.set(o.position.x, o.position.y + PEEK_EYE, o.position.z);
+  const out = sim.outside;
+  const [dx, dz] = out ? [out.x - o.position.x, out.z - o.position.z] : [0, 0];
+  const yaw = Math.hypot(dx, dz) > 1e-3 ? Math.atan2(dx, dz) : yawOf(cat.body.rotation());
+  camera.lookAt(camera.position.x + Math.sin(yaw), camera.position.y, camera.position.z + Math.cos(yaw));
+  peek.from.copy(camera.position);
+  peek.turn.copy(camera.quaternion);
+  peek.until = sim.time + BLEND;
+  peek.unseen = o;
+  o.visible = false;
 }
 
 // The third-person camera: DISTANCE behind the point `at`, orbiting it by `look`, and pulled in along that
