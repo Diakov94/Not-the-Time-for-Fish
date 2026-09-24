@@ -6,7 +6,7 @@ import { createWorld, init, step, STEP } from './world.ts';
 beforeAll(init);
 
 test('a crate dropped from 2 m rests at y = 0.50 ± 0.01 within 120 steps', () => {
-  const sim = createWorld(prototypeRoom);
+  const sim = createWorld(prototypeRoom, 'H');
   prototypeRoom.crates.forEach((p, i) =>
     spawnEntity(sim.world, sim.entities, { type: 'spawn', from: 'H', id: `H:${i}`, kind: 'crate', home: null, p }),
   );

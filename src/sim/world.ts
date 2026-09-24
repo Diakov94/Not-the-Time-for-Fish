@@ -1,13 +1,16 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { World } from '@dimforge/rapier3d-compat';
-import type { Entities } from './entities.ts';
+import type { KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
+import type { ClientId, Entities } from './entities.ts';
 import type { Level } from './level.ts';
+import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 
 export const STEP = 1 / 60;
 const GRAVITY = 9.81;
 
 export type Sim = {
+  me: ClientId; // the client this sim runs on
   world: World;
+  controller: KinematicCharacterController; // drives this client's own character
   entities: Entities;
   accumulator: number; // seconds of passed-in time not yet stepped
 };
@@ -16,7 +19,7 @@ export async function init(): Promise<void> {
   await RAPIER.init();
 }
 
-export function createWorld(level: Level): Sim {
+export function createWorld(level: Level, me: ClientId): Sim {
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = STEP;
   const h = level.halfSize;
@@ -30,14 +33,20 @@ export function createWorld(level: Level): Sim {
   ] as const) {
     world.createCollider(RAPIER.ColliderDesc.cuboid(hx, wall, hz).setTranslation(x, wall, z));
   }
-  return { world, entities: new Map(), accumulator: 0 };
+  const controller = world.createCharacterController(0.01);
+  controller.setApplyImpulsesToDynamicBodies(true);
+  controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
+  return { me, world, controller, entities: new Map(), accumulator: 0 };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
-export function step(sim: Sim, dt: number): void {
+// `intent` is this client's player input, held for every step of the call.
+export function step(sim: Sim, dt: number, intent: Intent = IDLE): void {
   sim.accumulator += dt;
   while (sim.accumulator >= STEP) {
     sim.accumulator -= STEP;
+    const c = myCharacter(sim);
+    if (c) drive(sim, c, intent);
     sim.world.step();
   }
 }
