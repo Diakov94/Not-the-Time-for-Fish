@@ -90,6 +90,22 @@ export const SOUNDS = {
     hiss(k, out, t, { filter: 'lowpass', f: [300, 150], dur: 0.08, peak: 1.5 * loud }),
     hiss(k, out, t, { filter: 'highpass', f: [4000, 4000], dur: 0.015, peak: 0.25 * loud }),
   ],
+  // A door swung open: its hinge's creak, a slow run of clicks that rises and falls through the wood.
+  creak: (k, out, t, loud) => [
+    tone(k, out, t, { type: 'sawtooth', f: [70, 130], dur: 0.35, peak: 0.6 * loud, attack: 0.08 }),
+    tone(k, out, t + 0.3, { type: 'sawtooth', f: [130, 90], dur: 0.3, peak: 0.5 * loud }),
+    hiss(k, out, t, { filter: 'bandpass', f: [900, 1400], q: 8, dur: 0.6, peak: 1.2 * loud, attack: 0.1 }),
+  ],
+  // A cat a bark flushed out of its spot: an angry yowl, up and down.
+  yowl: (k, out, t, loud) => [
+    tone(k, out, t, { type: 'sawtooth', f: [500, 900], dur: 0.25, peak: 0.7 * loud, attack: 0.05 }),
+    tone(k, out, t + 0.22, { type: 'sawtooth', f: [900, 450], dur: 0.45, peak: 0.7 * loud }),
+  ],
+  // The overtime carrier's ping: a heartbeat's lub-dub, low and soft, so it warns without startling.
+  pulse: (k, out, t, loud) => [
+    tone(k, out, t, { type: 'triangle', f: [90, 55], dur: 0.14, peak: 0.8 * loud }),
+    tone(k, out, t + 0.2, { type: 'triangle', f: [80, 50], dur: 0.16, peak: 0.6 * loud }),
+  ],
   // The round (card 55). A mine armed: a click and its fuse catching, a sizzle rising.
   arm: (k, out, t) => [
     tone(k, out, t, { type: 'square', f: [220, 110], dur: 0.05, peak: 0.35 }),

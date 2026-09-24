@@ -2,6 +2,7 @@ import type { Vec3 } from '../content/level.ts';
 import { volumeAt } from '../sim/build.ts';
 import { isCharacter, type ClientId, type Entity, type NetId } from '../sim/entities.ts';
 import type { SimEvent } from '../sim/events.ts';
+import type { NoiseCause } from '../sim/messages.ts';
 import { progress } from '../sim/mines.ts';
 import { SPEED } from '../sim/movement.ts';
 import { tension } from '../sim/tension.ts';
@@ -121,6 +122,9 @@ function sound(g: Graph, s: Sound, p: Vec3 | null, loud: number): number {
 const characterOf = (sim: Sim, client: ClientId): Entity | undefined =>
   [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind));
 
+// A noise's sound by its cause; a step's is its character's own (below).
+const NOISES: Record<NoiseCause, Sound | null> = { step: null, impact: 'impact', door: 'creak', flush: 'yowl', carrier: 'pulse', blast: null, trap: null };
+
 // An event's sound, and when it starts on the context's clock. A blast's and a sprung trap's noise is
 // the dogs' ping of them: they are heard at their own events, which come first.
 function play(g: Graph, sim: Sim, ev: SimEvent): number | undefined {
@@ -128,7 +132,10 @@ function play(g: Graph, sim: Sim, ev: SimEvent): number | undefined {
     const c = characterOf(sim, ev.from);
     return c?.kind === 'dog' ? sound(g, 'dogStep', ev.p, ev.loud * dogBoost(sim, c)) : sound(g, 'catStep', ev.p, ev.loud);
   }
-  if (ev.type === 'noise') return ev.cause === 'blast' || ev.cause === 'trap' ? undefined : sound(g, 'impact', ev.p, ev.loud);
+  if (ev.type === 'noise') {
+    const s = NOISES[ev.cause];
+    return s ? sound(g, s, ev.p, ev.loud) : undefined;
+  }
   if (ev.type === 'grab' || ev.type === 'throw' || ev.type === 'drop') {
     const e = sim.entities.get(ev.id);
     return e && sound(g, ev.type === 'grab' && e.kind === 'fish' ? 'pickup' : ev.type, e.body.translation(), 1);
