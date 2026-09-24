@@ -90,7 +90,9 @@
 - 128 map in the round table; 129 water bomb (soaks: a wet cat pings for 20 s); 130 slip trap (a banana peel slips a dog 1.5 s). Wave 1 SIM1, 2026-09-24.
 - 101 maps by file name, the headless --map; 102 the settings store (one owner of per-viewer settings); 103 the input zone and bindings. Wave 0 APP-SEAMS, 2026-09-24.
 - 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.
+- 123 gamepad (Gamepad API, stub-tested); 124 remap applied (the offerBindings wiring line lands after SETTINGS-UI); 125 final bindings, feel and emote keys. Wave 1 INPUT, 2026-09-24.
 - 112 the cats 1-3: concept, skeleton, detail and emotes. Wave 1 CATS-A, 2026-09-24.
 - 114 the dogs 1-3: concept, skeleton, detail and emotes. Wave 1 DOGS-A, 2026-09-24.
 - 113 the cats 4-6: concept, skeleton, detail and emotes. Wave 1 CATS-B, 2026-09-24.
 - 115 the dogs 4-6: concept, skeleton, detail and emotes. Wave 1 DOGS-B, 2026-09-24.
+- bug-net-copy-freezes-at-an-ownership-change: the fold decides once, at a tick's arrival; the 8-client round meets the card's acceptance 5/5 (a grabbed cat on the other clients 0.150-0.203 → 0.055-0.094 m). Stall divergence is filed separately. The last MVP bug, 2026-09-24.
