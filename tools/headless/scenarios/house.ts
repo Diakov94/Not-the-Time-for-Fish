@@ -31,6 +31,8 @@ export const TOSS = p(KENNEL.p.x - KENNEL.half.x - 1.1, KENNEL.p.z);
 export const IN_CAGE = box(KENNEL);
 export const RESCUE = p(LATCH.x, LATCH.z - 0.6);
 const OUT_OF_CAGE = p(KENNEL.p.x - 0.5, KENNEL.p.z - KENNEL.half.z - 0.7);
+// Where a cat with nothing left to do waits: the hideout's back, out of the gate's way.
+export const park = (n: number): P => p(-6 + 1.5 * n, -27);
 
 // A room a cat route leads into through a gap one cat wide: one cat at a time is in it or its passage.
 // Cats wait their turn outside at their own spot in the queue, the first on the team first.
@@ -95,6 +97,12 @@ export function* throughGate(c: HeadlessClient): Generator<Press, void> {
   }
   yield* until(c, () => !mineNear(c, MINE_AT.gate));
   yield* hold(c, 0.8 * n);
+}
+
+// A cat a scenario has no part for at this player count: to its spot at the hideout's back, and it stays.
+export function* standby(c: HeadlessClient): Generator<Press, void> {
+  yield* go(c, [park(place(c).n)]);
+  yield* until(c, () => false);
 }
 
 // Another cat in `b` in this client's world; with `before`, only one earlier on its team than that.

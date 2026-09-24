@@ -5,12 +5,10 @@ import { autoTeam, catsTeam, newRound, type Round } from '../../../src/sim/round
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
 import { captive, capturedMe, fishIn, go, heldNow, hold, phase, place, plantHere, pounce, rescue, toss, until, type P } from './bots.ts';
-import { fridgeTrip, ROUTE, TABLE, tableTrip, throughGate } from './house.ts';
+import { fridgeTrip, park, ROUTE, TABLE, tableTrip, throughGate } from './house.ts';
 
 type Script = Generator<Press, void>;
 const sniffing = { ...IDLE, sniff: true };
-// Where a cat with nothing left to do waits: the hideout's back, out of the gate's way.
-const park = (n: number): P => ({ x: -6 + 1.5 * n, z: -27 });
 
 // A runner (a cat at an even place on its team): through the gate, the table's fish out to the hideout
 // one at a time, and the kennel opened whenever a teammate is in it. A runner with no fish left for it
