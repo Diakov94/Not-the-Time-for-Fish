@@ -74,10 +74,13 @@ function* hunter(c: HeadlessClient): Script {
 }
 
 // A guard (every other dog): after the others have left the spawn, a mine at the east hole (the second
-// dog) or the west fence's exit (the third), then it sniffs a step back from it.
+// dog) or the west fence's exit (the third), then it sniffs a step back from it. A dog past the third
+// enters on another's spawn point (the level has three), so it steps out of their way at once, to the
+// yard east of the doghouse, 2 m south of the dogs' lane.
 function* guard(c: HeadlessClient): Script {
   const { n } = place(c);
   const route = [undefined, ROUTE.dogToEastHole, ROUTE.dogToWestFence][n];
+  if (n > 2) yield* go(c, [{ x: 6 + 1.5 * (n - 3), z: 10.5 }]);
   yield* hold(c, 1.2 * n);
   if (route) {
     yield* go(c, route, { sprint: true });

@@ -17,7 +17,7 @@ const mapOf = async (name: string): Promise<Level | undefined> => (await load(MA
 // `npm run headless -- --scenario <name> --clients N --seconds S`: no browser, no jsdom; exit 1 when a
 // judge fails, 2 for a scenario or a map it does not know. `--map <name>` plays the scenario on that map
 // instead of its own. A round scenario takes `--heist S` (the heist's length) and `--rounds N`;
-// `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay.
+// `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay; `--compare` below.
 const { values, positionals } = parseArgs({
   options: {
     scenario: { type: 'string', default: 'default' },
@@ -25,7 +25,7 @@ const { values, positionals } = parseArgs({
     clients: { type: 'string', default: '2' },
     seconds: { type: 'string' },
     heist: { type: 'string' },
-    rounds: { type: 'string', default: '1' },
+    rounds: { type: 'string' },
     'tick-rate': { type: 'string', default: '1' },
     delay: { type: 'string', default: '1' },
     compare: { type: 'boolean' },
@@ -59,7 +59,7 @@ const scenario = { ...own, level };
 const clients = Number(values.clients);
 const seconds = Number(values.seconds ?? scenario.seconds ?? 20);
 const heist = values.heist === undefined ? scenario.heist : Number(values.heist);
-const knobs = { ticks: Number(values['tick-rate']), delay: Number(values.delay), rounds: Number(values.rounds), ...(heist !== undefined && { heist }) };
+const knobs = { ticks: Number(values['tick-rate']), delay: Number(values.delay), rounds: Number(values.rounds ?? scenario.rounds ?? 1), ...(heist !== undefined && { heist }) };
 const t0 = performance.now();
 const r = await run(scenario, clients, seconds, knobs);
 const m = (x: number) => x.toFixed(3).padStart(8);
@@ -73,7 +73,7 @@ const worst = (k: 'moving' | 'resting') => Math.max(...r.divergence.map((d) => d
 console.log(`max: moving ${worst('moving').toFixed(3)} m (limit ${MOVING_MAX}), resting ${worst('resting').toFixed(3)} m (limit ${RESTING_MAX})`);
 const visible = r.visible.reduce((n, v) => n + v.n, 0);
 console.log(
-  `visible desyncs (a copy > ${VISIBLE.off} m off its owner's path for > ${VISIBLE.for / 1000} s): ${visible} (limit ${VISIBLE.max})${r.visible.map((v) => `; ${v.id} ${v.kind} ${v.n}`).join('')}`,
+  `visible desyncs (a copy > ${VISIBLE.off} m off its owner's path for > ${VISIBLE.for / 1000} s): ${visible} (limit ${VISIBLE.max} per round)${r.desyncs.length > 1 ? `, by round ${r.desyncs.join('/')}` : ''}${r.visible.map((v) => `; ${v.id} ${v.kind} ${v.n}`).join('')}`,
 );
 console.log(`tables at the end: ${r.tablesAgree ? 'deep-equal' : 'NOT equal'} on ${clients} clients, round tables ${r.roundsAgree ? 'deep-equal' : 'NOT equal'}; doomed claims ${r.doomed} of ${r.claims}`);
 console.log('client   side   ticks/s  min in 1 s  ticking/s  up kB/s  down kB/s  events');
