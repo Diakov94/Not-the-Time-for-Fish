@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUncheckedSideEffectImports": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@sim/*": ["./src/sim/*"],
+      "@net/*": ["./src/net/*"],
+      "@relay/*": ["./src/relay/*"],
+      "@render/*": ["./src/render/*"],
+      "@app/*": ["./src/app/*"],
+      "@headless/*": ["./tools/headless/*"]
+    }
+  },
+  "include": ["src", "tools", "*.ts"]
+}

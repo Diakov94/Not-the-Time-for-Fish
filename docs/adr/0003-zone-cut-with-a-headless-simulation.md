@@ -20,12 +20,7 @@ In code, *entity* means a row of that table: a character or a prop. A prop is al
 
 Tests sit next to the code they check as `*.test.ts` and run under Vitest in Node; they count as instruments. The Prototype's only level lives in `src/sim`; a `content/` zone appears with the Vertical Slice's country house, not before. One npm package with path aliases, no workspaces.
 
-The boundary is checked by command, not by promise, and the command runs inside the gates:
-
-```sh
-grep -rlE "from ['\"]three|document\.|window\.|navigator\." src/sim src/net src/relay   # must print nothing
-grep -rlE "(src|\.\.)/(render|app)/" src/sim src/net src/relay                        # must print nothing
-```
+The boundary is checked by command, not by promise: `npm run zones` (its one owner is `package.json`) runs inside the gates and must print nothing. It rejects, in `src/sim`, `src/net` and `src/relay`, any import of `three` (`from` or bare `import`), any `document.`, `window.` or `navigator.`, and any path or alias into `render` or `app`.
 
 ## Considered options
 

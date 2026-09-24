@@ -6,3 +6,5 @@
 # (gamestudio/agents.md); change it here if .studio/project.conf changes it.
 /.worktrees/
 .DS_Store
+# npm ci recreates it (card 01).
+/node_modules/
