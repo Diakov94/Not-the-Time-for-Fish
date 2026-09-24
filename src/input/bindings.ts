@@ -17,7 +17,7 @@ export const BINDINGS: { keyboard: Record<Action, string[]>; gamepad: Partial<Re
     left: ['KeyA'],
     right: ['KeyD'],
     sprint: ['ShiftLeft', 'ShiftRight'],
-    sneak: ['ControlLeft', 'ControlRight'],
+    sneak: ['KeyC'], // not Ctrl: Ctrl held into W closes the tab on Windows and Linux, past preventDefault
     jump: ['Space'],
     grab: ['Mouse0'],
     plant: ['KeyQ'],

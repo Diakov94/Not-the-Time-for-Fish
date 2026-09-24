@@ -52,7 +52,8 @@ export function listen(canvas: HTMLCanvasElement, own: () => NetId | undefined, 
   };
   addEventListener('keydown', (e) => {
     input.keys.set(e.code, 1);
-    if (does('report', e.code) || does('next', e.code)) e.preventDefault();
+    // Next (Tab) is the game's only while the canvas holds the mouse; on a screen it moves the focus.
+    if (does('report', e.code) || (does('next', e.code) && document.pointerLockElement === canvas)) e.preventDefault();
     if (!e.repeat) down(e.code, e.timeStamp);
   });
   addEventListener('keyup', (e) => up(e.code, e.timeStamp));
