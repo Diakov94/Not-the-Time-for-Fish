@@ -31,7 +31,7 @@ function* trapper(c: HeadlessClient): Script {
   yield* go(c, [...ROUTE.east.slice(0, 2), TRAP]);
   yield* tap('plant');
   yield* go(c, [p(PICKUP.x, PICKUP.z)]);
-  yield* until(c, () => simOf(c).trap);
+  yield* until(c, () => simOf(c).trap !== null);
   yield* tap('plant');
   yield* go(c, [p(PICKUP.x + 5, PICKUP.z - 1)]);
   yield* tap('plant');

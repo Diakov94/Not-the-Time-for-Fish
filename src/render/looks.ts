@@ -1,5 +1,6 @@
 import type { Ball, Capsule, Cuboid, Shape } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { ofSide } from '../content/characters.ts';
 import { isCharacter, type Entity, type Kind } from '../sim/entities.ts';
 import { lookOf as rosterLook, playerOf } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
@@ -52,7 +53,7 @@ export function lookOf(sim: Sim, e: Entity): number {
   if (p && (e.kind === 'cat' || e.kind === 'dog')) return rosterLook(sim.round, p, e.kind);
   let h = 2166136261;
   for (const c of e.home ?? '') h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
-  return h % 3;
+  return h % ofSide(e.kind as 'cat' | 'dog').length;
 }
 
 // A cat is built on a 0.5 x 0.9 m frame and a dog on a 0.8 x 1.4 m one, then scaled to the capsule; the
@@ -84,98 +85,97 @@ function dog(fur: number, muzzle: number): THREE.Group {
   return g;
 }
 
-// The six characters of GAME.md, three per side, each with its one signature detail.
-const LOOKS: Record<'cat' | 'dog', (() => THREE.Group)[]> = {
-  cat: [
-    // Проффесор: a grey tabby under a black mortarboard with a gold tassel.
-    () => {
-      const g = cat(0x8c95a3, 0xe8e2d6);
-      catEars(g, 0x8c95a3, 0.11, 0.33, 0.6);
-      const board = block(0.34, 0.025, 0.34, material(0x1c1c24), 0, 0.4, 0.02);
-      board.rotation.y = Math.PI / 4;
-      g.add(rod(0.1, 0x1c1c24, [0, 0.33, 0.02], [0, 0.4, 0.02]), board);
-      g.add(rod(0.008, GOLD, [0, 0.415, 0.02], [0.2, 0.4, 0.02]), rod(0.008, GOLD, [0.2, 0.4, 0.02], [0.21, 0.3, 0.02]), ball(0.025, GOLD, 0.21, 0.29, 0.02));
-      return g;
-    },
-    // Золотий Батон: a golden cat shaped like a loaf, crust-scored across its back, its head sunk into it.
-    () => {
-      const g = new THREE.Group();
-      const fur = 0xe3a93b;
-      g.add(ball(0.22, fur, 0, -0.2, 0, [1.25, 1, 1.3]), ball(0.15, fur, 0, 0.06, 0.12));
-      for (const z of [-0.22, -0.13, -0.04]) {
-        const score = block(0.2, 0.04, 0.05, material(0xa4632b), 0, -0.2 + 0.22 * Math.sqrt(1 - (z / 0.286) ** 2) - 0.01, z);
-        score.rotation.y = 0.5;
-        g.add(score);
-      }
-      catEars(g, fur, 0.08, 0.19, 0.2);
-      for (const x of [-1, 1]) g.add(ball(0.022, INK, 0.055 * x, 0.09, 0.26));
-      g.add(ball(0.02, 0xe88a9a, 0, 0.05, 0.27), rod(0.04, fur, [0, -0.3, -0.26], [0, -0.2, -0.36]));
-      return g;
-    },
-    // Страус з Межигір'я: a black-plumed cat on long thin legs, a long cream neck and an ostrich plume.
-    () => {
-      const g = new THREE.Group();
-      const cream = 0xe8dcc8;
-      for (const x of [-0.07, 0.07]) g.add(rod(0.022, 0xd9a6a0, [x, -0.45, 0], [x, -0.15, 0]));
-      g.add(ball(0.17, 0x2b2b2e, 0, -0.06, -0.02, [1.1, 0.85, 1.25]));
-      for (const x of [-1, 1]) g.add(ball(0.07, 0xf6f3ee, 0.16 * x, -0.06, -0.08, [0.5, 0.7, 1.4]));
-      g.add(rod(0.04, cream, [0, 0.02, 0.08], [0, 0.26, 0.12]), ball(0.11, cream, 0, 0.3, 0.12));
-      catEars(g, cream, 0.06, 0.4, 0.3);
-      for (const x of [-1, 1]) g.add(ball(0.02, INK, 0.045 * x, 0.32, 0.22));
-      for (const t of [-0.35, 0, 0.35]) g.add(cone(0.025, 0.2, 0xf6f3ee, 0.12 * Math.sin(t), 0.5, 0.1, [0, 0, -t]));
-      for (const t of [-0.4, 0.4]) g.add(cone(0.04, 0.2, 0xf6f3ee, 0.05 * t, 0.0, -0.22, [-1.1, 0, t]));
-      return g;
-    },
-  ],
-  dog: [
-    // ГАВ-БУ: black and tan, two tall pointed ears and dark sunglasses.
-    () => {
-      const g = dog(0x2f2a27, 0xb57a42);
-      for (const x of [-1, 1]) g.add(cone(0.08, 0.26, 0x2f2a27, 0.12 * x, 0.56, 0, [0, 0, -0.2 * x]));
-      g.add(block(0.32, 0.03, 0.03, material(INK), 0, 0.38, 0.23));
-      for (const x of [-1, 1]) g.add(block(0.12, 0.08, 0.03, material(INK), 0.075 * x, 0.36, 0.24));
-      return g;
-    },
-    // НАБУ-ГАВ: a white terrier with brown floppy ears, holding a big magnifying glass up beside its head.
-    () => {
-      const g = dog(0xf0ebe0, 0xf0ebe0);
-      for (const x of [-1, 1]) {
-        const ear = block(0.08, 0.26, 0.14, material(0x8a5a33), 0.21 * x, 0.24, 0.02);
-        ear.rotation.z = 0.3 * x;
-        g.add(ear);
-      }
-      g.add(ball(0.06, 0x8a5a33, -0.09, 0.38, 0.19, [1, 1, 0.4]));
-      g.add(rod(0.03, 0x5a3a22, [0.32, -0.08, 0.12], [0.42, 0.18, 0.18]));
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 6, 14), material(GOLD));
-      ring.position.set(0.46, 0.33, 0.2);
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.13, 14), new THREE.MeshLambertMaterial({ color: 0xbfe6f5, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
-      lens.position.copy(ring.position);
-      g.add(ring, lens);
-      return g;
-    },
-    // ДБР-р-р: a stocky brindle bulldog, a broad earless head with an underbite, in a spiked collar.
-    () => {
-      const g = dog(0x8a7563, 0xd8c8b0);
-      g.add(ball(0.25, 0x8a7563, 0, 0.27, 0.05, [1.3, 0.9, 1]));
-      for (const x of [-1, 1]) g.add(cone(0.02, 0.06, 0xffffff, 0.06 * x, 0.2, 0.37));
-      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.045, 6, 16), material(0x9a2a2a));
-      collar.position.set(0, 0.09, 0.02);
-      collar.rotation.x = Math.PI / 2;
-      g.add(collar);
-      for (let i = 0; i < 8; i++) {
-        const out = new THREE.Vector3(Math.sin((i * Math.PI) / 4), 0, Math.cos((i * Math.PI) / 4));
-        const spike = cone(0.035, 0.11, SILVER, 0.29 * out.x, 0.09, 0.02 + 0.29 * out.z);
-        spike.quaternion.setFromUnitVectors(up, out);
-        g.add(spike);
-      }
-      return g;
-    },
-  ],
+// The MVP's six placeholder characters, by the roster's id, each with its one signature detail.
+const LOOKS: Record<string, () => THREE.Group> = {
+  // Проффесор: a grey tabby under a black mortarboard with a gold tassel.
+  proffesor: () => {
+    const g = cat(0x8c95a3, 0xe8e2d6);
+    catEars(g, 0x8c95a3, 0.11, 0.33, 0.6);
+    const board = block(0.34, 0.025, 0.34, material(0x1c1c24), 0, 0.4, 0.02);
+    board.rotation.y = Math.PI / 4;
+    g.add(rod(0.1, 0x1c1c24, [0, 0.33, 0.02], [0, 0.4, 0.02]), board);
+    g.add(rod(0.008, GOLD, [0, 0.415, 0.02], [0.2, 0.4, 0.02]), rod(0.008, GOLD, [0.2, 0.4, 0.02], [0.21, 0.3, 0.02]), ball(0.025, GOLD, 0.21, 0.29, 0.02));
+    return g;
+  },
+  // Золотий Батон: a golden cat shaped like a loaf, crust-scored across its back, its head sunk into it.
+  'zolotyi-baton': () => {
+    const g = new THREE.Group();
+    const fur = 0xe3a93b;
+    g.add(ball(0.22, fur, 0, -0.2, 0, [1.25, 1, 1.3]), ball(0.15, fur, 0, 0.06, 0.12));
+    for (const z of [-0.22, -0.13, -0.04]) {
+      const score = block(0.2, 0.04, 0.05, material(0xa4632b), 0, -0.2 + 0.22 * Math.sqrt(1 - (z / 0.286) ** 2) - 0.01, z);
+      score.rotation.y = 0.5;
+      g.add(score);
+    }
+    catEars(g, fur, 0.08, 0.19, 0.2);
+    for (const x of [-1, 1]) g.add(ball(0.022, INK, 0.055 * x, 0.09, 0.26));
+    g.add(ball(0.02, 0xe88a9a, 0, 0.05, 0.27), rod(0.04, fur, [0, -0.3, -0.26], [0, -0.2, -0.36]));
+    return g;
+  },
+  // Страус з Межигір'я: a black-plumed cat on long thin legs, a long cream neck and an ostrich plume.
+  straus: () => {
+    const g = new THREE.Group();
+    const cream = 0xe8dcc8;
+    for (const x of [-0.07, 0.07]) g.add(rod(0.022, 0xd9a6a0, [x, -0.45, 0], [x, -0.15, 0]));
+    g.add(ball(0.17, 0x2b2b2e, 0, -0.06, -0.02, [1.1, 0.85, 1.25]));
+    for (const x of [-1, 1]) g.add(ball(0.07, 0xf6f3ee, 0.16 * x, -0.06, -0.08, [0.5, 0.7, 1.4]));
+    g.add(rod(0.04, cream, [0, 0.02, 0.08], [0, 0.26, 0.12]), ball(0.11, cream, 0, 0.3, 0.12));
+    catEars(g, cream, 0.06, 0.4, 0.3);
+    for (const x of [-1, 1]) g.add(ball(0.02, INK, 0.045 * x, 0.32, 0.22));
+    for (const t of [-0.35, 0, 0.35]) g.add(cone(0.025, 0.2, 0xf6f3ee, 0.12 * Math.sin(t), 0.5, 0.1, [0, 0, -t]));
+    for (const t of [-0.4, 0.4]) g.add(cone(0.04, 0.2, 0xf6f3ee, 0.05 * t, 0.0, -0.22, [-1.1, 0, t]));
+    return g;
+  },
+  // ГАВ-БУ: black and tan, two tall pointed ears and dark sunglasses.
+  'hav-bu': () => {
+    const g = dog(0x2f2a27, 0xb57a42);
+    for (const x of [-1, 1]) g.add(cone(0.08, 0.26, 0x2f2a27, 0.12 * x, 0.56, 0, [0, 0, -0.2 * x]));
+    g.add(block(0.32, 0.03, 0.03, material(INK), 0, 0.38, 0.23));
+    for (const x of [-1, 1]) g.add(block(0.12, 0.08, 0.03, material(INK), 0.075 * x, 0.36, 0.24));
+    return g;
+  },
+  // НАБУ-ГАВ: a white terrier with brown floppy ears, holding a big magnifying glass up beside its head.
+  'nabu-hav': () => {
+    const g = dog(0xf0ebe0, 0xf0ebe0);
+    for (const x of [-1, 1]) {
+      const ear = block(0.08, 0.26, 0.14, material(0x8a5a33), 0.21 * x, 0.24, 0.02);
+      ear.rotation.z = 0.3 * x;
+      g.add(ear);
+    }
+    g.add(ball(0.06, 0x8a5a33, -0.09, 0.38, 0.19, [1, 1, 0.4]));
+    g.add(rod(0.03, 0x5a3a22, [0.32, -0.08, 0.12], [0.42, 0.18, 0.18]));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 6, 14), material(GOLD));
+    ring.position.set(0.46, 0.33, 0.2);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.13, 14), new THREE.MeshLambertMaterial({ color: 0xbfe6f5, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+    lens.position.copy(ring.position);
+    g.add(ring, lens);
+    return g;
+  },
+  // ДБР-р-р: a stocky brindle bulldog, a broad earless head with an underbite, in a spiked collar.
+  dbr: () => {
+    const g = dog(0x8a7563, 0xd8c8b0);
+    g.add(ball(0.25, 0x8a7563, 0, 0.27, 0.05, [1.3, 0.9, 1]));
+    for (const x of [-1, 1]) g.add(cone(0.02, 0.06, 0xffffff, 0.06 * x, 0.2, 0.37));
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.045, 6, 16), material(0x9a2a2a));
+    collar.position.set(0, 0.09, 0.02);
+    collar.rotation.x = Math.PI / 2;
+    g.add(collar);
+    for (let i = 0; i < 8; i++) {
+      const out = new THREE.Vector3(Math.sin((i * Math.PI) / 4), 0, Math.cos((i * Math.PI) / 4));
+      const spike = cone(0.035, 0.11, SILVER, 0.29 * out.x, 0.09, 0.02 + 0.29 * out.z);
+      spike.quaternion.setFromUnitVectors(up, out);
+      g.add(spike);
+    }
+    return g;
+  },
 };
 const FRAME = { cat: { w: 0.5, h: 0.9 }, dog: { w: 0.8, h: 1.4 } };
 
+// A look is an index into its side's roster. A character with no geometry here yet (the fourth to the
+// sixth of a side) draws its side's placeholder of the same index modulo three, until cards 112-115.
 function character(kind: 'cat' | 'dog', look: number, c: Capsule): THREE.Object3D {
-  const g = LOOKS[kind][look]!();
+  const side = ofSide(kind);
+  const g = (LOOKS[side[look]!.id] ?? LOOKS[side[look % 3]!.id]!)();
   g.userData.look = look;
   const f = FRAME[kind];
   const w = 2 * c.radius;

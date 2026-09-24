@@ -3,7 +3,7 @@ import { countryHouse } from '../content/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
 import { forward, join, leave, newRoom, type Out } from '../relay/room.ts';
 import { halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';
-import type { Left, SimMessage } from './messages.ts';
+import type { Left, MapPick, SimMessage } from './messages.ts';
 import { drainEvents } from './events.ts';
 import { IDLE, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
@@ -11,8 +11,8 @@ import { interact } from './heist.ts';
 import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
-import { receive } from './ownership.ts';
-import { advance, knobs, playerOf, playsAs } from './round.ts';
+import { newOwnershipTable, receive } from './ownership.ts';
+import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -133,6 +133,48 @@ test("the host moves a name at that message on every client; a non-host's roster
   for (const s of r.sims()) expect(teams(s)).toBe(before);
   r.send(a!, { type: 'roster', from: a!.me, name: c!.me, team: 'B' });
   for (const s of r.sims()) expect(s.round.roster.find((p) => p.name === c!.me)?.team).toBe('B');
+});
+
+// A side's looks are its characters in the roster (card 100): six per side, the fold refuses a seventh.
+test('the fold accepts looks 0 to 5 on either side and refuses 6', () => {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  foldRound(r, { type: 'hello', from: 'A', name: 'P0' }, 'A', t, new Map());
+  for (const side of ['cat', 'dog'] as const) {
+    const looks = [0, 1, 2, 3, 4, 5, 6].map((look) => foldRound(r, { type: 'look', from: 'A', side, look, worn: {} }, 'A', t, new Map()));
+    expect(looks).toEqual([true, true, true, true, true, true, false]);
+    expect(r.roster[0]!.looks[side]).toBe(5);
+  }
+});
+
+// What a player wears is the round table's, per side, whatever id it names (ADR 0013); the next look
+// overwrites it.
+test('the fold stores what a look wears per side, and the next look overwrites it', () => {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const fold = (m: RoundMessage) => foldRound(r, m, 'A', t, new Map());
+  fold({ type: 'hello', from: 'A', name: 'P0' });
+  fold({ type: 'look', from: 'A', side: 'cat', look: 1, worn: { hat: 'ushanka' } });
+  fold({ type: 'look', from: 'A', side: 'dog', look: 2, worn: { accessory: 'sunflower' } });
+  expect(r.roster[0]!.worn).toEqual({ cat: { hat: 'ushanka' }, dog: { accessory: 'sunflower' } });
+  fold({ type: 'look', from: 'A', side: 'cat', look: 1, worn: { accessory: 'medal' } });
+  expect(r.roster[0]!.worn).toEqual({ cat: { accessory: 'medal' }, dog: { accessory: 'sunflower' } });
+});
+
+// The host picks the map in the lobby, by a name this client has a level for (card 128); the fold names
+// why it refuses a pick.
+test("the fold takes a map from the host in the lobby only, by a name it has a level for, and names each refusal", () => {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const levels = { 'country-house': countryHouse, 'prototype-room': prototypeRoom };
+  // A pick's reason, then whether the fold took it.
+  const fold = (from: ClientId, name: string) => {
+    const m: MapPick = { type: 'map', from, name };
+    return [mapRefusal(r, m, 'H', levels), foldRound(r, m, 'H', t, new Map(), levels)];
+  };
+  const lobby = [fold('A', 'prototype-room'), fold('H', 'nope'), fold('H', 'prototype-room')];
+  foldRound(r, { type: 'phase', from: 'H', to: 'prep', round: 1 }, 'H', t, new Map(), levels);
+  const prep = fold('H', 'country-house');
+  expect(lobby).toEqual([['host', false], ['unknown', false], [null, true]]);
+  expect(prep).toEqual(['lobby', false]);
+  expect(r.map).toBe('prototype-room');
 });
 
 test('a known name whose client left rejoins on its team from a new client; a name in use is refused everywhere', () => {

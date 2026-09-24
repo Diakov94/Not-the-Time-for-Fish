@@ -1,11 +1,11 @@
 import type { Rotation, Vector } from '@dimforge/rapier3d-compat';
-import type { ClientId, Kind, NetId } from './entities.ts';
+import type { ClientId, Kind, NetId, Variant } from './entities.ts';
 
 // The sim's messages (ADR 0006, 0007, 0008): the contract net carries and folds nothing of. `from` is
 // the sender the relay stamped on the envelope; `left` comes from the relay itself.
 // A content prop names its index in the level's props; a body on a content point may carry its facing; a
-// thrown one (a lure) leaves its spawner at `v`.
-export type Spawn = { type: 'spawn'; from: ClientId; id: NetId; kind: Kind; home: ClientId | null; p: Vector; q?: Rotation; prop?: number; v?: Vector };
+// thrown one (a lure) leaves its spawner at `v`; a mine or a trap names its variant.
+export type Spawn = { type: 'spawn'; from: ClientId; id: NetId; kind: Kind; home: ClientId | null; p: Vector; q?: Rotation; prop?: number; v?: Vector; variant?: Variant };
 export type Claim = { type: 'claim'; from: ClientId; id: NetId; hold: boolean };
 export type Release = { type: 'release'; from: ClientId; id: NetId; p: Vector; q: Rotation; v: Vector };
 export type Left = { type: 'left'; id: ClientId; host: ClientId };
@@ -29,12 +29,17 @@ export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number; ca
 export type Mark = { type: 'mark'; from: ClientId; p: Vector };
 // A dog's Bark (card 42) where it stands: an event every cat's client answers for its own cat.
 export type Bark = { type: 'bark'; from: ClientId; p: Vector };
-// The round's (ADR 0007): a joining client's name, the host's team for a name, a player's look for a side.
+// An emote (ADR 0013): an event, never stored; `n` indexes the emotes the roster names for the sender's
+// character.
+export type Emote = { type: 'emote'; from: ClientId; n: number };
+// The round's (ADR 0007): a joining client's name, the host's team for a name, a player's look for a side
+// and what it wears there, cosmetics by their catalogue ids (ADR 0013).
 export type Team = 'A' | 'B';
 export type Side = Extract<Kind, 'cat' | 'dog'>;
 export type Hello = { type: 'hello'; from: ClientId; name: string };
 export type Roster = { type: 'roster'; from: ClientId; name: string; team: Team };
-export type Look = { type: 'look'; from: ClientId; side: Side; look: number };
+export type Worn = { hat?: string; accessory?: string };
+export type Look = { type: 'look'; from: ClientId; side: Side; look: number; worn: Worn };
 // The host's clock: the phase whose time is up gives way to `to`, in round `round` of the match.
 export type Phase = 'lobby' | 'prep' | 'heist' | 'overtime' | 'over';
 export type PhaseMessage = { type: 'phase'; from: ClientId; to: Phase; round: number };
@@ -47,6 +52,8 @@ export type DugOut = { type: 'dugOut'; from: ClientId };
 export type Opened = { type: 'opened'; from: ClientId; storage: number };
 // A house door (the level's door index) a cat worked open or a dog barged.
 export type OpenDoor = { type: 'door'; from: ClientId; door: number };
+// The host's pick in the lobby: the map the next prep builds, by its name (card 128).
+export type MapPick = { type: 'map'; from: ClientId; name: string };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Bark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
+export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Bark | Emote | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor | MapPick;
