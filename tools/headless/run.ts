@@ -8,6 +8,8 @@ import { startRelay } from '../../src/relay/node.ts';
 import type { ClientId, Kind, NetId } from '../../src/sim/entities.ts';
 import { drainEvents, type SimEvent } from '../../src/sim/events.ts';
 import type { Claim, Team } from '../../src/sim/messages.ts';
+import { whisker } from '../../src/sim/mines.ts';
+import type { Intent } from '../../src/sim/movement.ts';
 import { fold, sideOf, type Identities } from '../../src/sim/ownership.ts';
 import { advance, catsTeam, duration, knobs, newRound, type Round } from '../../src/sim/round.ts';
 import { init } from '../../src/sim/world.ts';
@@ -30,8 +32,8 @@ export type Verdict = { lines: string[]; ok: boolean };
 export type Options = { heist?: number; rounds?: number };
 
 // Every frame of the game: each client's dump (its fold's table and every pose), the events it drained,
-// and the ticks it had sent so far.
-export type Sample = { t: number; dumps: Dump[]; events: SimEvent[][]; ticks: number[] };
+// the ticks it had sent so far, the intent its player held and whether its cat felt the whisker cue.
+export type Sample = { t: number; dumps: Dump[]; events: SimEvent[][]; ticks: number[]; intents: Intent[]; cues: boolean[] };
 // A message after which a client's round table was not what it was before: when (real time, and this
 // client's sim time), the relay's `seq`, the type, the table after it, and how late by this client's clock
 // it came against the end of the phase before (NaN for a phase with no clock).
@@ -306,7 +308,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       prev = now;
       if (start === Infinity) continue;
       const dumps = cs.map((c, i) => intern(last[i]!, dump(c.session.sim)));
-      samples.push({ t: now, dumps, events, ticks: cs.map((c) => c.session.ticks) });
+      samples.push({ t: now, dumps, events, ticks: cs.map((c) => c.session.ticks), intents: cs.map((c) => c.intent), cues: cs.map((c) => whisker(c.session.sim)) });
       judge.see(now, dumps);
     }
     const s = (prev - start) / 1000;

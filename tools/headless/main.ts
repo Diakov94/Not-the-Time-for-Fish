@@ -3,9 +3,16 @@ import { MOVING_MAX, RESTING_MAX, run, type Scenario } from './run.ts';
 import { defaultGame } from './scenarios/default.ts';
 import { eightClients } from './scenarios/eight-clients.ts';
 import { grabTossWiggleHit } from './scenarios/grab-toss-wiggle-hit.ts';
+import { minesAndTraps } from './scenarios/mines-and-traps.ts';
 import { aRound } from './scenarios/round.ts';
 
-const scenarios: Record<string, Scenario> = { default: defaultGame, 'grab-toss-wiggle-hit': grabTossWiggleHit, 'eight-clients': eightClients, round: aRound };
+const scenarios: Record<string, Scenario> = {
+  default: defaultGame,
+  'grab-toss-wiggle-hit': grabTossWiggleHit,
+  'eight-clients': eightClients,
+  round: aRound,
+  'mines-and-traps': minesAndTraps,
+};
 
 // `npm run headless -- --scenario <name> --clients N --seconds S`: no browser, no jsdom; exit 1 when a
 // judge fails, 2 for a scenario it does not know. A round scenario takes `--heist S` (the heist's length)

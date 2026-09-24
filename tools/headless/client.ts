@@ -27,8 +27,8 @@ export type Player = { side: Side; at?: Vector; script: Step[] | Bot };
 export type Thing = { kind: Kind; p: Vector };
 
 // `t`: seconds into the run, the bot's clock; `round`: the round whose prep started the bot's script;
-// `error`: why its script stopped.
-export type HeadlessClient = { session: Session; name: string; player: Player; next: number; bot: Script | null; t: number; round: number; error?: string };
+// `intent`: what its player held this frame; `error`: why its script stopped.
+export type HeadlessClient = { session: Session; name: string; player: Player; next: number; bot: Script | null; t: number; round: number; intent: Intent; error?: string };
 
 // A player's client minus render and app: sim and net over the global WebSocket, driven by its script.
 // In a lobby scenario the host spawns the scenario's things before its character, so a client that holds
@@ -37,30 +37,30 @@ export async function joinHeadless(url: string, level: Level, name: string, play
   const session = await connect(url, level, name);
   for (const t of lobby ? things : []) spawn(session, t.kind, t.p);
   if (lobby) spawn(session, player.side, player.at!);
-  return { session, name, player, next: 0, bot: null, t: 0, round: 0 };
+  return { session, name, player, next: 0, bot: null, t: 0, round: 0, intent: IDLE };
 }
 
 // One frame, `t` seconds into the run (negative: not started, idle).
 export function playHeadless(c: HeadlessClient, t: number, dt: number): void {
   const { sim } = c.session;
   const script = c.player.script;
-  let intent = IDLE;
   let action: Press['action'];
   c.t = t;
+  c.intent = IDLE;
   if (Array.isArray(script)) {
     for (; c.next < script.length && script[c.next]![0] <= t; c.next++) press(c, script[c.next]![2]);
-    if (c.next > 0) intent = script[c.next - 1]![1];
+    if (c.next > 0) c.intent = script[c.next - 1]![1];
   } else {
     if (sim.round.phase === 'prep' && c.round !== sim.round.round) [c.bot, c.round] = [script(c), sim.round.round];
     try {
       const r = c.bot?.next();
-      if (r && !r.done) ({ intent, action } = r.value);
+      if (r && !r.done) ({ intent: c.intent, action } = r.value);
     } catch (e) {
       [c.error, c.bot] = [(e as Error).message, null];
     }
     press(c, action ?? null);
   }
-  frame(c.session, dt, intent);
+  frame(c.session, dt, c.intent);
 }
 
 function press(c: HeadlessClient, action: Action | null): void {
