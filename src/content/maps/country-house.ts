@@ -1,4 +1,4 @@
-import { span, vec, type Access, type Box, type Door, type Level, type Point, type Prop, type Static, type V, type Volume } from './level.ts';
+import { span, vec, type Access, type Box, type Door, type Level, type Point, type Prop, type Static, type V, type Volume } from '../level.ts';
 
 // The country house (GAME.md, Map Anatomy and Setting): the hideout south of an opaque fence with four
 // exits, the yard with the doghouse and the kennel, and the house with its rooms, three storages, doors,
