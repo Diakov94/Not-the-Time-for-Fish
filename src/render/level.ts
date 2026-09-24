@@ -14,11 +14,15 @@ import { block, frameOf, themeOf, type Theme } from '../art/themes.ts';
 export { LABEL as COLOUR, DEFAULT, material } from '../art/palette.ts';
 export { block } from '../art/themes.ts';
 const DEV_KEY = 'F8'; // shows and hides the volumes, in dev only
-// The map drawn when the caller names none: the only one until the view follows the round's map (card 142).
+// The map drawn when the level is none of the named maps (a test's level).
 const MAP = 'country-house';
 
-// The theme of the map drawn last, which the props' looks share.
+// The theme of the map drawn last, which the props' looks share, and that level's volumes, which DEV_KEY
+// shows and hides.
 let theme: Theme = themeOf(MAP);
+let volumes: THREE.Group | undefined;
+// One tint per volume role, shared by every level drawn, so a level owns no material.
+const tints = new Map<string, THREE.Material>();
 
 // A label's shape built in `b`, for a label that has one.
 export function shaped(label: string, b: Box): THREE.Object3D | undefined {
@@ -34,10 +38,10 @@ function part(s: Static): THREE.Object3D {
 // A door: a casing that stays in the wall, standing proud of it so a door seen along its wall still
 // shows, and the panel with a knob on both faces at its free end, returned for the view to swing with
 // the sim's door body.
-function door({ panel, hinge }: Door, scene: THREE.Scene): THREE.Object3D {
+function door({ panel, hinge }: Door, parts: THREE.Group): THREE.Object3D {
   const casing = frameOf(panel);
   for (const x of [-casing.l - 0.04, casing.l + 0.04]) casing.group.add(block(0.08, 2 * casing.h, 0.3, material(WALLS.trim), x));
-  scene.add(casing.group);
+  parts.add(casing.group);
   const f = frameOf({ p: { x: 0, y: 0, z: 0 }, half: panel.half });
   f.group.add(block(2 * f.l, 2 * f.h, 2 * f.t, material(WOOD.door)));
   // The hinge's end of the panel in the frame's x (a frame turned about y runs its x along -z).
@@ -49,7 +53,7 @@ function door({ panel, hinge }: Door, scene: THREE.Scene): THREE.Object3D {
   }
   const swing = new THREE.Group();
   swing.position.set(panel.p.x, panel.p.y, panel.p.z);
-  scene.add(swing.add(f.group));
+  parts.add(swing.add(f.group));
   return swing;
 }
 
@@ -78,26 +82,29 @@ function point({ role, p, yaw }: Point): THREE.Object3D | null {
   return null;
 }
 
-// The whole level, once, in the theme of `map`, its content file's name; returns the door panels, index
-// for index with the level's doors. The volumes are hidden; in dev, DEV_KEY shows and hides them.
-export function drawLevel(scene: THREE.Scene, level: Level, map = MAP): THREE.Object3D[] {
-  theme = themeOf(map);
-  for (const s of level.statics) scene.add(part(s));
-  const doors = level.doors.map((d) => door(d, scene));
+// The whole level in the theme of its map, the name `levels` gives it (a map's content file name), in one
+// group for the view to drop when the round's map changes (card 142); returns the group and the door
+// panels, index for index with the level's doors. The volumes are hidden; in dev, DEV_KEY shows and hides them.
+export function drawLevel(level: Level, levels: Readonly<Record<string, Level>>): { parts: THREE.Group; doors: THREE.Object3D[] } {
+  theme = themeOf(Object.keys(levels).find((name) => levels[name] === level) ?? MAP);
+  const parts = new THREE.Group();
+  for (const s of level.statics) parts.add(part(s));
+  const doors = level.doors.map((d) => door(d, parts));
   for (const p of level.points) {
     const o = point(p);
-    if (o) scene.add(o);
+    if (o) parts.add(o);
   }
-  const volumes = new THREE.Group();
+  if (import.meta.env.DEV && !volumes)
+    addEventListener('keydown', (e) => {
+      if (e.code === DEV_KEY && volumes) volumes.visible = !volumes.visible;
+    });
+  volumes = new THREE.Group();
   volumes.visible = false;
   for (const v of level.volumes) {
-    const tint = new THREE.MeshBasicMaterial({ color: VOLUME[v.role], transparent: true, opacity: 0.2, depthWrite: false });
+    let tint = tints.get(v.role);
+    if (!tint) tints.set(v.role, (tint = new THREE.MeshBasicMaterial({ color: VOLUME[v.role], transparent: true, opacity: 0.2, depthWrite: false })));
     volumes.add(block(2 * v.half.x, 2 * v.half.y, 2 * v.half.z, tint, v.p.x, v.p.y, v.p.z));
   }
-  scene.add(volumes);
-  if (import.meta.env.DEV)
-    addEventListener('keydown', (e) => {
-      if (e.code === DEV_KEY) volumes.visible = !volumes.visible;
-    });
-  return doors;
+  parts.add(volumes);
+  return { parts, doors };
 }

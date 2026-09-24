@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OVERLAY } from '../art/palette.ts';
+import { GLASS, OVERLAY } from '../art/palette.ts';
 import { settings } from '../settings/store.ts';
 import type { Sim } from '../sim/world.ts';
 
@@ -9,7 +9,9 @@ import type { Sim } from '../sim/world.ts';
 // the camera's target; the target itself never moves. Render keeps each burst's and shake's age only.
 // Which noises are impacts is the sim's word: the noise's `cause` (card 23), an impact or a blast. A
 // mine's `blast` event, on every client at the fold, is a comic "boom" puff and a shockwave ring on the
-// floor (card 57), gone after PUFF_TIME; the ring is the look of a bang, not the blast's reach.
+// floor (card 57), gone after PUFF_TIME; the ring is the look of a bang, not the blast's reach. A water
+// bomb's blast (card 129) is a splash instead: drops thrown up and out that fall back, and a ring of
+// water, in the same time.
 const IMPACTS = new Set(['impact', 'blast']);
 export const SHAKE = 0.1; // m: the shake of the loudest noise at the target; none under reduced motion (card 117)
 const SHAKE_RANGE = 8; // m: an impact this far from the target shakes nothing
@@ -18,6 +20,9 @@ const STARS = 6; // per burst
 const STAR_TIME = 0.5; // s
 const PUFF_TIME = 0.8; // s
 const PUFFS = 7; // balls of smoke per puff
+const DROPS = 12; // drops per splash
+const DROP = 0.07; // m: a drop's radius
+const FALL = 2.5; // m: how far a drop has fallen back by the splash's end
 
 export type Juice = {
   bursts: { stars: THREE.Group; born: number }[];
@@ -65,9 +70,25 @@ function puff(p: { x: number; y: number; z: number }): THREE.Group {
   return g.add(new THREE.Mesh(WAVE, new THREE.MeshBasicMaterial({ color: OVERLAY.white, transparent: true, side: THREE.DoubleSide })));
 }
 
+// A splash: drops thrown up and out round the bomb, and a ring of water lying on its floor.
+function splash(p: { x: number; y: number; z: number }): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(p.x, p.y, p.z);
+  g.userData.water = true;
+  const water = new THREE.MeshLambertMaterial({ color: GLASS.pane, flatShading: true, transparent: true });
+  for (let i = 0; i < DROPS; i++) {
+    const drop = new THREE.Mesh(SMOKE, water);
+    const a = (i * 2 * Math.PI) / DROPS;
+    drop.userData.dir = new THREE.Vector3(0.6 * Math.sin(a), 1.2 + 0.4 * (i % 3), 0.6 * Math.cos(a));
+    drop.scale.setScalar(DROP);
+    g.add(drop);
+  }
+  return g.add(new THREE.Mesh(WAVE, new THREE.MeshBasicMaterial({ color: GLASS.pane, transparent: true, side: THREE.DoubleSide })));
+}
+
 // One of each effect, for the view to compile their shaders before its first frame.
 export function samples(): THREE.Object3D[] {
-  return [burst({ x: 0, y: 0, z: 0 }), puff({ x: 0, y: 0, z: 0 })];
+  return [burst({ x: 0, y: 0, z: 0 }), puff({ x: 0, y: 0, z: 0 }), splash({ x: 0, y: 0, z: 0 })];
 }
 
 // Starts this frame's bursts and shakes, moves the live ones on, and returns the camera's offset for
@@ -76,7 +97,7 @@ export function samples(): THREE.Object3D[] {
 export function drawJuice(j: Juice, sim: Sim, scene: THREE.Scene, camera: THREE.Camera, target: THREE.Vector3 | null): THREE.Vector3 {
   for (const e of sim.events) {
     if (e.type === 'blast') {
-      const p = puff(e.p);
+      const p = (e.variant === 'water' ? splash : puff)(e.p);
       scene.add(p);
       j.puffs.push({ puff: p, born: sim.time });
     }
@@ -114,7 +135,8 @@ export function drawJuice(j: Juice, sim: Sim, scene: THREE.Scene, camera: THREE.
     }
     for (const ball of g.children.slice(0, -1)) {
       ball.position.copy(ball.userData.dir).multiplyScalar(0.5 + 1.5 * t);
-      ball.scale.setScalar(0.3 + 0.3 * Math.sqrt(t));
+      if (g.userData.water) ball.position.y -= FALL * t * t;
+      else ball.scale.setScalar(0.3 + 0.3 * Math.sqrt(t));
     }
     g.children.at(-1)!.scale.setScalar(0.3 + 2 * t);
     smoke!.opacity = 1 - t * t;

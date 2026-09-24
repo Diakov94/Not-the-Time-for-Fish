@@ -60,7 +60,12 @@ export function receiveTick(sim: Sim, r: Receiver, t: Tick, at: number): void {
       r.set(s.id, [{ ...entry, at: at - TICK_MS }, entry]);
     } else if (last.from === t.from && last.at < at - 2 * TICK_MS) {
       r.set(s.id, [{ at: at - TICK_MS, from: t.from, s: readSnapshot(e) }, entry]);
-    } else list.push(entry);
+    } else {
+      list.push(entry);
+      // One owner ticks every TICK_MS; its ticks that came closer were held on the way (all of a stalled
+      // receiver's at once), so each takes its place a tick before the one after it.
+      for (let i = list.length - 2; i >= 0 && list[i]!.from === t.from && list[i]!.at > list[i + 1]!.at - TICK_MS; i--) list[i]!.at = list[i + 1]!.at - TICK_MS;
+    }
   }
 }
 
@@ -78,7 +83,8 @@ function mix(a: Snapshot, b: Snapshot, k: number): Snapshot {
   return { ...b, p: lerp(a.p, b.p, k), q: { x: q.x / n, y: q.y / n, z: q.z / n, w: q.w / n }, rest: false };
 }
 
-// Every frame: each copy goes to its owner's pose DELAY_MS ago, between the two snapshots around it.
+// Before every step, at its moment: each copy goes to its owner's pose DELAY_MS ago, between the two
+// snapshots around it.
 // Two owners' snapshots are never blended, since a handoff can jump (a grabbed cat into the carrier's
 // mouth): the new owner's first tick came within a tick of the fold, so its pose shows from one tick
 // before it came, and the previous owner's last until then. The sim's snapshot rule leaves alone a body

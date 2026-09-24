@@ -1,6 +1,6 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
 import { volumeAt } from './build.ts';
-import { halfHeight, isCharacter, isFixture, spawnOf, type Variant } from './entities.ts';
+import { halfHeight, isCharacter, isFixture, spawnOf, type Entity, type NetId, type Variant } from './entities.ts';
 import { release } from './grab.ts';
 import type { Blast, SimMessage } from './messages.ts';
 import { myCharacter, type Intent } from './movement.ts';
@@ -43,6 +43,19 @@ export function stunned(sim: Sim): boolean {
 export function wet(sim: Sim): number {
   const left = sim.wetUntil - sim.time;
   return left > 1e-9 ? left : 0;
+}
+
+// Until when character `e` is stunned (a cat by a blast, a dog by a slip trap) and until when cat `e` is
+// wet, for any view on this client. Its own character's are its own client's facts (ADR 0007); another's
+// are derived, as `hidden` is (ADR 0010), from the ends this client folded, by the rule its own client
+// applies: nothing is sent.
+export const stunnedUntil = (sim: Sim, e: Entity): number => (e.home === sim.me ? sim.stunUntil : (sim.stunned.get(e.id) ?? 0));
+export const soakedUntil = (sim: Sim, e: Entity): number => (e.home === sim.me ? sim.wetUntil : (sim.soaked.get(e.id) ?? 0));
+
+// Notes until when `id` is stunned or wet, dropping the ends already past: a short list.
+export function noteUntil(sim: Sim, ends: Map<NetId, number>, id: NetId, until: number): void {
+  for (const [k, t] of ends) if (t <= sim.time) ends.delete(k);
+  ends.set(id, until);
 }
 
 // The mines this client's dog has in hand, its own count: the knob's firecrackers (card 27), the water
@@ -113,8 +126,9 @@ export function mineStep(sim: Sim, intent: Intent): SimMessage[] {
 // A folded blast on every client (ADR 0007): each client pushes the bodies it simulates within BLAST of
 // the mine outward and up, by less the further they stand. Its own character leaps; a cat is stunned for
 // STUN and drops what it holds by an ordinary release, a dog never is. A water bomb's splash pushes
-// nothing and stuns no one: its own cat within BLAST is wet for WET. The client whose blast it was sends
-// its noise.
+// nothing and stuns no one: its own cat within BLAST is wet for WET. Every other cat its own client
+// drives, within BLAST by the poses this client holds, is noted stunned or wet the same. The client whose
+// blast it was sends its noise.
 export function blasted(sim: Sim, m: Blast, at: Vector, variant?: Variant): void {
   const water = variant === 'water';
   const push = (p: Vector) => {
@@ -131,6 +145,11 @@ export function blasted(sim: Sim, m: Blast, at: Vector, variant?: Variant): void
     const held = carried(sim);
     if (c.kind === 'cat') sim.stunUntil = sim.time + STUN;
     if (c.kind === 'cat' && held) sim.outbox.push(release(sim, held, { x: 0, y: 0, z: 0 }));
+  }
+  for (const e of sim.entities.values()) {
+    const row = sim.ownership.rows.get(e.id);
+    if (e.kind !== 'cat' || e.home === sim.me || row?.owner !== e.home || row.held || !push(e.body.translation())) continue;
+    noteUntil(sim, water ? sim.soaked : sim.stunned, e.id, sim.time + (water ? WET : STUN));
   }
   const bodies = [...sim.entities.values()].filter((e) => !isCharacter(e.kind) && !isFixture(e.kind) && simulatedHere(sim, e));
   for (const { body } of water ? [] : [...bodies, ...sim.debris]) {

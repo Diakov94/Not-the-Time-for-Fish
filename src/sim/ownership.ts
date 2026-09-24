@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
+import type { Level } from '../content/level.ts';
+import { characterOf, isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
 import type { Blast, Claim, Cleared, Defused, Despawn, Hit, Left, Pickup, Release, SimMessage, Spawn, Sprung } from './messages.ts';
 import { blasted } from './mines.ts';
 import { barked } from './perks.ts';
@@ -20,27 +21,34 @@ export function newOwnershipTable(): OwnershipTable {
   return { rows: new Map(), gone: new Set() };
 }
 
-// ADR 0009: whether a holder may hold a target. The side rule is written here only: the fold rejects
-// a hold claim it refuses, and `grab` never makes one.
-export function mayHold(holder: Kind | undefined, target: Kind): boolean {
-  if (holder === 'cat') return target === 'fish' || target === 'prop' || target === 'lure';
+// The heaviest prop a cat carries, kg (GAME.md, Movement asymmetry: a cat moves light props only). The
+// Architect's assumption for the Producer: a chair's 5 kg; a 10 kg crate stays a push.
+export const CAT_CARRY = 5;
+
+// ADR 0009: whether a holder may hold a target of `mass` kg. The side rule is written here only: the fold
+// rejects a hold claim it refuses, and `grab` never makes one.
+export function mayHold(holder: Kind | undefined, target: Kind, mass = 0): boolean {
+  if (holder === 'cat') return target === 'fish' || target === 'lure' || (target === 'prop' && mass <= CAT_CARRY);
   return holder === 'dog' && target === 'cat';
 }
 
 // What the fold reads of the entity table: identity, never a pose.
-export type Identities = ReadonlyMap<NetId, Pick<Entity, 'kind' | 'home' | 'variant'>>;
+export type Identities = ReadonlyMap<NetId, Pick<Entity, 'kind' | 'home' | 'variant' | 'prop'>>;
+
+// An entity's mass as content describes it (ADR 0008), by its prop index; 0 for one content does not
+// describe (a test's crate).
+export const massOf = (e: Pick<Entity, 'prop'>, level?: Pick<Level, 'props'>): number => (e.prop === undefined ? 0 : (level?.props[e.prop]?.mass ?? 0));
 
 // A client's side: the kind of its character (ADR 0009).
 export function sideOf(entities: Identities, client: ClientId): Kind | undefined {
-  for (const e of entities.values()) if (e.home === client && isCharacter(e.kind)) return e.kind;
-  return undefined;
+  return characterOf(entities, client)?.kind;
 }
 
 // Folds one message of the relay's order into the table and says whether it was accepted. The table
-// depends on nothing but the messages and the entity table's identities, so every client that folds
-// the same order holds the same table. `host` is the host the relay names as of the message: only its
-// `despawn` counts.
-export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, host?: ClientId): boolean {
+// depends on nothing but the messages, the entity table's identities and the level's content, so every
+// client that folds the same order holds the same table. `host` is the host the relay names as of the
+// message: only its `despawn` counts.
+export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, host?: ClientId, level?: Pick<Level, 'props'>): boolean {
   const homeOr = (id: NetId, fallback: ClientId): ClientId => {
     const home = entities.get(id)?.home ?? null;
     return home !== null && !t.gone.has(home) ? home : fallback;
@@ -55,7 +63,7 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, ho
       // Held by someone else, a touch on an entity with a home (a character), or a hold the side rule
       // refuses: rejected.
       if (!row || !target || (row.held && row.owner !== m.from)) return false;
-      if (m.hold ? !mayHold(sideOf(entities, m.from), target.kind) : target.home !== null) return false;
+      if (m.hold ? !mayHold(sideOf(entities, m.from), target.kind, massOf(target, level)) : target.home !== null) return false;
       // A grabbed cat drops what it holds on the spot: its client keeps simulating it, from where it is.
       if (m.hold && target.kind === 'cat') for (const r of t.rows.values()) if (r.owner === target.home && r.held) r.held = false;
       row.owner = m.from;
@@ -163,7 +171,7 @@ export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   const { phase, round } = sim.round;
   const accepted = (m.type === 'left' || isRound(m)) && receiveRound(sim, m, host);
   if (accepted && (m.type === 'secured' || m.type === 'captured' || m.type === 'rescue' || m.type === 'dugOut')) {
-    const at = m.type === 'secured' ? sim.entities.get(m.fish) : [...sim.entities.values()].find((e) => e.home === m.from && isCharacter(e.kind));
+    const at = m.type === 'secured' ? sim.entities.get(m.fish) : characterOf(sim.entities, m.from);
     if (at) sim.events.push({ type: m.type, p: at.body.translation(), from: m.from });
   }
   if (m.type === 'secured' && accepted) remove(sim, m.fish);
@@ -202,7 +210,7 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   if (m.type === 'spawn' && (m.kind === 'mine' || (m.kind === 'trap' && m.home !== null))) sim.events.push({ type: 'planted', kind: m.kind, id: m.id, p: m.p, from: m.from });
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
-  const accepted = fold(sim.ownership, m, sim.entities, host);
+  const accepted = fold(sim.ownership, m, sim.entities, host, sim.level);
   // A message that ends an entity takes it out of play; the end of a mine, a trap or a pickup is an event
   // where it lay, of its variant; a blast acts on the bodies this client simulates, a pickup fills its
   // picker's hand.
@@ -226,7 +234,7 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   // The carrier's clock of the wiggle-free starts when its hold on a cat is accepted.
   if (m.type === 'claim' && m.hold && m.from === sim.me && e?.kind === 'cat') sim.grabbedAt = sim.time;
   // A hold on this client's own character names its holder: a capture's `by` (ADR 0014).
-  if (m.type === 'claim' && m.hold && e?.home === sim.me && isCharacter(e.kind)) sim.holder = m.from;
+  if (m.type === 'claim' && m.hold && e && e === characterOf(sim.entities, sim.me)) sim.holder = m.from;
   if (m.type !== 'release' || !e) return;
   // The release carries the handoff state, so the new owner continues the throw or the drop without a gap:
   // a tossed character flies as a leap from the carrier's hands.

@@ -107,6 +107,38 @@ function mine(half: Vec3): THREE.Object3D {
   return bake(g.add(spark));
 }
 
+// The water bomb (card 129): three round blue balloons in a bundle, each with a pale shine, their white
+// knots tied together in the middle, sitting on the floor under the body: round and blue where the
+// firecracker is long and red.
+function waterBomb(half: Vec3): THREE.Object3D {
+  const g = new THREE.Group();
+  const r = 0.36 * Math.min(half.x, half.z);
+  const y = -half.y + 0.8 * r; // the floor the body lies on, the balloons a little sunk into it
+  for (let i = 0; i < 3; i++) {
+    const [s, c] = [Math.sin((i * 2 * Math.PI) / 3), Math.cos((i * 2 * Math.PI) / 3)];
+    g.add(ball(r, i === 1 ? CLOTH.denim : PAINT.cobalt, [1.15 * r * s, y, 1.15 * r * c], [1, 0.9, 1]));
+    g.add(ball(0.25 * r, GLASS.pane, [1.15 * r * s - 0.3 * r, y + 0.55 * r, 1.15 * r * c + 0.3 * r]));
+    g.add(rod(0.08 * r, PAINT.porcelain, [0.2 * r * s, y + 0.5 * r, 0.2 * r * c], [0.9 * r * s, y + 0.3 * r, 0.9 * r * c]));
+  }
+  return bake(g.add(ball(0.3 * r, PAINT.porcelain, [0, y + 0.55 * r, 0])));
+}
+
+// The slip trap (card 130): a banana peel lying on the floor, four yellow flaps spread from its stalk,
+// their tips brown.
+function peel(half: Vec3): THREE.Object3D {
+  const g = new THREE.Group();
+  const r = Math.min(half.x, half.z);
+  const y = -half.y + 0.03;
+  g.add(ball(0.3 * r, GOLD.star, [0, y + 0.08 * r, 0], [1, 1.4, 1]), rod(0.07 * r, WOOD.walnut, [0, y + 0.4 * r, 0], [0.05 * r, y + 0.6 * r, 0]));
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2 + 0.3;
+    const flap = ball(1, i % 2 ? GOLD.star : PAINT.mustard, [0.5 * r * Math.sin(a), y, 0.5 * r * Math.cos(a)], [0.18 * r, 0.05 * r, 0.5 * r]);
+    flap.rotation.y = a;
+    g.add(flap, ball(0.08 * r, WOOD.walnut, [0.95 * r * Math.sin(a), y, 0.95 * r * Math.cos(a)]));
+  }
+  return bake(g);
+}
+
 // A trap is a noise maker: a teal alarm clock on two feet, a white face with four ticks and two hands,
 // two brass bells and the hammer between them.
 function trap(half: Vec3): THREE.Object3D {
@@ -139,7 +171,9 @@ export const KINDS = {
   fish: (half: Vec3) => fish(half, KIND.fish),
   lure: (half: Vec3) => fish(half, KIND.lure),
   mine,
+  water: waterBomb,
   trap,
+  slip: peel,
   bag,
 };
 

@@ -1,7 +1,7 @@
 import { ofSide } from '../content/characters.ts';
 import type { Level } from '../content/level.ts';
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
-import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
+import { characterOf, halfHeight, spawnOf, type ClientId, type NetId } from './entities.ts';
 import type { Captured, Despawn, DugOut, Hello, Left, Look, MapPick, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Secured, Side, Worn } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
 import { follow, type Sim } from './world.ts';
@@ -114,7 +114,11 @@ export function duration(r: Round): number | null {
   return r.phase === 'prep' ? PREP : r.phase === 'heist' ? knobs(r).heist : r.phase === 'overtime' ? OVERTIME : null;
 }
 
-const cats = (r: Round) => r.roster.filter((p) => p.side === 'cat' && p.client !== null);
+// The cats this round, their client here or away (ADR 0007: the roster owns who plays): a cat whose tab died
+// keeps its state, free or captured, its character frozen where it stood, so a `left` never ends a round.
+const cats = (r: Round) => r.roster.filter((p) => p.side === 'cat');
+// The captured cats: every one a rescue frees, and what a free cat's interact at the latch answers.
+export const captives = (r: Round) => cats(r).filter((p) => p.captured !== null);
 export const inPlay = (r: Round) => r.phase === 'prep' || r.phase === 'heist' || r.phase === 'overtime';
 const stealing = (r: Round) => r.phase === 'heist' || r.phase === 'overtime';
 
@@ -249,8 +253,8 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       r.caught.push({ cat: p.name, by: m.by === null ? null : (playerOf(r, m.by)?.name ?? null), at: m.at });
       return true;
     case 'rescue': {
-      // A free cat opens the kennel: every captured cat is free at once.
-      const inside = cats(r).filter((q) => q.captured !== null);
+      // A free cat opens the kennel: every captured cat is free at once, one whose tab died too.
+      const inside = captives(r);
       if (!inPlay(r) || !p || playsAs(r, m.from) !== 'cat' || p.captured !== null || inside.length === 0) return false;
       for (const q of inside) q.captured = null;
       return true;
@@ -279,17 +283,21 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
 // rescue opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once
 // captured, starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the
 // tunnel exit. This client's own hello with a known name mid-round is a rejoin: its character enters,
-// and its own refused hello leaves the fold's reason for its client to show.
+// and its own refused hello leaves the fold's reason for its client to show. Its own refused `secured`
+// is forgotten, so its cat secures that fish on its next carry.
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
   const leaver = m.type === 'left' ? playerOf(sim.round, m.id) : undefined;
   if (m.type === 'hello' && m.from === sim.me) sim.refused = refusal(sim.round, m);
-  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities, sim.levels)) return false;
+  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities, sim.levels)) {
+    if (m.type === 'secured' && m.from === sim.me) sim.securing.delete(m.fish);
+    return false;
+  }
   if (m.type === 'left') sim.away.set(m.id, { name: leaver?.name ?? null, at: sim.time });
   if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
   if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;
   if (playerOf(sim.round, sim.me)?.captured === null) sim.digOut = null;
   if (m.type === 'dugOut' && m.from === sim.me) {
-    const me = [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind));
+    const me = characterOf(sim.entities, sim.me);
     const exit = pointFor(sim.level, 'tunnelExit', 'cat');
     if (me && exit) me.body.setTranslation(exit, true);
     sim.leap = null;
@@ -299,9 +307,9 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
 }
 
 // The round table turned to a new phase on this client (the entity table is already cleared for prep):
-// the phase starts now by this client's clock, and at prep the world follows the table's map, the host
-// spawns the level anew and every player its character, of the side the roster gives it this round, at
-// its side's spawn point.
+// the phase starts now by this client's clock, and at prep the world follows the table's map, its debris
+// stands again where content puts it, still, the host spawns the level anew and every player its
+// character, of the side the roster gives it this round, at its side's spawn point.
 export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   const r = sim.round;
   sim.phaseAt = sim.time;
@@ -315,6 +323,12 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.ending.clear();
   sim.barged.clear();
   follow(sim);
+  for (const { prop, body } of sim.debris) {
+    body.setTranslation(sim.level.props[prop]!.p, true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }
@@ -344,7 +358,8 @@ export function removals(sim: Sim, host: ClientId | undefined): Despawn[] {
     const back = sim.round.roster.some((p) => p.name === name && p.client !== null);
     if (!back && sim.time - at < AWAY - 1e-9) continue;
     sim.away.delete(client);
-    for (const e of sim.entities.values()) if (e.home === client && isCharacter(e.kind)) out.push({ type: 'despawn', from: sim.me, id: e.id });
+    const gone = characterOf(sim.entities, client);
+    if (gone) out.push({ type: 'despawn', from: sim.me, id: gone.id });
   }
   return out;
 }
