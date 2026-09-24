@@ -32,3 +32,7 @@
 - 35 runner for the MVP: scenarios by name; judges divergence, end tables, sides, doomed claims = 0. Batch H1, 2026-09-24.
 - 36 scenario grab-toss-wiggle-hit at 3 clients: 3 of 3 runs; hit frees in 18–20 ms, wiggle-free at 7.99–8.01 s, moving peak 0.241 m (limit 0.25). Batch H1, 2026-09-24.
 - 37 eight clients within budget: measured 289.6 kB/s down per client, relay 169.9 msg/s, 16.7 ticks/s; the budget itself is card 45. Batch H1, 2026-09-24.
+- 43 state carries the round: a joiner's timer is within 34 ms of the host's (limit 250); 20 pings held before the state reach it as 0 events. Batch N1, 2026-09-24.
+- 44 hello and rejoin: a taken name is refused with {code: 'refused'} in 5–7 ms. Batch N1, 2026-09-24.
+- 45 snapshot budget for eight: 58.8–60.6 kB/s down per client (budget 100; before 289.6). Batch N1, 2026-09-24.
+- 46 dead socket leaves: a silent socket is terminated and `left` follows; before, none within 60 s. Batch N1, 2026-09-24.
