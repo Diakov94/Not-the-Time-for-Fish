@@ -4,12 +4,10 @@ import type { Round } from '../../../src/sim/round.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
 import { captive, capturedMe, fishIn, go, heldNow, hold, phase, place, plantHere, pounce, rescue, toss, until, type P } from './bots.ts';
-import { fridgeTrip, ROUTE, TABLE, tableTrip, throughGate } from './house.ts';
+import { fridgeTrip, park, ROUTE, TABLE, tableTrip, throughGate } from './house.ts';
 
 type Script = Generator<Press, void>;
 const sniffing = { ...IDLE, sniff: true };
-// Where a cat with nothing left to do waits: the hideout's back, out of the gate's way.
-const park = (n: number): P => ({ x: -6 + 1.5 * n, z: -27 });
 
 // A runner (a cat at an even place on its team): through the gate, the table's fish out to the hideout
 // one at a time, and the kennel opened whenever a teammate is in it. A runner with no fish left for it
@@ -118,12 +116,24 @@ function judge(r: Run): Verdict {
   const count = (type: string) => r.samples.reduce((n, x) => n + x.events[h]!.filter((e) => e.type === type).length, 0);
   const mines = [...kinds.values()].filter((k) => k === 'mine').length;
   const by = (type: string) => r.wires[h]!.turns.filter((t) => t.by === type).length;
+  const row = {
+    round: `${s(took)} s`,
+    fish: String(result?.secured ?? 0),
+    grab: grab && heist ? `${s((grab.t - heist.at) / 1000)} s` : 'none',
+    mines: String(mines),
+    defused: String(count('defused')),
+    blasts: String(count('blast')),
+    captured: String(by('captured')),
+    rescues: String(by('rescue')),
+    winner: result ? `${result.winner}s` : 'none',
+    why: result?.why ?? 'none',
+  };
   const lines = [
     `the end: ${result ? `${result.why}, ${result.secured} fish, winner ${result.winner}s` : 'none'} on ${here.length} clients at ${oneMessage ? `one message, seq ${overs[0]!.seq}` : 'DIFFERENT messages'}; as scripted: ${scripted ?? false}`,
-    `round: ${s(took)} s of sim time from prep to the end (limit ${LIMIT(players)})${r.heist === undefined ? '' : `, heist ${r.heist} s`}`,
-    `fish delivered ${result?.secured ?? 0}; first grab ${grab && heist ? `${s((grab.t - heist.at) / 1000)} s into the heist` : 'none'}; mines armed ${mines}, defused ${count('defused')}, blasts ${count('blast')}; captured ${by('captured')}, rescues ${by('rescue')}`,
+    `round: ${row.round} of sim time from prep to the end (limit ${LIMIT(players)})${r.heist === undefined ? '' : `, heist ${r.heist} s`}`,
+    `fish delivered ${row.fish}; first grab ${row.grab === 'none' ? 'none' : `${row.grab} into the heist`}; mines armed ${row.mines}, defused ${row.defused}, blasts ${row.blasts}; captured ${row.captured}, rescues ${row.rescues}`,
   ];
-  return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players) };
+  return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players), row };
 }
 
 // Card 63: a round to the end at any roster size, the same scripts. The fold sides the players at prep

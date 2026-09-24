@@ -4,7 +4,7 @@ import { IDLE } from '../../../src/sim/movement.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Turn, Verdict } from '../run.ts';
 import { captive, capturedMe, flat, go, heldNow, hold, phase, place, pounce, rescue, simOf, toss, until, type P } from './bots.ts';
-import { fridgeTrip, IN_CAGE, ROUTE, tableTrip } from './house.ts';
+import { fridgeTrip, IN_CAGE, ROUTE, standby, tableTrip } from './house.ts';
 
 type Script = Generator<Press, void>;
 const p = (x: number, z: number): P => ({ x, z });
@@ -73,7 +73,7 @@ function* dog(c: HeadlessClient): Script {
 
 const script = (c: HeadlessClient): Script => {
   const { side, n } = place(c);
-  return side === 'dog' ? dog(c) : [carrier, captive2, rescuer][n]!(c);
+  return side === 'dog' ? dog(c) : ([carrier, captive2, rescuer][n] ?? standby)(c);
 };
 
 // Card 65's judge. The chase: the fish secured on every client at one message, or the carrier held on every
@@ -153,7 +153,7 @@ function judge(r: Run): Verdict {
   return { lines, ok };
 }
 
-// Card 65 at four clients (one dog, three cats by the auto-balance): a fish carried out under chase; a grab,
+// Card 65 at four clients (one dog, three cats by the auto-balance; at more, every further cat stands by): a fish carried out under chase; a grab,
 // the kennel, a closed tab and a rejoin by name; a rescue; the host's tab closed and the clock with the
 // next host. The heist is shortened so the round ends by its timer.
 const chaseKennelRescueRejoin: Scenario = {

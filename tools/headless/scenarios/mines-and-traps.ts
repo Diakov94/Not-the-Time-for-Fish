@@ -1,12 +1,11 @@
 import { countryHouse } from '../../../src/content/maps/country-house.ts';
 import type { SimEvent } from '../../../src/sim/events.ts';
-import type { Side } from '../../../src/sim/messages.ts';
 import { IDLE, SPEED } from '../../../src/sim/movement.ts';
 import { sniffed } from '../../../src/sim/scent.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
 import { go, hold, mineNear, phase, place, plantHere, simOf, tap, until, type P } from './bots.ts';
-import { ROUTE, throughGate } from './house.ts';
+import { ROUTE, standby, throughGate } from './house.ts';
 
 type Script = Generator<Press, void>;
 const p = (x: number, z: number): P => ({ x, z });
@@ -69,9 +68,8 @@ function* listener(c: HeadlessClient): Script {
 
 const script = (c: HeadlessClient): Script => {
   const { side, n } = place(c);
-  return side === 'cat' ? (n === 0 ? sneaker(c) : trapper(c)) : n === 0 ? sniffer(c) : listener(c);
+  return side === 'cat' ? ([sneaker, trapper][n] ?? standby)(c) : n === 0 ? sniffer(c) : listener(c);
 };
-const SIDES: Side[] = ['cat', 'dog', 'cat', 'dog'];
 
 // Card 64's judge, every number from the samples: each client's count of blasts, defuses, sprung and cleared
 // traps; how long the stunned cat's intent did not move it (from the blast to the first frame its body
@@ -102,7 +100,7 @@ function judge(r: Run): Verdict {
     if (first >= 0 && defused >= 0) cue = (r.samples[defused]!.t - r.samples[first]!.t) / 1000;
   }
   const pings = here.map((i) => r.samples.reduce((n, x) => n + x.events[i]!.filter((e) => e.type === 'noise').length, 0));
-  const dogs = here.filter((i) => SIDES[r.seats[i]!] === 'dog');
+  const dogs = here.filter((i) => r.ends[i]!.roster.find((q) => q.client === r.ids[i])?.side === 'dog'); // the fold's sides (ADR 0014)
   const lines = [
     `per client blasts/defused/sprung/cleared: ${counts.map((c) => c.join('/')).join(', ')}`,
     `the stunned cat's intent ignored for ${stun.toFixed(3)} s (3.0 +- 0.1); its whisker cue ${cue.toFixed(2)} s before its defuse`,
@@ -112,12 +110,12 @@ function judge(r: Run): Verdict {
   return { lines, ok };
 }
 
-// Card 64 at four clients, two dogs by the host's hand: mines armed, felt, defused and set off; a trap
+// Card 64 with two dogs, as the rotation seats them at 6 and 7 players (every further cat stands by): mines armed, felt, defused and set off; a trap
 // planted, sniffed out and cleared; a second one sprung across the yard.
 const minesAndTraps: Scenario = {
   about: 'a mine defused after the whisker cue, one stepped on; a trap cleared, one sprung',
   level: countryHouse,
-  player: (i) => ({ side: SIDES[i] ?? 'cat', script }),
+  player: (i) => ({ side: i < 2 ? 'dog' : 'cat', script }), // the runner's label: the rotation seats the first names as dogs
   judge,
   round: true,
   seconds: 80,
