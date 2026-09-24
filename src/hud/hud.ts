@@ -1,4 +1,5 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
+import { TEAM } from '../art/palette.ts';
 import { livePings } from '../render/senses.ts';
 import { project, type View } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
@@ -9,6 +10,7 @@ import { sideOf } from '../sim/ownership.ts';
 import { perkOf } from '../sim/perks.ts';
 import { inPlay, playerOf, playsAs, remaining, type Player } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
+import { offerView } from '../settings/screen.ts';
 import { settings } from '../settings/store.ts';
 import { due, see, type Hint } from './hints.ts';
 import { CSS } from './style.ts';
@@ -37,6 +39,10 @@ export type Hud = {
   arrows: HTMLElement;
   cues: { p: Vector; born: number }[];
 };
+
+// The settings overlay (ADR 0012) mounts itself on import, before any room; it learns the team pairs and
+// whether a round is in play (the HUD is shown) from the HUD.
+offerView({ pairs: TEAM, playing: () => document.querySelector('.hud:not([hidden])') !== null });
 
 export function createHud(): Hud {
   document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
