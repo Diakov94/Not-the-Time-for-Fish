@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Vector } from '@dimforge/rapier3d-compat';
 import { myCharacter, yawOf } from './movement.ts';
-import { carried, type Claim, type Release } from './ownership.ts';
+import { carried, setBodyTypes, simulatedHere, type Claim, type Release } from './ownership.ts';
 import type { Sim } from './world.ts';
 
 const REACH = 1.5; // the forward shape cast travels at most this far
@@ -16,7 +16,8 @@ export function anchor(p: Vector, yaw: number): Vector {
 }
 
 // A grab never takes anything by itself: it turns the first entity a forward shape cast meets into a
-// hold claim for the relay, and the fold decides when the claim comes back.
+// hold claim for the relay, and the fold decides when the claim comes back. A grabbed prop is simulated
+// here until then, as a touched one is.
 export function grab(sim: Sim): Claim | null {
   const c = myCharacter(sim);
   if (!c || carried(sim)) return null;
@@ -36,7 +37,12 @@ export function grab(sim: Sim): Claim | null {
   );
   const body = hit?.collider.parent();
   for (const e of sim.entities.values()) {
-    if (body && e.body.handle === body.handle) return { type: 'claim', from: sim.me, id: e.id, hold: true };
+    if (!body || e.body.handle !== body.handle) continue;
+    if (e.kind === 'crate' && !simulatedHere(sim, e)) {
+      sim.inFlight.add(e.id);
+      setBodyTypes(sim);
+    }
+    return { type: 'claim', from: sim.me, id: e.id, hold: true };
   }
   return null;
 }

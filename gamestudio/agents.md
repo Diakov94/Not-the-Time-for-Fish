@@ -20,13 +20,13 @@ Every model can use MCP (blender, elevenlabs) and the Orca browser. **No worker 
 ## How to launch
 
 ```
-orca orchestration task-create --spec "<spec>" --task-title "<...>" --display-name "<...>" --json
+orca orchestration task-create --spec "$(cat spec.md)" --task-title "<...>" --display-name "<...>" --json
 orca orchestration worker-start --task <FULL id from the task-create response> \
-  --worktree "<Orca project id>::<root>/.worktrees/<name>" \
+  --worktree new-top-level --name <name> --repo id:<Orca project id> --base-branch develop --setup skip \
   --agent claude --model claude-opus-5-5 --effort xhigh --json   # no --effort for claude-haiku-4-5
 ```
 
-`<Orca project id>` is the UUID of the registered project; it is taken once from `orca worktree list` (or `orca project list`) and then substituted into every launch.
+`<Orca project id>` is the UUID of the registered project; it is taken once from `orca worktree list` (or `orca project list`) and then substituted into every launch. *This machine, 24 September 2026:* `new-top-level` creates the worktree at `~/orca/workspaces/<repo>/<name>` and registers it at once, with no `selector_not_found`; Orca removes it by itself once its branch is deleted after the merge. Without `--setup skip` Orca's own setup installs with pnpm and leaves an untracked `pnpm-lock.yaml`, a second lock file one `git add -A` away from the commit.
 
 Take the task **by the id from the `task-create` response**, not by searching for `display_name`: names repeat across run generations, and a match gives `selector_not_found` on a live task.
 
