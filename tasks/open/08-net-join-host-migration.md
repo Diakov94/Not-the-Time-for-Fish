@@ -9,6 +9,7 @@ size: M
 
 ## Acceptance
 - A third client joining mid-run ends with an ownership table and entity list deep-equal to the host's within 500 ms.
+- The same holds when a client left before the join: the fold's departed set travels with the state, or a later release diverges between clients.
 - After the host leaves, the next host answers the next joiner.
 
 ## Test
