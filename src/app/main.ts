@@ -1,14 +1,15 @@
 import { countryHouse } from '../content/country-house.ts';
-import { connect, frame, send, spawn } from '../net/client.ts';
+import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw } from '../render/view.ts';
-import { spawnPoint } from '../sim/build.ts';
 import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import { carried } from '../sim/ownership.ts';
+import { advance } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
 import { intent, listen } from './input.ts';
+import { lobbyScreen } from './screens/lobby.ts';
 import { roomScreen } from './screens/room.ts';
 
 const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is stepped as this much
@@ -18,11 +19,19 @@ const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is
 await init();
 // The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
 const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
-const session = await roomScreen((code) => connect(`${relay}/${code}`, countryHouse));
+const { session, room } = await roomScreen(async (room) => ({ session: await connect(`${relay}/${room}`, countryHouse), room }));
 const { sim } = session;
-// The level's cat spawn after those the characters already in the room hold, so two players stand apart.
-const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;
-spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
+// Until card 44's `connect` sends the hello with the name card 50 asks for: delete this line then.
+send(session, { type: 'hello', from: sim.me, name: `Гравець ${sim.me}` });
+// The host's button, in the lobby: the round table's successor phase, sent only by the host.
+const lobby = lobbyScreen(
+  room,
+  (m) => send(session, m),
+  () => {
+    const m = advance(sim, session.host);
+    if (m) send(session, m);
+  },
+);
 
 const canvas = document.querySelector('canvas')!;
 const input = listen(
@@ -49,6 +58,7 @@ requestAnimationFrame(function loop(now: number) {
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), intent(input));
   last = now;
   draw(view, sim, input.look);
+  lobby(sim, session.host);
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });

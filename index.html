@@ -43,6 +43,61 @@
         font-size: 18px;
         text-align: center;
       }
+      .lobby {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: #1d2330;
+      }
+      .lobby[hidden] {
+        display: none;
+      }
+      .lobby h1,
+      .lobby h2,
+      .lobby p {
+        margin: 0;
+      }
+      .lobby h2 {
+        font-size: 18px;
+      }
+      .lobby button {
+        padding: 6px 10px;
+        font: inherit;
+      }
+      .lobby [aria-pressed='true'] {
+        outline: 2px solid #f2c14e;
+      }
+      .teams {
+        display: flex;
+        gap: 24px;
+      }
+      .teams section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 360px;
+      }
+      .teams button,
+      .teams p {
+        text-align: left;
+      }
+      .looks {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .host {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border: 1px solid #f2c14e;
+      }
       .hint {
         position: fixed;
         top: 8px;

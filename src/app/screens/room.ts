@@ -1,6 +1,6 @@
 // The room screen: create a room or join one by its code. `enter` connects to the room; while it fails
 // the screen stays and says so. Once in, the screen leaves a one-line hint that shows the room's code,
-// so the other players can join it, and the controls. All player-facing text of the app lives here.
+// so the other players can join it, and the controls. The app's player-facing text lives in its screens.
 export function roomScreen<T>(enter: (code: string) => Promise<T>): Promise<T> {
   const screen = document.createElement('form');
   screen.className = 'room';
