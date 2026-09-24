@@ -164,7 +164,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
   const url = `ws://localhost:${relay.port}/headless`;
   const cs: HeadlessClient[] = [];
   try {
-    for (let i = 0; i < clients; i++) cs.push(await joinHeadless(url, scenario.level, scenario.player(i), i === 0 ? scenario.things : []));
+    for (let i = 0; i < clients; i++) cs.push(await joinHeadless(url, scenario.level, `p${i}`, scenario.player(i), i === 0 ? scenario.things : []));
     const ids = cs.map((c) => c.session.sim.me);
     const wires = cs.map(tap);
     const samples: Sample[] = [];

@@ -16,7 +16,8 @@ const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is
 // The Vite entry: it wires the zones and holds no game fact. The sim owns every pose, the entity table
 // and the fold; net carries them; render draws them; this file only moves input in and frames along.
 await init();
-const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, countryHouse));
+const name = `Гравець ${1000 + Math.floor(Math.random() * 9000)}`; // until the room screen asks for one (card 50)
+const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, countryHouse, name));
 const { sim } = session;
 // The level's cat spawn after those the characters already in the room hold, so two players stand apart.
 const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;

@@ -19,8 +19,8 @@ export type HeadlessClient = { session: Session; player: Player; next: number };
 // A player's client minus render and app: sim and net over the global WebSocket, driven by its script.
 // The host spawns the scenario's things before its character, so a client that holds every character
 // holds them too.
-export async function joinHeadless(url: string, level: Level, player: Player, things: Thing[] = []): Promise<HeadlessClient> {
-  const session = await connect(url, level);
+export async function joinHeadless(url: string, level: Level, name: string, player: Player, things: Thing[] = []): Promise<HeadlessClient> {
+  const session = await connect(url, level, name);
   for (const t of things) spawn(session, t.kind, t.p);
   spawn(session, player.side, player.at);
   return { session, player, next: 0 };
