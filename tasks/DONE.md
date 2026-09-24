@@ -105,3 +105,4 @@
 - 143 high-rise theme; 149 fish-market theme; 144 water-bomb and slip looks (own client; every-client wiring follows SIM-FIX). THEMES-A, 2026-09-24.
 - 150 farm theme; 151 yacht theme. THEMES-B, 2026-09-24.
 - HUD-INPUT: 146, 163, 166, bug-hud-hints-once-per-browser-not-per-side, review-hud-own-state-grabbed-captured-watching, review-input-sneak-on-ctrl-closes-the-tab. 2026-09-24.
+- NET-FIX: bug-net-socket-close-unnoticed, bug-app-silent-disconnect, review-net-gates-wall-time-is-one-test-file, review-net-state-type-omits-variant (the runner's leave lines follow HEADLESS). 2026-09-24.
