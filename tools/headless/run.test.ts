@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { expect, test } from 'vitest';
 import { run } from './run.ts';
-import { defaultGame } from './scenarios/default.ts';
+import defaultGame from './scenarios/default.ts';
 
 test('with the tick sender disabled, divergence exceeds 1 m, two or more visible desyncs are counted and the exit code is 1', { timeout: 15000 }, async () => {
   const r = await run(defaultGame, 2, 3, { ticks: 0 });
