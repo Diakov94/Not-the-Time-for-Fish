@@ -9,7 +9,7 @@ import type { Sim } from './world.ts';
 const REACH = 1.5; // the forward shape cast travels at most this far
 const PROBE_RADIUS = 0.25;
 const FEET = 0.05; // the probe stays this far above the character's feet, clear of the floor
-const HAND = 1; // the anchor is this far ahead of the carrier's centre (capsule 0.35 + crate 0.5 + a gap)
+const HAND = 1; // the anchor is this far ahead of the carrier's centre (a capsule 0.25-0.4 + crate 0.5 + a gap)
 const LIFT = 0.3; // and this far above it
 const THROW_PITCH = (5 * Math.PI) / 180; // a 6 m/s throw touches down 3.55 m from the thrower
 
@@ -18,7 +18,7 @@ const THROW_PITCH = (5 * Math.PI) / 180; // a 6 m/s throw touches down 3.55 m fr
 // over a sofa, never the fence).
 type Held = { hand: number; speed: number };
 const CRATE: Held = { hand: HAND, speed: 6 };
-const HELD: Partial<Record<Kind, Held>> = { fish: { hand: 0.7, speed: 4.6 } };
+const HELD: Partial<Record<Kind, Held>> = { fish: { hand: 0.7, speed: 5.5 } };
 const heldAs = (kind: Kind): Held => HELD[kind] ?? CRATE;
 
 // Where a carrier at `p` facing `yaw` holds what it carries.
@@ -49,7 +49,7 @@ export function grab(sim: Sim): Claim | null {
     0,
     REACH,
     true,
-    undefined,
+    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
     undefined,
     undefined,
     c.body,

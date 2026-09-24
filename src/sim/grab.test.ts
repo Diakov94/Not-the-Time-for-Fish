@@ -101,7 +101,7 @@ test("a grabbed character's body follows its carrier", () => {
   const onB = b.entities.get(cat)!.body;
   const x0 = onA.translation().x;
   let worst = 0;
-  for (let i = 0; i < 48; i++) {
+  for (let i = 0; i < 96; i++) { // a dog carrying a cat walks at half its speed (card 22)
     step(b, STEP, east);
     // B's tick: everything B owns, the carried cat included.
     for (const [id, row] of b.ownership.rows) if (row.owner === 'B') applySnapshot(a, 'B', readSnapshot(b.entities.get(id)!));

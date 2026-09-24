@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
+import type { Collider, KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
 import type { ClientId, Entities, NetId } from './entities.ts';
 import type { Level } from './level.ts';
 import { carry } from './grab.ts';
@@ -21,6 +21,8 @@ export type Sim = {
   time: number; // seconds stepped: the clock of the touch-claim limit
   inFlight: Set<NetId>; // props this client claimed or grabbed whose claim has not come back yet
   touchedAt: Map<NetId, number>; // when this client last produced a touch claim for a prop
+  climbs: Collider[]; // the level's climb volumes, sensors
+  leap: { x: number; y: number; z: number } | null; // the own character's velocity since its take-off, while airborne
 };
 
 export async function init(): Promise<void> {
@@ -41,6 +43,9 @@ export function createWorld(level: Level, me: ClientId): Sim {
   ] as const) {
     world.createCollider(RAPIER.ColliderDesc.cuboid(hx, wall, hz).setTranslation(x, wall, z));
   }
+  const climbs = (level.climbs ?? []).map(({ p, half }) =>
+    world.createCollider(RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(p.x, p.y, p.z).setSensor(true)),
+  );
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
@@ -54,6 +59,8 @@ export function createWorld(level: Level, me: ClientId): Sim {
     time: 0,
     inFlight: new Set(),
     touchedAt: new Map(),
+    climbs,
+    leap: null,
   };
 }
 

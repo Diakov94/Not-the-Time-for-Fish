@@ -1,15 +1,20 @@
 import type { Rotation } from '@dimforge/rapier3d-compat';
 import { isCharacter, type Entity } from './entities.ts';
-import { simulatedHere } from './ownership.ts';
+import { carried, simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
-// A player's input for one step; `move` is a world-space direction, length up to 1.
-export type Intent = { move: { x: number; z: number }; sprint: boolean; jump: boolean };
+// A player's input for one step; `move` is a world-space direction, length up to 1. `jump` held inside
+// a climb volume climbs; `sneak` is the cats' toggle, held here as its current state.
+export type Intent = { move: { x: number; z: number }; sprint: boolean; jump: boolean; sneak?: boolean };
 export const IDLE: Intent = { move: { x: 0, z: 0 }, sprint: false, jump: false };
 
-export const WALK_SPEED = 4;
-export const SPRINT_SPEED = 7;
-const JUMP_SPEED = 5;
+// The one table of speeds, m/s, per side (GAME.md, Movement asymmetry): dogs are faster on open ground,
+// cats sneak, jump and climb. A carrying character moves at `carry` at most; `sneak` is null for a
+// side that does not sneak, and a zero `jump` or `climb` is a move the side does not have.
+export const SPEED = {
+  cat: { walk: 4, sprint: 6, sneak: 1.6, carry: 4.2, jump: 4.6, climb: 1.5 },
+  dog: { walk: 4, sprint: 9, sneak: null, carry: 2, jump: 0, climb: 0 },
+};
 // 720 deg/s. Rapier silently clamps angular velocity at 15 pi rad/s (45 deg per step at 60 Hz), so a
 // faster turn leaves the body short of what `drive` set, and a carried crate 0.77 m off its anchor.
 const TURN_SPEED = 4 * Math.PI;
@@ -31,18 +36,32 @@ export function yawOf(q: Rotation): number {
 // so gravity and a throw's momentum are read back from it on the next step.
 export function drive(sim: Sim, c: Entity, intent: Intent): void {
   const dt = sim.world.timestep;
+  const s = SPEED[c.kind === 'dog' ? 'dog' : 'cat'];
   const v = c.body.linvel();
-  const grounded = sim.controller.computedGrounded();
+  const grounded = !sim.leap && sim.controller.computedGrounded();
   const len = Math.hypot(intent.move.x, intent.move.z);
-  const k = (intent.sprint ? SPRINT_SPEED : WALK_SPEED) / Math.max(len, 1);
-  const vx = grounded ? intent.move.x * k : v.x;
-  const vz = grounded ? intent.move.z * k : v.z;
+  let speed = intent.sprint ? s.sprint : s.walk;
+  if (intent.sneak && s.sneak !== null) speed = s.sneak;
+  if (carried(sim)) speed = Math.min(speed, s.carry);
+  const k = speed / Math.max(len, 1);
+  const p = c.body.translation();
+  const climbing = s.climb > 0 && intent.jump && sim.climbs.some((box) => box.containsPoint(p));
+  // The mantle: a leap keeps its own velocity while airborne, so a rising character keeps its forward
+  // speed against a ledge and steps onto it once its feet clear the top, where the controller's clipped
+  // speed would drop it; and the lift the controller gives over a lip moves the pose, never the leap.
+  const rising = sim.leap && sim.leap.y > 0 ? sim.leap : null;
+  const vx = grounded || climbing ? intent.move.x * k : (rising ?? v).x;
+  const vz = grounded || climbing ? intent.move.z * k : (rising ?? v).z;
   // A grounded character never presses into the floor: the controller stops on that contact instead of
   // sliding (5 of 120 sprint steps lost, 3.7 % of the distance); snap-to-ground keeps it on the floor.
-  const vy = grounded ? (intent.jump ? JUMP_SPEED : 0) : v.y + sim.world.gravity.y * dt;
+  const takeoff = grounded && !climbing && intent.jump && s.jump > 0;
+  const vy = climbing ? s.climb : grounded ? (takeoff ? s.jump : 0) : (sim.leap ?? v).y + sim.world.gravity.y * dt;
+  if (takeoff) sim.leap = { x: vx, y: vy, z: vz };
   sim.controller.computeColliderMovement(c.body.collider(0), { x: vx * dt, y: vy * dt, z: vz * dt });
   const m = sim.controller.computedMovement();
   c.body.setLinvel({ x: m.x / dt, y: m.y / dt, z: m.z / dt }, true);
+  if (sim.leap) sim.leap.y = Math.min(vy, m.y / dt); // a ceiling stops the rise
+  if (climbing || (m.y <= 0 && sim.controller.computedGrounded())) sim.leap = null;
   const turn = len > 0 ? Math.atan2(intent.move.x, intent.move.z) - yawOf(c.body.rotation()) : 0;
   const w = Math.atan2(Math.sin(turn), Math.cos(turn)) / dt;
   c.body.setAngvel({ x: 0, y: Math.max(-TURN_SPEED, Math.min(TURN_SPEED, w)), z: 0 }, true);

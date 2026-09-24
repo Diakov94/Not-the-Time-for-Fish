@@ -6,6 +6,7 @@ export type Level = {
   halfSize: number; // the floor is a square of 2 * halfSize, its top at y = 0
   wallHeight: number;
   crates: Vector[]; // crate centres
+  climbs?: { p: Vector; half: Vector }[]; // boxes a cat climbs inside (a drainpipe)
 };
 
 export const CRATE_HALF = 0.5;
