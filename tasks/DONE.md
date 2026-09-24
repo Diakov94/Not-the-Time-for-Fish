@@ -101,3 +101,6 @@
 - bug-net-copy-freezes-at-an-ownership-change: the fold decides once, at a tick's arrival; the 8-client round meets the card's acceptance 5/5 (a grabbed cat on the other clients 0.150-0.203 → 0.055-0.094 m). Stall divergence is filed separately. The last MVP bug, 2026-09-24.
 - 160 the rotation picks the dogs at every prep; 161 per-player score, a catch names its dog; 164 meta progress by side. ROTATION (owner decision, ADR 0014), 2026-09-24.
 - RENDER-FIX: 142 the view follows the map; review-render-camera-six-metres-out; review-render-looks-of-gone-entities-never-freed. 2026-09-24.
+- 143 high-rise theme; 149 fish-market theme; 144 water-bomb and slip looks (own client; every-client wiring follows SIM-FIX). THEMES-A, 2026-09-24.
+- 150 farm theme; 151 yacht theme. THEMES-B, 2026-09-24.
+- HUD-INPUT: 146, 163, 166, bug-hud-hints-once-per-browser-not-per-side, review-hud-own-state-grabbed-captured-watching, review-input-sneak-on-ctrl-closes-the-tab. 2026-09-24.
