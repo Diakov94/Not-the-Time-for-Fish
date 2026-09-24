@@ -92,6 +92,8 @@
 - 101 maps by file name, the headless --map; 102 the settings store (one owner of per-viewer settings); 103 the input zone and bindings. Wave 0 APP-SEAMS, 2026-09-24.
 - 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.
 - w1-headless: its cards closed (see the batch report). 2026-09-24.
+- w1-ui1: its cards closed (see the batch report). 2026-09-24.
+- w1-mapscen: its cards closed (see the batch report). 2026-09-24.
 - w1-settings: its cards closed (see the batch report). 2026-09-24.
 - w1-props: delivered cards closed (see the batch report). 2026-09-24.
 - fix-audio: delivered cards closed (see the batch report). 2026-09-24.
