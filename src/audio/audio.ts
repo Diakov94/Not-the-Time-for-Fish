@@ -108,7 +108,7 @@ function at(g: Graph, p: Vec3): PannerNode {
   return panner;
 }
 
-// A one-shot where it happened, or heard everywhere (a phase stinger) with no place.
+// A one-shot where it happened, or heard everywhere (a phase stinger, a round event) with no place.
 function sound(g: Graph, s: Sound, p: Vec3 | null, loud: number): number {
   const out = p ? at(g, p) : g.master;
   const t = g.kit.ctx.currentTime;
@@ -135,7 +135,8 @@ function play(g: Graph, sim: Sim, ev: SimEvent): number | undefined {
   }
   if (ev.type === 'planted') return sound(g, ev.kind === 'mine' ? 'arm' : 'trapSet', ev.p, 1);
   if (ev.type === 'blast' || ev.type === 'defused' || ev.type === 'sprung') return sound(g, ev.type, ev.p, 1);
-  if (ev.type === 'secured' || ev.type === 'captured' || ev.type === 'rescue' || ev.type === 'dugOut') return sound(g, ev.type, ev.p, 1);
+  // The round's own turns change every player's plan, so they are heard everywhere, as the stingers are.
+  if (ev.type === 'secured' || ev.type === 'captured' || ev.type === 'rescue' || ev.type === 'dugOut') return sound(g, ev.type, null, 1);
   if (ev.type === 'phase' && (ev.to === 'heist' || ev.to === 'overtime' || ev.to === 'over')) return sound(g, ev.to, null, 1);
   return undefined;
 }
