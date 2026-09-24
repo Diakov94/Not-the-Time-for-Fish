@@ -7,7 +7,8 @@ import type { Box, Door, Level, Point, Static, Volume } from '../content/level.t
 // its label (GAME.md, Art Direction: low-poly, flat shading, warm homey colours; placeholders). A label
 // with a shape below is built inside its box; any other label is its plain box, in DEFAULT if render has
 // no colour for it. A `dogs` blocker is an opening only cats pass, so it is drawn open, never as a wall.
-const COLOUR: Record<string, number> = {
+// Content's props carry labels from the same table (card 30).
+export const COLOUR: Record<string, number> = {
   ground: 0x7ea65a,
   floor: 0xb9a78a,
   'outer wall': 0xc9b79a,
@@ -28,8 +29,30 @@ const COLOUR: Record<string, number> = {
   car: 0xc8453a,
   'cat flap': 0xeadcc0,
   vent: 0xeadcc0,
+  sofa: 0x7d4b8f,
+  curtain: 0xc9544b,
+  'cardboard box': 0xc8a063,
+  barricade: 0x8f6b4a,
+  armchair: 0x5f8f6b,
+  chair: 0xa8744a,
+  'coffee table': 0x8a5a3a,
+  stool: 0xb58a5a,
+  bin: 0x6f7a80,
+  'bedside table': 0x8a5a3a,
+  watermelon: 0x3f8f3a,
+  wheelbarrow: 0x8a8f95,
+  'garden chair': 0xe8e0d0,
+  crate: 0xb07a45,
+  plate: 0xf4f1ea,
+  cup: 0xe8c35a,
+  jar: 0x9fd0d8,
+  apple: 0xd23b2f,
+  vase: 0x3f6fb5,
+  shoe: 0x4a3b35,
+  'flower pot': 0xc46b3c,
+  football: 0xf4f1ea,
 };
-const DEFAULT = 0xb8a48c;
+export const DEFAULT = 0xb8a48c;
 const ROUTE = 0x23a99a; // the frame of an opening only cats pass: an exit or a cat route
 const METAL = 0x9aa3a8;
 const GLASS = 0x8fd8ea;
@@ -50,7 +73,7 @@ const HOLE = 0.6; // m: the height of a cat route's hole in its wall
 const DEV_KEY = 'F8'; // shows and hides the volumes, in dev only
 
 const materials = new Map<number, THREE.Material>();
-function material(colour: number): THREE.Material {
+export function material(colour: number): THREE.Material {
   let m = materials.get(colour);
   if (!m) materials.set(colour, (m = new THREE.MeshLambertMaterial({ color: colour, flatShading: true })));
   return m;
@@ -58,7 +81,7 @@ function material(colour: number): THREE.Material {
 const GLASS_MATERIAL = new THREE.MeshLambertMaterial({ color: GLASS, transparent: true, opacity: 0.35, depthWrite: false });
 
 // A box of size w x h x d at (x, y, z) in its part's frame.
-function block(w: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
+export function block(w: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
   mesh.position.set(x, y, z);
   return mesh;
@@ -103,14 +126,39 @@ function flap(f: Frame, panel: THREE.Object3D, open: number): THREE.Group {
   return f.group;
 }
 
-const SHAPES: Record<string, (s: Static) => THREE.Object3D> = {
-  table: (s) => {
-    const { l, t, h, group } = frameOf(s);
-    const m = material(COLOUR.table!);
-    group.add(block(2 * l, 0.06, 2 * t, m, 0, h - 0.03));
-    for (const x of [-l + 0.06, l - 0.06]) for (const z of [-t + 0.06, t - 0.06]) group.add(block(0.07, 2 * h - 0.06, 0.07, m, x, -0.03, z));
-    return group;
-  },
+// A top on four legs, a seat with a back (and arms), a crate's slatted edges.
+function table(b: Box, colour: number): THREE.Group {
+  const { l, t, h, group } = frameOf(b);
+  const m = material(colour);
+  group.add(block(2 * l, 0.06, 2 * t, m, 0, h - 0.03));
+  for (const x of [-l + 0.06, l - 0.06]) for (const z of [-t + 0.06, t - 0.06]) group.add(block(0.07, 2 * h - 0.06, 0.07, m, x, -0.03, z));
+  return group;
+}
+function seat(b: Box, colour: number, arms: boolean): THREE.Group {
+  const { l, t, h, group } = frameOf(b);
+  const m = material(colour);
+  const back = Math.min(0.2, t);
+  group.add(block(2 * l, h, 2 * t, m, 0, -h / 2), block(2 * l, 2 * h, back, m, 0, 0, -t + back / 2));
+  if (arms) for (const x of [-l + 0.06, l - 0.06]) group.add(block(0.12, 1.3 * h, 2 * t, m, x, -0.35 * h));
+  return group;
+}
+function crate(b: Box): THREE.Group {
+  const { l, t, h, group } = frameOf(b);
+  group.add(block(2 * l - 0.02, 2 * h - 0.02, 2 * t - 0.02, material(COLOUR.crate!)));
+  const m = material(0x7a4f2a);
+  for (const y of [-h + 0.04, h - 0.04]) for (const z of [-t, t]) group.add(block(2 * l, 0.08, 0.02, m, 0, y, z));
+  return group;
+}
+
+const SHAPES: Record<string, (s: Box) => THREE.Object3D> = {
+  table: (s) => table(s, COLOUR.table!),
+  'coffee table': (s) => table(s, COLOUR['coffee table']!),
+  'bedside table': (s) => table(s, COLOUR['bedside table']!),
+  sofa: (s) => seat(s, COLOUR.sofa!, true),
+  armchair: (s) => seat(s, COLOUR.armchair!, true),
+  chair: (s) => seat(s, COLOUR.chair!, false),
+  'garden chair': (s) => seat(s, COLOUR['garden chair']!, false),
+  crate,
   // A tank's panes are thin, its stand is not.
   aquarium: (s) =>
     Math.min(s.half.x, s.half.y, s.half.z) < 0.05
@@ -160,13 +208,18 @@ const SHAPES: Record<string, (s: Static) => THREE.Object3D> = {
 };
 
 // A cage wall: bars every 0.2 m between a top and a bottom rail.
-function bars(s: Static, colour: number): THREE.Object3D {
+function bars(s: Box, colour: number): THREE.Object3D {
   const { l, t, h, group } = frameOf(s);
   const m = material(colour);
   for (const y of [-h + 0.03, h - 0.03]) group.add(block(2 * l, 0.06, 2 * t, m, 0, y));
   const n = Math.max(2, Math.round((2 * l) / 0.2));
   for (let i = 0; i <= n; i++) group.add(block(0.04, 2 * h, 0.04, m, -l + (2 * l * i) / n));
   return group;
+}
+
+// A label's shape built in `b`, for a label that has one.
+export function shaped(label: string, b: Box): THREE.Object3D | undefined {
+  return SHAPES[label]?.(b);
 }
 
 function part(s: Static): THREE.Object3D {

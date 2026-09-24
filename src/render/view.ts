@@ -1,9 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { Ball, Capsule, Collider, Cuboid, RigidBody, Shape, Vector } from '@dimforge/rapier3d-compat';
+import type { Collider, RigidBody, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
+import { buildLook, debrisLook, lookOf } from './looks.ts';
 
 // Where the camera orbits its target from: the app's mouse input sets it.
 export type Look = { yaw: number; pitch: number }; // yaw 0 looks along +z; pitch > 0 looks down
@@ -19,21 +20,9 @@ export type View = {
   camera: THREE.PerspectiveCamera;
   objects: Map<NetId, THREE.Object3D>;
   doors: THREE.Object3D[]; // the level's door panels, index for index with the sim's door bodies
+  debris: THREE.Object3D[]; // the level's debris, index for index with the sim's local debris bodies
 };
 
-// An entity is drawn as its body is shaped: the sim's collider is the one owner of every kind's size.
-function geometry(shape: Shape): THREE.BufferGeometry {
-  if ('halfExtents' in shape) {
-    const h = (shape as Cuboid).halfExtents;
-    return new THREE.BoxGeometry(2 * h.x, 2 * h.y, 2 * h.z);
-  }
-  if ('halfHeight' in shape) return new THREE.CapsuleGeometry((shape as Capsule).radius, 2 * (shape as Capsule).halfHeight, 4, 12);
-  return new THREE.SphereGeometry((shape as Ball).radius, 12, 8);
-}
-const NOSE = new THREE.BoxGeometry(0.15, 0.15, 0.2); // shows a character's facing: its grab reaches forward
-const CRATE = new THREE.MeshStandardMaterial({ color: 0xb07a45 });
-const MINE = new THREE.MeshStandardMaterial({ color: 0xf28c28 }); // this player's character
-const THEIRS = new THREE.MeshStandardMaterial({ color: 0x3f7fd0 });
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
 const EYE = 1; // m: that point's height above the character's centre
 const LENS = new RAPIER.Ball(0.2); // what the camera keeps clear of a wall: twice its near plane
@@ -53,7 +42,12 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
   camera.position.set(0, 12, -14);
   camera.lookAt(0, 0, 0);
-  return { renderer, scene, camera, objects: new Map(), doors };
+  const debris = sim.debris.map((d) => {
+    const o = debrisLook(sim, d);
+    scene.add(o);
+    return o;
+  });
+  return { renderer, scene, camera, objects: new Map(), doors, debris };
 }
 
 const size = new THREE.Vector2();
@@ -73,8 +67,14 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     camera.updateProjectionMatrix();
   }
   const lag = STEP - sim.accumulator;
-  for (const e of sim.entities.values()) place(objects.get(e.id) ?? add(view, sim, e), e.body, lag);
+  for (const e of sim.entities.values()) {
+    const o = objects.get(e.id);
+    // A character whose look the roster changed is built anew.
+    if (o?.userData.look !== undefined && o.userData.look !== lookOf(sim, e)) scene.remove(o);
+    place(o && o.parent ? o : add(view, sim, e), e.body, lag);
+  }
   sim.doors.forEach((b, i) => place(view.doors[i]!, b, lag));
+  sim.debris.forEach((d, i) => place(view.debris[i]!, d.body, lag));
   for (const [id, o] of objects) {
     if (sim.entities.has(id)) continue;
     scene.remove(o);
@@ -86,11 +86,10 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   renderer.render(scene, camera);
 }
 
+// An entity's look is built on first sight from its kind, its collider, a prop's content label and a
+// character's look in the roster; nothing of the entity is copied into render.
 function add(view: View, sim: Sim, e: Entity): THREE.Object3D {
-  const material = !isCharacter(e.kind) ? CRATE : e.home === sim.me ? MINE : THEIRS;
-  const shape = e.body.collider(0).shape;
-  const o = new THREE.Mesh(geometry(shape), material);
-  if (isCharacter(e.kind)) o.add(new THREE.Mesh(NOSE, material).translateY(0.3).translateZ((shape as Capsule).radius));
+  const o = buildLook(sim, e);
   view.scene.add(o);
   view.objects.set(e.id, o);
   return o;
