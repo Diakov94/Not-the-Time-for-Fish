@@ -83,3 +83,4 @@
 - 140 the yacht map: exits 4 > dogs 3, carry 11.3 m, rails 4 m; no schema change. Wave 0 MAP-yacht, 2026-09-24.
 - 138 the farm map: every anatomy number holds; the schema lacks a fence role (reported). Wave 0 MAP-farm, 2026-09-24.
 - 136 the market map: every anatomy number holds (exits 4 > dogs 3, farthest storage 12.8 m from the hatch). Wave 0 MAP-market, 2026-09-24.
+- 126 progress save: src/meta/progress.ts owns it. 127 unlock rules: twelve, one per cosmetic id. Wave 1 META, 2026-09-24.
