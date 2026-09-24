@@ -2,7 +2,7 @@ import type { ClientId } from '../../sim/entities.ts';
 import type { Look, Roster, Side, Team } from '../../sim/messages.ts';
 import { catsTeam, lookOf, playerOf, type Player } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { tag, TEAM } from './parts.ts';
+import { score, tag, TEAM } from './parts.ts';
 
 // Each side's characters by look (GAME.md, Characters: the first three of each list, the order render
 // builds its looks in). Which look a player has is the round table's (`lookOf`); the screen names it.
@@ -19,13 +19,13 @@ const MAP = 'Дача'; // the MVP's one map, the country house: shown as picked
 // player's own look per side, and for the host a name moved to the other team and the start. It keeps no
 // roster and decides no team; it is redrawn when what it shows changes.
 export function lobbyScreen(room: string, send: (m: Roster | Look) => void, start: () => void): (sim: Sim, host: ClientId) => void {
-  const screen = tag('div', { className: 'lobby' });
+  const screen = tag('div', { className: 'screen lobby' });
   document.body.append(screen);
   let drawn = '';
   return (sim, host) => {
     const r = sim.round;
     screen.hidden = r.phase !== 'lobby';
-    const key = JSON.stringify([r.roster, host]);
+    const key = JSON.stringify([r.roster, host, r.score]);
     if (screen.hidden || key === drawn) return;
     drawn = key;
     const hosting = host === sim.me;
@@ -53,6 +53,7 @@ export function lobbyScreen(room: string, send: (m: Roster | Look) => void, star
     const cats = catsTeam(r);
     screen.replaceChildren(
       tag('h1', { textContent: `Кімната ${room}` }),
+      ...(r.match === null ? [] : [tag('p', { textContent: score(r) })]),
       tag('div', { className: 'teams' }, column(cats, 'cat'), column(cats === 'A' ? 'B' : 'A', 'dog')),
       ...(me ? [picker('cat'), picker('dog')] : []),
       hosting
