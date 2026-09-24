@@ -139,7 +139,7 @@ function judge(r: Run): Verdict {
   const prep = turnTo(h, 'prep');
   const heist = turnTo(h, 'heist');
   const took = overs[0] && prep ? overs[0].time - prep.time : Infinity;
-  const players = r.ids.length;
+  const players = new Set(r.seats).size;
   const kinds = new Map(r.samples.flatMap((x) => x.dumps[h]?.entities.map((e) => [e.id, e.kind] as const) ?? []));
   const grab = r.samples.find((x) => x.events[h]!.some((e) => e.type === 'grab' && kinds.get(e.id) === 'cat'));
   const count = (type: string) => r.samples.reduce((n, x) => n + x.events[h]!.filter((e) => e.type === type).length, 0);

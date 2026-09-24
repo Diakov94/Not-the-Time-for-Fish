@@ -14,8 +14,9 @@ const ACTIONS = { grab, throw: throwCarried, interact, plant };
 // A line of a player's script, in seconds from the start of the run: from `at` on the intent is held,
 // and the action is pressed once.
 export type Step = [at: number, intent: Intent, action: Action | null];
-// A bot's frame: the intent held and a key tapped.
-export type Press = { intent: Intent; action?: Action };
+// A bot's frame: the intent held, a key tapped, or its tab closed (`leave`) and opened again with its
+// name (`rejoin`), which the runner does.
+export type Press = { intent: Intent; action?: Action | 'leave' | 'rejoin' };
 export type Script = Generator<Press, void, void>;
 // A bot reads its own client's sim, as its player reads the screen, and is started anew at every prep
 // for the side the roster gives it that round.
@@ -26,9 +27,21 @@ export type Player = { side: Side; at?: Vector; script: Step[] | Bot };
 // What a scenario's host spawns beside the level's crates.
 export type Thing = { kind: Kind; p: Vector };
 
-// `t`: seconds into the run, the bot's clock; `round`: the round whose prep started the bot's script;
-// `intent`: what its player held this frame; `error`: why its script stopped.
-export type HeadlessClient = { session: Session; name: string; player: Player; next: number; bot: Script | null; t: number; round: number; intent: Intent; error?: string };
+// `t`: seconds into the run, the bot's clock, which runs on while its tab is closed; `round`: the round
+// whose prep started the bot's script; `left`: its tab is closed; `intent`: what its player held this
+// frame; `error`: why its script stopped.
+export type HeadlessClient = {
+  session: Session;
+  name: string;
+  player: Player;
+  next: number;
+  bot: Script | null;
+  t: number;
+  round: number;
+  left: boolean;
+  intent: Intent;
+  error?: string;
+};
 
 // A player's client minus render and app: sim and net over the global WebSocket, driven by its script.
 // In a lobby scenario the host spawns the scenario's things before its character, so a client that holds
@@ -37,11 +50,12 @@ export async function joinHeadless(url: string, level: Level, name: string, play
   const session = await connect(url, level, name);
   for (const t of lobby ? things : []) spawn(session, t.kind, t.p);
   if (lobby) spawn(session, player.side, player.at!);
-  return { session, name, player, next: 0, bot: null, t: 0, round: 0, intent: IDLE };
+  return { session, name, player, next: 0, bot: null, t: 0, round: 0, left: false, intent: IDLE };
 }
 
-// One frame, `t` seconds into the run (negative: not started, idle).
-export function playHeadless(c: HeadlessClient, t: number, dt: number): void {
+// One frame, `t` seconds into the run (negative: not started, idle); a closed tab's bot runs on without
+// a frame. Returns what only the runner can do.
+export function playHeadless(c: HeadlessClient, t: number, dt: number): 'leave' | 'rejoin' | undefined {
   const { sim } = c.session;
   const script = c.player.script;
   let action: Press['action'];
@@ -51,16 +65,19 @@ export function playHeadless(c: HeadlessClient, t: number, dt: number): void {
     for (; c.next < script.length && script[c.next]![0] <= t; c.next++) press(c, script[c.next]![2]);
     if (c.next > 0) c.intent = script[c.next - 1]![1];
   } else {
-    if (sim.round.phase === 'prep' && c.round !== sim.round.round) [c.bot, c.round] = [script(c), sim.round.round];
+    if (!c.left && sim.round.phase === 'prep' && c.round !== sim.round.round) [c.bot, c.round] = [script(c), sim.round.round];
     try {
       const r = c.bot?.next();
       if (r && !r.done) ({ intent: c.intent, action } = r.value);
     } catch (e) {
       [c.error, c.bot] = [(e as Error).message, null];
     }
+    if (action === 'leave' || action === 'rejoin') return action;
+    if (c.left) return undefined;
     press(c, action ?? null);
   }
   frame(c.session, dt, c.intent);
+  return undefined;
 }
 
 function press(c: HeadlessClient, action: Action | null): void {

@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { MOVING_MAX, RESTING_MAX, run, type Scenario } from './run.ts';
+import { chaseKennelRescueRejoin } from './scenarios/chase-kennel-rescue-rejoin.ts';
 import { defaultGame } from './scenarios/default.ts';
 import { eightClients } from './scenarios/eight-clients.ts';
 import { grabTossWiggleHit } from './scenarios/grab-toss-wiggle-hit.ts';
@@ -12,6 +13,7 @@ const scenarios: Record<string, Scenario> = {
   'eight-clients': eightClients,
   round: aRound,
   'mines-and-traps': minesAndTraps,
+  'chase-kennel-rescue-rejoin': chaseKennelRescueRejoin,
 };
 
 // `npm run headless -- --scenario <name> --clients N --seconds S`: no browser, no jsdom; exit 1 when a
@@ -33,7 +35,7 @@ if (!scenario) {
 }
 const clients = Number(values.clients);
 const seconds = Number(values.seconds ?? scenario.seconds ?? 20);
-const heist = values.heist === undefined ? undefined : Number(values.heist);
+const heist = values.heist === undefined ? scenario.heist : Number(values.heist);
 const knobs = { rounds: Number(values.rounds), ...(heist !== undefined && { heist }) };
 const t0 = performance.now();
 const r = await run(scenario, clients, seconds, true, knobs);

@@ -20,7 +20,7 @@ function judge({ samples, start }: Run): Verdict {
   const props = samples[0]!.dumps[0]!.entities.filter((e) => e.kind === 'prop').length;
   const awake = samples
     .filter(({ t }) => t - start >= RAMP)
-    .map(({ dumps }) => dumps.reduce((n, d) => n + d.entities.filter((e) => e.kind === 'prop' && e.owner === d.me && !e.rest).length, 0));
+    .map(({ dumps }) => dumps.reduce((n, d) => n + d!.entities.filter((e) => e.kind === 'prop' && e.owner === d!.me && !e.rest).length, 0));
   const mean = awake.reduce((n, x) => n + x, 0) / awake.length;
   const all = (100 * awake.filter((x) => x === props).length) / awake.length;
   return { lines: [`props awake on their owner after ${RAMP / 1000} s: ${mean.toFixed(1)} of ${props} on average, all ${props} in ${all.toFixed(0)} % of frames`], ok: true };

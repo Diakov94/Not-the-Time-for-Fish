@@ -101,7 +101,7 @@ function judge(r: Run): Verdict {
     if (first >= 0 && defused >= 0) cue = (r.samples[defused]!.t - r.samples[first]!.t) / 1000;
   }
   const pings = here.map((i) => r.samples.reduce((n, x) => n + x.events[i]!.filter((e) => e.type === 'noise').length, 0));
-  const dogs = here.filter((i) => SIDES[i] === 'dog');
+  const dogs = here.filter((i) => SIDES[r.seats[i]!] === 'dog');
   const lines = [
     `per client blasts/defused/sprung/cleared: ${counts.map((c) => c.join('/')).join(', ')}`,
     `the stunned cat's intent ignored for ${stun.toFixed(3)} s (3.0 +- 0.1); its whisker cue ${cue.toFixed(2)} s before its defuse`,

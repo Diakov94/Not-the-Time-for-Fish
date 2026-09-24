@@ -38,7 +38,7 @@ const GATE_IN = [p(gate.p.x - 0.4, gate.p.z + 2), p(gate.p.x - 0.4, gate.p.z - 2
 // The dog tosses from 1 m west of the cage, facing it (card 29); a cat opens it from beside the latch.
 export const TOSS = p(KENNEL.p.x - KENNEL.half.x - 1.1, KENNEL.p.z);
 export const CAGE = p(KENNEL.p.x, KENNEL.p.z);
-const IN_CAGE = box(KENNEL);
+export const IN_CAGE = box(KENNEL);
 export const RESCUE = p(LATCH.x, LATCH.z - 0.6);
 const OUT_OF_CAGE = p(KENNEL.p.x - 0.5, KENNEL.p.z - KENNEL.half.z - 0.7);
 
@@ -76,6 +76,8 @@ export const ROUTE = {
   west: [...GATE_OUT, p(-8.5, -7)],
   westHome: [p(-9.3, 1.2), p(-9.3, -7), ...GATE_IN],
   cageToWest: [OUT_OF_CAGE, p(-8.5, 7.3)],
+  outOfCage: [OUT_OF_CAGE],
+  westToRescue: [...GATE_OUT, p(-8.5, -7), p(-8.5, 7.3), RESCUE],
   // Dogs: the first from its spawn north then round the east of the house to the gate, along the fence to
   // the west gap, up the west lane; the others round the shed to the east hole, or round the kennel to the
   // west fence's exit, once the first has gone.
@@ -186,17 +188,18 @@ export function* take(c: HeadlessClient): Generator<Press, boolean> {
 export const captive = (c: HeadlessClient) => simOf(c).round.roster.some((q) => q.captured !== null);
 export const capturedMe = (c: HeadlessClient) => playerOf(simOf(c).round, simOf(c).me)?.captured != null;
 
-// A dog on the watch: sniffing where it stands until a free cat comes within `near` m, then after it at a
-// sprint, lunging from LUNGE m, until the fold gives it the cat. False if none came within `patience` s.
+// A dog on the watch: sniffing where it stands until a free cat (one `prey` accepts) comes within `near` m,
+// then after it at a sprint, lunging from LUNGE m, until the fold gives it the cat. False if none came
+// within `patience` s.
 const LUNGE = 2.2;
-export function* pounce(c: HeadlessClient, near: number, patience: number): Generator<Press, boolean> {
+export function* pounce(c: HeadlessClient, near: number, patience: number, prey: (e: Entity) => boolean = () => true): Generator<Press, boolean> {
   const sim = simOf(c);
   const end = c.t + patience;
   let chased: string | undefined;
   while (c.t < end) {
     if (carried(sim)?.kind === 'cat') return true;
     const at = where(c);
-    const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat' && !sim.ownership.rows.get(e.id)?.held && !inside(e.body.translation(), IN_CAGE));
+    const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat' && !sim.ownership.rows.get(e.id)?.held && !inside(e.body.translation(), IN_CAGE) && prey(e));
     const target = cats.find((e) => e.id === chased) ?? (at && cats.find((e) => flat(e.body.translation(), at) <= near));
     if (!at || !target) {
       yield { intent: { ...IDLE, sniff: true } };
@@ -275,13 +278,15 @@ function* leave(c: HeadlessClient, room: Room): Generator<Press, void> {
 
 const RUN = { sprint: true };
 // A cat's trip for the table's fish: along `from` to its spot `k` in the living room's queue, in through the
-// gap in its turn, a fish if one is left, out again and back to the hideout by the east lane. Ends in the
-// hideout, in the queue if `call` came while it waited there, or wherever a dog carried it from.
-export function* tableTrip(c: HeadlessClient, from: P[], k: number, call?: () => boolean): Generator<Press, 'home' | 'called' | 'carried'> {
+// gap in its turn, a fish if one is left (held at the table while `stay` says so), out again and back to
+// the hideout by the east lane. Ends in the hideout, in the queue if `call` came while it waited there, or
+// wherever a dog carried it from.
+export function* tableTrip(c: HeadlessClient, from: P[], k: number, call?: () => boolean, stay = () => false): Generator<Press, 'home' | 'called' | 'carried'> {
   if (!(yield* go(c, [...from, LIVING.spot(k)], RUN))) return 'carried';
   if (!(yield* enter(c, LIVING, call))) return 'called';
   if (!(yield* go(c, [...EAST_GAP, ...TO_TABLE], RUN))) return 'carried';
   yield* take(c);
+  yield* until(c, () => !stay());
   if (!(yield* go(c, [...back(TO_TABLE).slice(1), EAST_GAP[1]!]))) return 'carried';
   yield* leave(c, LIVING);
   return (yield* go(c, [EAST_GAP[0]!, ...ROUTE.eastHome])) ? 'home' : 'carried';
