@@ -1,5 +1,5 @@
 import { beforeAll, expect, test } from 'vitest';
-import { countryHouse } from '../content/country-house.ts';
+import { countryHouse } from '../content/maps/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
 import { forward, join, leave, newRoom, type Out } from '../relay/room.ts';
 import { halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';

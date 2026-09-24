@@ -23,7 +23,7 @@ export const VISIBLE = { off: 0.5, for: 1000, max: 1 };
 const FRAME_MS = 1000 / 60; // the runner's loop: a 60 Hz display's frames
 
 // A scenario, one file each: the level, what its host spawns beside the level's crates, and each
-// client's player by join order (the first joins as the host). Its judge adds its own checks to the
+// client's player by join order (the first joins as the host) on the level the game runs. Its judge adds its own checks to the
 // shared ones and prints its own numbers. A round scenario starts in the lobby: the host sides every
 // player as its `side` (ADR 0007's reassignment by hand) and starts the round, the characters enter at
 // prep, and the run ends once `rounds` rounds are over on every client, or after the run's seconds.
@@ -32,7 +32,7 @@ export type Scenario = {
   about: string;
   level: Level;
   things?: Thing[];
-  player: (i: number) => Player;
+  player: (i: number, level: Level) => Player;
   judge?: (r: Run) => Verdict;
   round?: boolean;
   seconds?: number;
@@ -283,7 +283,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
   try {
     for (let i = 0; i < clients; i++) {
       opened.push(performance.now());
-      seats.push(await joinHeadless(url, scenario.level, `p${i}`, scenario.player(i), i === 0 ? scenario.things : [], !scenario.round));
+      seats.push(await joinHeadless(url, scenario.level, `p${i}`, scenario.player(i, scenario.level), i === 0 ? scenario.things : [], !scenario.round));
       link(seats[i]!, 'in');
     }
     const samples: Sample[] = [];
@@ -410,7 +410,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       divergence: div,
       visible,
       clients: traffic,
-      sidesAgree: scenario.round ? here.every((l) => sided(l.session)) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i).side)),
+      sidesAgree: scenario.round ? here.every((l) => sided(l.session)) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
       tablesAgree: ends.every((t) => isDeepStrictEqual(t, ends[0])),
       roundsAgree: tables.every((t) => isDeepStrictEqual(t, tables[0])),
       claims: claims.length,
