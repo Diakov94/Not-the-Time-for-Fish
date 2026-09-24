@@ -105,7 +105,7 @@ export function duration(r: Round): number | null {
 }
 
 const cats = (r: Round) => r.roster.filter((p) => p.team === catsTeam(r) && p.client !== null);
-const inPlay = (r: Round) => r.phase === 'prep' || r.phase === 'heist' || r.phase === 'overtime';
+export const inPlay = (r: Round) => r.phase === 'prep' || r.phase === 'heist' || r.phase === 'overtime';
 const stealing = (r: Round) => r.phase === 'heist' || r.phase === 'overtime';
 
 // Whether a cat holds a fish: the ownership table's word, read through the identities.
@@ -257,7 +257,9 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
   [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
+  [sim.stunUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt] = [0, 0, null, null, null];
   sim.securing.clear();
+  sim.ending.clear();
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }

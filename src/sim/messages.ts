@@ -12,6 +12,9 @@ export type Left = { type: 'left'; id: ClientId; host: ClientId };
 export type Hit = { type: 'hit'; from: ClientId; dog: NetId };
 // The host removes a gone player's character (ADR 0007): 60 s after its `left`, or when its name rejoins.
 export type Despawn = { type: 'despawn'; from: ClientId; id: NetId };
+// A mine's end, born at a cat's client (ADR 0007): the cat stepped on mine `id`, or defused it.
+export type Blast = { type: 'blast'; from: ClientId; id: NetId };
+export type Defused = { type: 'defused'; from: ClientId; id: NetId };
 // Events, not folded (ADR 0010): a noise ping born at the sender, and a team marker for the sender's side.
 // A noise names its cause, set where it is born: a character's step, an impact, a mine's blast, a sprung trap,
 // a door storage opened.
@@ -36,4 +39,4 @@ export type DugOut = { type: 'dugOut'; from: ClientId };
 export type Opened = { type: 'opened'; from: ClientId; storage: number };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened;
+export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened;

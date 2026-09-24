@@ -3,6 +3,7 @@ import type { Box } from '../content/level.ts';
 import { volumeAt } from './build.ts';
 import { GROUPS, type Entity } from './entities.ts';
 import type { SimMessage } from './messages.ts';
+import { stunned } from './mines.ts';
 import { myCharacter } from './movement.ts';
 import { carried } from './ownership.ts';
 import { playerOf } from './round.ts';
@@ -50,7 +51,7 @@ export function stored(sim: Sim, cat: Entity): Entity | undefined {
 // sends at once, if any.
 export function interact(sim: Sim): SimMessage | null {
   const c = myCharacter(sim);
-  if (c?.kind !== 'cat') return null;
+  if (c?.kind !== 'cat' || stunned(sim)) return null;
   const p = c.body.translation();
   const latch = sim.level.points.find((pt) => pt.role === 'latch')?.p;
   const free = playerOf(sim.round, sim.me)?.captured === null;

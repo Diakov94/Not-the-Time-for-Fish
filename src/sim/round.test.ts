@@ -8,6 +8,7 @@ import { drainEvents } from './events.ts';
 import { IDLE, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
 import { interact } from './heist.ts';
+import { plant, stunned } from './mines.ts';
 import { receive } from './ownership.ts';
 import { advance, knobs, playerOf, playsAs } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
@@ -496,4 +497,104 @@ test('a captured cat that leaves and rejoins by name mid-heist: its old body is 
   expect(captured).toBe('true,true,true');
   expect(Math.abs(dug - 60)).toBeLessThanOrEqual(0.1);
   expect(agree(r)).toBe(true);
+});
+
+// A dog's mine at its feet at (x, z): it plants and stands still for the 1.5 s the plant takes.
+function mineAt(r: Relay, dog: Sim, x: number, z: number): NetId {
+  own(dog).body.setTranslation({ x, y: halfHeight('dog') + 0.01, z }, true);
+  r.run(2);
+  plant(dog);
+  r.until(() => r.sims().every((s) => [...s.entities.values()].some((e) => e.kind === 'mine' && Math.hypot(e.body.translation().x - x, e.body.translation().z - z) < 0.1)), 2 * 60);
+  return [...dog.entities.values()].find((e) => e.kind === 'mine' && Math.hypot(e.body.translation().x - x, e.body.translation().z - z) < 0.1)!.id;
+}
+const walking = (x: number): Intent => ({ move: { x, z: 0 }, sprint: false, jump: false });
+const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
+
+test('two cats walk onto one mine in the same step: one blast accepted; each stunned 3 s and thrown, the carrier drops its fish at once; the dog 1 m off is pushed, not stunned; one noise', () => {
+  const r = relay(countryHouse, true);
+  const [b, dog, a] = r.players(3); // P0 and P2 play cats, P1 the dog
+  toHeist(r);
+  const mine = mineAt(r, dog!, 0, -10);
+  own(dog!).body.setTranslation({ x: 0, y: halfHeight('dog') + 0.01, z: -9 }, true);
+  stand(a!, -1.5, -10, Math.PI / 2);
+  stand(b!, 1.5, -10, -Math.PI / 2);
+  const fish = spawnOf(a!, { kind: 'fish', p: { x: -0.8, y: halfHeight('fish'), z: -10 } });
+  r.send(a!, fish);
+  r.send(a!, { type: 'claim', from: a!.me, id: fish.id, hold: true });
+  r.run(5);
+  // Every client steps before the relay orders what any sent, so both cats' blasts are in flight at once.
+  const walk = (s: Sim) => walking(s === a ? 1 : s === b ? -1 : 0);
+  const blasts = () => r.history.filter(([m]) => m.type === 'blast').length;
+  for (let i = 0; i < 60 && blasts() === 0; i++) {
+    const outs = r.clients.map((c) => [c.sim, step(c.sim, STEP, walk(c.sim), c.host)] as const);
+    for (const [s, ms] of outs) for (const m of ms) r.send(s, m);
+  }
+  const at = r.history.findIndex(([m]) => m.type === 'blast');
+  const t0 = new Map(r.sims().map((s) => [s, s.time]));
+  const from = new Map([a!, b!, dog!].map((s) => [s, { ...own(s).body.translation() }]));
+  const walksAgain = new Map<Sim, number>();
+  const thrown = new Map<Sim, number>();
+  let dogMoved = 0;
+  for (let i = 0; i < 4 * 60; i++) {
+    r.run(1, walk);
+    for (const s of [a!, b!]) {
+      const v = own(s).body.linvel();
+      if (!walksAgain.has(s) && s.time - t0.get(s)! > 0.5 && v.x * (s === a ? 1 : -1) >= 0.9 * 4) walksAgain.set(s, s.time - t0.get(s)!);
+      if (Math.abs(s.time - t0.get(s)! - 2.9) < STEP / 2) thrown.set(s, flat(own(s).body.translation(), from.get(s)!));
+    }
+    dogMoved = Math.max(dogMoved, flat(own(dog!).body.translation(), from.get(dog!)!));
+  }
+  // What the carrier sends once it folded the blast; a blast of its own was already in flight.
+  const next = r.history.slice(at + 1).find(([m]) => m.type !== 'blast' && m.type !== 'left' && m.from === a!.me)?.[0];
+  const noises = r.history.filter(([m]) => m.type === 'noise' && m.cause === 'blast').length;
+  console.log(
+    `blasts sent ${blasts()}, noises from a blast ${noises}, mine in any table ${r.sims().some((s) => s.entities.has(mine))}; ` +
+      `the carrier's next message: ${next?.type} of ${next?.type === 'release' ? next.id : '-'}, fish held on ${r.sims().map((s) => s.ownership.rows.get(fish.id)?.held).join()}; ` +
+      `cats walk again ${[...walksAgain.values()].map((t) => t.toFixed(3)).join(' / ')} s after the blast, thrown ${[...thrown.values()].map((d) => d.toFixed(2)).join(' / ')} m; ` +
+      `the dog 1 m off moved ${dogMoved.toFixed(2)} m, stunned ${stunned(dog!)}`,
+  );
+  expect(blasts()).toBe(2);
+  expect(noises).toBe(1);
+  expect(r.sims().some((s) => s.entities.has(mine) || s.ownership.rows.has(mine))).toBe(false);
+  expect(next).toMatchObject({ type: 'release', id: fish.id });
+  expect(r.sims().map((s) => s.ownership.rows.get(fish.id)?.held)).toEqual([false, false, false]);
+  expect(walksAgain.size).toBe(2);
+  for (const t of walksAgain.values()) expect(Math.abs(t - 3)).toBeLessThanOrEqual(0.1);
+  for (const d of thrown.values()) expect(d).toBeGreaterThanOrEqual(1.5);
+  expect(dogMoved).toBeGreaterThanOrEqual(0.5);
+  expect(stunned(dog!)).toBe(false);
+});
+
+test('a defuse held 3 s still removes the mine on both clients; moving at 2 s restarts it, and so does a grab', () => {
+  const r = relay(countryHouse, true);
+  const [cat, dog] = r.players(2); // P0 plays the cat, P1 the dog
+  toHeist(r);
+  const first = mineAt(r, dog!, 0, -10);
+  const second = mineAt(r, dog!, 4, -10);
+  own(dog!).body.setTranslation({ x: 4, y: halfHeight('dog') + 0.01, z: -12 }, true);
+  const on = (id: NetId) => r.sims().map((s) => s.entities.has(id)).join();
+  const hold = (steps: number, z = 0) => r.run(steps, (s) => (s === cat ? { move: { x: 0, z }, sprint: false, jump: false, defuse: true } : IDLE));
+  // At the first mine: 2 s held, a step aside while holding (still within reach), then held still.
+  stand(cat!, -0.8, -10, Math.PI / 2);
+  r.run(2);
+  hold(120);
+  hold(6, 1);
+  const restart = cat!.time;
+  hold(75);
+  const moved = on(first); // 3.4 s since the first press
+  r.until(() => !cat!.entities.has(first), 4 * 60, (s) => (s === cat ? { ...IDLE, defuse: true } : IDLE));
+  const done = cat!.time - restart;
+  const gone = on(first);
+  // At the second: 2 s held, then the dog grabs the cat, which holds E on.
+  stand(cat!, 3.2, -10, Math.PI / 2);
+  r.run(2);
+  hold(120);
+  r.send(dog!, { type: 'claim', from: dog!.me, id: own(cat!).id, hold: true });
+  hold(90);
+  const grabbed = on(second);
+  console.log(`mine after 2 s, a step aside, 1.25 s more: ${moved}; removed ${done.toFixed(3)} s after the restart: ${gone}; after 2 s and a grab, 1.5 s more: ${grabbed}`);
+  expect(moved).toBe('true,true');
+  expect(Math.abs(done - 3)).toBeLessThanOrEqual(0.1);
+  expect(gone).toBe('false,false');
+  expect(grabbed).toBe('true,true');
 });

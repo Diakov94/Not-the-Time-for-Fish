@@ -7,13 +7,14 @@ import { simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
 // What happened, one list per frame (ADR 0008): appended by `receive` for the messages that are events
-// and by the fold's accepted grabs, throws, drops and hits; read by every view; drained by the loop that
-// owns the frame. Never sent. `loud` runs from 0 to 1, a mine's blast or a sprung trap.
+// and by the fold's accepted grabs, throws, drops, hits and ends; read by every view; drained by the loop
+// that owns the frame. Never sent. `loud` runs from 0 to 1, a mine's blast or a sprung trap.
 export type SimEvent =
   | { type: 'noise'; p: Vector; loud: number; from: ClientId; cause: NoiseCause }
   | { type: 'mark'; p: Vector; from: ClientId }
   | { type: 'grab' | 'throw' | 'drop'; id: NetId; from: ClientId }
   | { type: 'hit'; dog: NetId; from: ClientId }
+  | { type: 'blast' | 'defused'; id: NetId; p: Vector; from: ClientId } // a mine's end, where it lay
   | { type: 'phase'; to: Phase; round: number; from: ClientId }; // the table turned, at `from`'s message (ADR 0007)
 
 export const IMPACT = 5; // a contact is an impact above this many times its body's weight

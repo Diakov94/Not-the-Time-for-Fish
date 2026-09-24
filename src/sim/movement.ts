@@ -7,8 +7,8 @@ import type { Sim } from './world.ts';
 
 // A player's input for one step; `move` is a world-space direction, length up to 1. `jump` held inside
 // a climb volume climbs; `sneak` is the cats' toggle, held here as its current state; `sniff` is the
-// dogs' held action.
-export type Intent = { move: { x: number; z: number }; sprint: boolean; jump: boolean; sneak?: boolean; sniff?: boolean };
+// dogs' held action and `defuse` the cats' (E held, card 49).
+export type Intent = { move: { x: number; z: number }; sprint: boolean; jump: boolean; sneak?: boolean; sniff?: boolean; defuse?: boolean };
 export const IDLE: Intent = { move: { x: 0, z: 0 }, sprint: false, jump: false };
 
 // The one table of speeds, m/s, per side (GAME.md, Movement asymmetry): dogs are faster on open ground,
@@ -58,6 +58,7 @@ export function drive(sim: Sim, c: Entity, intent: Intent): void {
   const carrying = carried(sim) !== undefined;
   // A dog sniffs while it holds the action and carries nothing, and walks meanwhile.
   sim.sniffing = intent.sniff === true && c.kind === 'dog' && !carrying;
+  sim.sneaking = intent.sneak === true && s.sneak !== null;
   let speed = intent.sprint && !sim.sniffing ? s.sprint : s.walk;
   if (intent.sneak && s.sneak !== null) speed = s.sneak;
   if (carrying) speed = Math.min(speed, s.carry);

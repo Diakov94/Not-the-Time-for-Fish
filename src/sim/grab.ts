@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Capsule, Collider, Vector } from '@dimforge/rapier3d-compat';
 import { entityOf, isCharacter, type Entity, type Kind } from './entities.ts';
 import { locked, stored } from './heist.ts';
+import { stunned } from './mines.ts';
 import type { Claim, Hit, Release, SimMessage } from './messages.ts';
 import { myCharacter, speedsOf, yawOf } from './movement.ts';
 import { carried, mayHold, setBodyTypes, simulatedHere } from './ownership.ts';
@@ -43,7 +44,7 @@ export function anchor(p: Vector, yaw: number, hand = HAND): Vector {
 // dash of its own body, at most once per cooldown, whose end makes the claim (`grabStep`).
 export function grab(sim: Sim): Claim | null {
   const c = myCharacter(sim);
-  if (!c || carried(sim)) return null;
+  if (!c || carried(sim) || stunned(sim)) return null;
   if (speedsOf(c).lunge === 0) return reach(sim, c);
   if (sim.lunge === null && sim.time >= sim.lungeReady) {
     sim.lunge = sim.time + LUNGE_TIME;
@@ -120,7 +121,7 @@ export function throwCarried(sim: Sim): Release | null {
   return release(sim, held, { x: Math.sin(yaw) * ahead, y: Math.sin(pitch) * speed, z: Math.cos(yaw) * ahead });
 }
 
-function release(sim: Sim, held: Entity, v: Release['v']): Release {
+export function release(sim: Sim, held: Entity, v: Release['v']): Release {
   return { type: 'release', from: sim.me, id: held.id, p: held.body.translation(), q: held.body.rotation(), v };
 }
 

@@ -25,6 +25,12 @@ export function isCharacter(kind: Kind): boolean {
   return kind === 'cat' || kind === 'dog';
 }
 
+// ADR 0009: a mine is never held or pushed. It is a fixed sensor where it was put: characters walk over
+// it, and the client that simulates a character finds it with a query of its own.
+export function isFixture(kind: Kind): boolean {
+  return kind === 'mine';
+}
+
 export const CRATE_HALF = 0.5; // a prop content does not describe: a test's crate, 1 kg
 
 // Collision groups, Rapier's `memberships << 16 | filter`. A blocker belongs to its own group only and
@@ -51,8 +57,8 @@ export function propCollider(prop: Prop): ColliderDesc {
 
 // Every kind's body. A character is a capsule its player drives: a cat 0.5 m wide and 0.9 m tall, a dog
 // 0.8 m wide and 1.4 m tall, so a gap between the two widths is a cat route (card 19 sizes its gaps to
-// these). Everything else is a dynamic prop. Mines, traps, bags and lures are placeholders until their
-// cards (39, 40, 42); a `prop` takes its body from content.
+// these). A fixture is a fixed sensor; everything else is a dynamic prop. Traps, bags and lures are
+// placeholders until their cards (40, 42); a `prop` takes its body from content.
 const COLLIDER: Record<Kind, () => ColliderDesc> = {
   cat: () => RAPIER.ColliderDesc.capsule(0.2, 0.25),
   dog: () => RAPIER.ColliderDesc.capsule(0.3, 0.4),
@@ -78,11 +84,16 @@ export function spawnOf(sim: Sim, b: Body): Spawn {
 
 export function spawnEntity(sim: Sim, s: Spawn): Entity {
   const { world } = sim;
-  const desc = isCharacter(s.kind) ? RAPIER.RigidBodyDesc.kinematicVelocityBased() : RAPIER.RigidBodyDesc.dynamic();
+  const desc = isCharacter(s.kind)
+    ? RAPIER.RigidBodyDesc.kinematicVelocityBased()
+    : isFixture(s.kind)
+      ? RAPIER.RigidBodyDesc.fixed()
+      : RAPIER.RigidBodyDesc.dynamic();
   const body = world.createRigidBody(desc.setTranslation(s.p.x, s.p.y, s.p.z).setRotation(s.q ?? { x: 0, y: 0, z: 0, w: 1 }));
+  if (isFixture(s.kind)) body.sleep(); // at rest from the start: its owner sends its pose once (ADR 0006)
   const prop = s.prop === undefined ? undefined : sim.level.props[s.prop];
   const kindGroups = s.kind === 'dog' ? GROUPS.dog : s.kind === 'cat' ? GROUPS.cat : GROUPS.body;
-  const collider = world.createCollider(prop ? propCollider(prop) : COLLIDER[s.kind]().setCollisionGroups(kindGroups), body);
+  const collider = world.createCollider(prop ? propCollider(prop) : COLLIDER[s.kind]().setCollisionGroups(kindGroups).setSensor(isFixture(s.kind)), body);
   // Contacts that press above IMPACT weights are reported: the noise of an impact (ADR 0010).
   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
   collider.setContactForceEventThreshold(IMPACT * collider.mass() * -world.gravity.y);

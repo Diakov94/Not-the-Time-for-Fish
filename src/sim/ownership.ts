@@ -1,11 +1,12 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
-import type { Claim, Despawn, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
+import { isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
+import type { Blast, Claim, Defused, Despawn, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
+import { blasted } from './mines.ts';
 import { isRound, receiveRound, settle, turned, type RoundMessage } from './round.ts';
 import type { Sim } from './world.ts';
 
 // ADR 0006's, 0007's and 0009's messages, in the relay's order.
-export type FoldMessage = Spawn | Claim | Release | Left | Hit | Despawn;
+export type FoldMessage = Spawn | Claim | Release | Left | Hit | Despawn | Blast | Defused;
 
 export type Ownership = { owner: ClientId; held: boolean };
 
@@ -90,6 +91,10 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, ho
     case 'despawn':
       // Only the host removes an entity (ADR 0007): its row goes, and `receive` drops the entity.
       return m.from === host && t.rows.delete(m.id);
+    case 'blast':
+    case 'defused':
+      // A cat stepped on a mine or defused it: the first delivered ends the mine.
+      return entities.get(m.id)?.kind === 'mine' && sideOf(entities, m.from) === 'cat' && t.rows.delete(m.id);
   }
 }
 
@@ -111,9 +116,10 @@ export function carried(sim: Sim): Entity | undefined {
   return undefined;
 }
 
-// Body types follow the table's decision, on every client at the same message.
+// Body types follow the table's decision, on every client at the same message; a fixture stays fixed.
 export function setBodyTypes(sim: Sim): void {
   for (const e of sim.entities.values()) {
+    if (isFixture(e.kind)) continue;
     const type = !simulatedHere(sim, e)
       ? RAPIER.RigidBodyType.KinematicPositionBased // a follower of its carrier or a copy of its owner
       : isCharacter(e.kind)
@@ -171,7 +177,14 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities, host);
-  if (accepted && m.type === 'despawn') remove(sim, m.id);
+  // A message that ends an entity takes it out of play; a mine's end is an event where it lay, and a blast
+  // acts on the bodies this client simulates.
+  if (accepted && (m.type === 'despawn' || m.type === 'blast' || m.type === 'defused')) {
+    const p = sim.entities.get(m.id)!.body.translation();
+    remove(sim, m.id);
+    if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from });
+    if (m.type === 'blast') blasted(sim, m, p);
+  }
   if (!accepted && !settled) return;
   setBodyTypes(sim);
   if (!accepted) return;
