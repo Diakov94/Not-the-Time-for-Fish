@@ -16,7 +16,7 @@ export type Session = {
   owed: Set<ClientId>; // joiners whose `joined` this client saw and whose `state` it has not
   rested: Rested;
   receiver: Receiver;
-  lastTick: number;
+  lastTick: number; // when the last tick was due
   ticks: number; // tick messages sent, for the headless runner's count
 };
 
@@ -145,13 +145,15 @@ export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: numb
 }
 
 // One frame of the caller's loop, in real time: copies move toward their owners' poses, the sim
-// steps and its touch claims go out, and every TICK_MS a tick goes out.
+// steps and its touch claims go out, and every TICK_MS a tick goes out. The next tick is due TICK_MS
+// after the last one was due, not after the frame that sent it, so the mean interval is TICK_MS at any
+// frame rate; after a stall of more than a tick the schedule starts again from now.
 export function frame(s: Session, dt: number, intent: Intent): void {
   const now = performance.now();
   interpolate(s.sim, s.receiver, now);
   for (const claim of step(s.sim, dt, intent, s.host)) send(s, claim);
   if (now - s.lastTick < TICK_MS) return;
-  s.lastTick = now;
+  s.lastTick = now - s.lastTick < 2 * TICK_MS ? s.lastTick + TICK_MS : now;
   const t = tick(s.sim, s.rested);
   if (!t) return;
   send(s, t);

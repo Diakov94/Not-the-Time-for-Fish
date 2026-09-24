@@ -255,6 +255,37 @@ test("the heist timer out with a fish held gives overtime; the fish's release en
   console.log(ends.join('\n'));
 });
 
+test("in overtime the carrier's client pings from its cat every 1 s, the first at once, and stops on the drop; none before, none from a cat with no fish", () => {
+  const r = relay();
+  r.players(3);
+  toHeist(r);
+  const [cat, other] = catsOf(r);
+  character(r, cat!);
+  r.send(other!, spawnOf(other!, { kind: 'cat', p: { x: -4, y: 1, z: 0 } }));
+  const fish = holdFish(r, cat!);
+  for (const s of r.sims()) s.phaseAt -= knobs(s.round).heist - 3; // the heist's time is up 3 s from now
+  const pings: { t: number; from: ClientId; phase: string }[] = [];
+  let seen = r.history.length;
+  const watch = (steps: number) => {
+    for (let i = 0; i < steps; i++) {
+      r.run(1);
+      for (const [m] of r.history.slice(seen)) if (m.type === 'noise' && m.cause === 'carrier') pings.push({ t: cat!.time - cat!.phaseAt, from: m.from, phase: cat!.round.phase });
+      seen = r.history.length;
+    }
+  };
+  watch(3 * 60 + 270); // 3 s of heist, then 4.5 s of overtime
+  const body = cat!.entities.get(fish)!.body;
+  r.send(cat!, { type: 'release', from: cat!.me, id: fish, p: body.translation(), q: body.rotation(), v: { x: 0, y: 0, z: 0 } });
+  const dropped = pings.length;
+  watch(2 * 60);
+  const gaps = pings.slice(1).map((p, i) => p.t - pings[i]!.t);
+  console.log(`pings at ${pings.map((p) => `${p.phase} ${p.t.toFixed(3)}`).join(', ')} s; gaps ${gaps.map((g) => g.toFixed(3)).join(' / ')} s; after the drop ${pings.length - dropped}`);
+  expect(pings.map((p) => `${p.phase}:${p.from}`)).toEqual(Array(5).fill(`overtime:${cat!.me}`));
+  expect(pings[0]!.t).toBeLessThanOrEqual(STEP + 1e-9);
+  for (const g of gaps) expect(Math.abs(g - 1)).toBeLessThanOrEqual(STEP);
+  expect(pings.length - dropped).toBe(0);
+});
+
 test('the host leaves mid-heist: the next host ends the heist on time; no phase is folded twice', { timeout: 30000 }, () => {
   const r = relay();
   const [old, next, third] = r.players(3);

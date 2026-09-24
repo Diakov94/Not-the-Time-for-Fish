@@ -23,8 +23,8 @@ export type Cleared = { type: 'cleared'; from: ClientId; id: NetId };
 export type Pickup = { type: 'pickup'; from: ClientId; id: NetId };
 // Events, not folded (ADR 0010): a noise ping born at the sender, and a team marker for the sender's side.
 // A noise names its cause, set where it is born: a character's step, an impact, a mine's blast, a sprung trap,
-// a door opened, a cat a bark flushed out of its hiding spot.
-export type NoiseCause = 'step' | 'impact' | 'blast' | 'trap' | 'door' | 'flush';
+// a door opened, a cat a bark flushed out of its hiding spot, a cat carrying a fish in overtime.
+export type NoiseCause = 'step' | 'impact' | 'blast' | 'trap' | 'door' | 'flush' | 'carrier';
 export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number; cause: NoiseCause };
 export type Mark = { type: 'mark'; from: ClientId; p: Vector };
 // A dog's Bark (card 42) where it stands: an event every cat's client answers for its own cat.

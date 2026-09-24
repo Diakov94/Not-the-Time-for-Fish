@@ -16,6 +16,8 @@ const OPENING = 3; // s of a cat's work at a door storage (the fridge) before it
 const DOOR_WORK = 2; // s of a cat's work at a shut house door before it opens
 const DOOR_LOUD = 0.6; // the opened door's noise ping, a storage's or a house door's
 const LATCH = 1; // m from the latch point a free cat opens the kennel
+const CARRIER_EVERY = 1; // s between an overtime carrier's noise pings (GAME.md, Round Structure)
+const CARRIER_LOUD = 0.5; // louder than a dog's step, quieter than a door
 
 // How far `p` is from the box, 0 inside it.
 function away(p: Vector, b: Box): number {
@@ -76,12 +78,17 @@ export function interact(sim: Sim): SimMessage | null {
   return null;
 }
 
+// Whether this client is the pinging carrier: the round table says overtime and the fold says this client
+// holds a fish. The ping and the HUD's line both read it.
+export const pinging = (sim: Sim): boolean => sim.round.phase === 'overtime' && carried(sim)?.kind === 'fish';
+
 // Every step after the world's, what this client detects for the round (ADR 0007: born at the fact's
 // owner). Exits carry their cats blockers while the table says prep, and the kennel's gate lets only dogs
 // meet it while a rescue holds it open. A door storage worked on for OPENING, or a house door for
 // DOOR_WORK, by a cat still at it opens, loudly. This client's dog that meets a shut house door in play
 // barges it: open here at once, and for everyone at the message. A house door is fixed at its closed pose
 // while shut and a free panel once open. A fish this client holds inside the hideout is secured, once.
+// While this client is the pinging carrier, its character pings every CARRIER_EVERY, the first at once.
 // This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured; its
 // dig-out timer ending digs it out.
 export function roundStep(sim: Sim): SimMessage[] {
@@ -112,6 +119,11 @@ export function roundStep(sim: Sim): SimMessage[] {
   if (stealing && held?.kind === 'fish' && !sim.securing.has(held.id) && volumeAt(sim, 'hideout', held.body.translation()) >= 0) {
     sim.securing.add(held.id);
     out.push({ type: 'secured', from: sim.me, fish: held.id, at: sim.time - sim.heistAt });
+  }
+  if (!pinging(sim)) sim.carrierPing = null;
+  else if (c && (sim.carrierPing === null || sim.time >= sim.carrierPing + CARRIER_EVERY - 1e-9)) {
+    sim.carrierPing = sim.time;
+    out.push({ type: 'noise', from: sim.me, p: c.body.translation(), loud: CARRIER_LOUD, cause: 'carrier' });
   }
   const me = playerOf(r, sim.me);
   if (me?.captured !== null) sim.capturing = false; // the table answered, or there is nothing to answer

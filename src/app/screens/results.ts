@@ -1,5 +1,5 @@
 import type { ClientId } from '../../sim/entities.ts';
-import { successor, type Result, type Why } from '../../sim/round.ts';
+import { successor, type Decider, type Result, type Why } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
 import { score, tag, TEAM } from './parts.ts';
 
@@ -9,6 +9,13 @@ const WHY: Record<Why, string> = {
   captured: 'усі коти у вольєрі',
   timer: 'сплив час пограбування',
   overtime: 'скінчився овертайм',
+};
+
+// The rule that decided the match, as the table's `decided` names it.
+const DECIDED: Record<Decider, string> = {
+  more: 'Вирішила кількість: команда винесла більше риби.',
+  sooner: 'Риби порівну: вирішила швидша остання риба — її винесли раніше у своєму раунді.',
+  level: 'Риби порівну, і жодна команда не винесла останню рибу раніше: нічия.',
 };
 
 // Seconds as m:ss.
@@ -22,9 +29,9 @@ function ended(x: Result, i: number): HTMLElement {
 }
 
 // The results (card 48), shown while the round table says `over`: the round's outcome and, once the
-// table holds the match's, the match and the session score. The winner, the counts and the reasons are
-// the table's; the match's deciding rule is not in the table, so the screen shows the counts and times
-// it was decided on beside the rule. The host's button sends `next`, the table's successor phase.
+// table holds the match's, the match, the rule that decided it and the session score. The winner, the
+// counts, the reasons and the deciding rule are the table's; the screen shows the counts and times it was
+// decided on beside the rule. The host's button sends `next`, the table's successor phase.
 export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => void {
   const screen = tag('div', { className: 'screen results' });
   document.body.append(screen);
@@ -32,7 +39,7 @@ export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => v
   return (sim, host) => {
     const r = sim.round;
     screen.hidden = r.phase !== 'over';
-    const key = JSON.stringify([r.round, r.results, r.match, r.score, host]);
+    const key = JSON.stringify([r.round, r.results, r.match, r.decided, r.score, host]);
     if (screen.hidden || key === drawn) return;
     drawn = key;
     const match =
@@ -40,7 +47,7 @@ export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => v
         ? []
         : [
             tag('h2', { textContent: r.match === 'draw' ? 'Матч: нічия' : `Матч виграла ${TEAM[r.match]}` }),
-            tag('p', { textContent: 'Перемагає більше винесеної риби; порівну — команда, що винесла останню рибу раніше у своєму раунді; 0 : 0 — нічия.' }),
+            tag('p', { textContent: DECIDED[r.decided!] }),
             tag('p', { textContent: score(r) }),
           ];
     const button = successor(r).to === 'lobby' ? 'До лобі' : 'Наступний раунд';
