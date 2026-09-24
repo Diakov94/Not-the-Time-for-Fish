@@ -8,7 +8,7 @@ import { stunned } from './mines.ts';
 import { clear } from './traps.ts';
 import { myCharacter } from './movement.ts';
 import { carried } from './ownership.ts';
-import { playerOf } from './round.ts';
+import { captives, playerOf } from './round.ts';
 import type { Sim } from './world.ts';
 
 const TAKE = 0.8; // m from a storage's box: a cat takes a fish from there, and a teammate holds a lid
@@ -64,7 +64,7 @@ export function interact(sim: Sim): SimMessage | null {
   const p = c.body.translation();
   const latch = sim.level.points.find((pt) => pt.role === 'latch')?.p;
   const free = playerOf(sim.round, sim.me)?.captured === null;
-  if (latch && free && away(p, { p: latch, half: { x: 0, y: 0, z: 0 } }) <= LATCH && sim.round.roster.some((q) => q.captured !== null)) {
+  if (latch && free && away(p, { p: latch, half: { x: 0, y: 0, z: 0 } }) <= LATCH && captives(sim.round).length > 0) {
     return { type: 'rescue', from: sim.me };
   }
   if (sim.opening || sim.doorWork) return null;

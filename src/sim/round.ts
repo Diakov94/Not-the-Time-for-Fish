@@ -114,7 +114,11 @@ export function duration(r: Round): number | null {
   return r.phase === 'prep' ? PREP : r.phase === 'heist' ? knobs(r).heist : r.phase === 'overtime' ? OVERTIME : null;
 }
 
-const cats = (r: Round) => r.roster.filter((p) => p.side === 'cat' && p.client !== null);
+// The cats this round, their client here or away (ADR 0007: the roster owns who plays): a cat whose tab died
+// keeps its state, free or captured, its character frozen where it stood, so a `left` never ends a round.
+const cats = (r: Round) => r.roster.filter((p) => p.side === 'cat');
+// The captured cats: every one a rescue frees, and what a free cat's interact at the latch answers.
+export const captives = (r: Round) => cats(r).filter((p) => p.captured !== null);
 export const inPlay = (r: Round) => r.phase === 'prep' || r.phase === 'heist' || r.phase === 'overtime';
 const stealing = (r: Round) => r.phase === 'heist' || r.phase === 'overtime';
 
@@ -249,8 +253,8 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       r.caught.push({ cat: p.name, by: m.by === null ? null : (playerOf(r, m.by)?.name ?? null), at: m.at });
       return true;
     case 'rescue': {
-      // A free cat opens the kennel: every captured cat is free at once.
-      const inside = cats(r).filter((q) => q.captured !== null);
+      // A free cat opens the kennel: every captured cat is free at once, one whose tab died too.
+      const inside = captives(r);
       if (!inPlay(r) || !p || playsAs(r, m.from) !== 'cat' || p.captured !== null || inside.length === 0) return false;
       for (const q of inside) q.captured = null;
       return true;

@@ -12,7 +12,7 @@ import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { newOwnershipTable, receive } from './ownership.ts';
-import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, successor, type RoundMessage } from './round.ts';
+import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, settle, successor, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -189,6 +189,38 @@ test('the score is per player: p3 secures 2, p0 catches 1, p1 2, a capture held 
 });
 
 // A side's looks are its characters in the roster (card 100): six per side, the fold refuses a seventh.
+// Three names folded to the heist, the table's ends settled after every message as `receive` does: p0
+// the dog, p1 and p2 the cats.
+function heistOf3() {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const fold = (m: RoundMessage | Left) => {
+    const ok = foldRound(r, m, 'c0', t, new Map());
+    settle(r, t, new Map());
+    return ok;
+  };
+  for (let i = 0; i < 3; i++) fold({ type: 'hello', from: `c${i}`, name: `p${i}` });
+  for (let k = 0; k < 2; k++) fold({ type: 'phase', from: 'c0', ...successor(r) });
+  return { r, fold };
+}
+
+test("a free cat's tab dying mid-heist, its teammate captured, ends nothing", () => {
+  const { r, fold } = heistOf3();
+  fold({ type: 'captured', from: 'c1', at: 5, by: null });
+  fold({ type: 'left', id: 'c2', host: 'c0' });
+  console.log(`${r.roster.map((p) => `${p.name}:${p.side}`).join(' ')}; phase after the free cat's left: ${r.phase}`);
+  expect(r.phase).toBe('heist');
+});
+
+test('a rescue frees a captured cat whose tab died, and its rejoin by name enters free', () => {
+  const { r, fold } = heistOf3();
+  fold({ type: 'captured', from: 'c2', at: 5, by: null });
+  fold({ type: 'left', id: 'c2', host: 'c0' });
+  const rescue = fold({ type: 'rescue', from: 'c1' });
+  fold({ type: 'hello', from: 'c9', name: 'p2' });
+  console.log(`the rescue with the captive away accepted: ${rescue}; its rejoin's captured: ${playerOf(r, 'c9')?.captured}`);
+  expect([rescue, playerOf(r, 'c9')?.captured, r.phase]).toEqual([true, null, 'heist']);
+});
+
 test('the fold accepts looks 0 to 5 on either side and refuses 6', () => {
   const [r, t] = [newRound(), newOwnershipTable()];
   foldRound(r, { type: 'hello', from: 'A', name: 'P0' }, 'A', t, new Map());
