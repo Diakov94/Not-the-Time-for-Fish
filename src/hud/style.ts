@@ -21,11 +21,17 @@ export const CSS = `
   border-radius: calc(1.2 * var(--u));
   padding: calc(0.8 * var(--u)) calc(1.6 * var(--u));
 }
-.hud .clock {
+.hud .top {
   position: absolute;
   top: calc(7 * var(--u));
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(1 * var(--u));
+}
+.hud .clock {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -78,5 +84,70 @@ export const CSS = `
 }
 .hud .items .off {
   opacity: 0.5;
+}
+.hud .overtime {
+  font-size: calc(2.6 * var(--u));
+  background: rgb(150 30 20 / 0.8);
+  white-space: nowrap;
+}
+.hud .work {
+  position: absolute;
+  bottom: calc(3 * var(--u));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(32 * var(--u));
+  text-align: center;
+  font-size: calc(2.2 * var(--u));
+}
+.hud .work .bar {
+  height: calc(1.6 * var(--u));
+  margin-top: calc(0.6 * var(--u));
+  border: calc(0.3 * var(--u)) solid #f4f1ea;
+  border-radius: calc(1 * var(--u));
+  overflow: hidden;
+}
+.hud .work .fill {
+  height: 100%;
+  background: #f4f1ea;
+}
+.hud .whisker i {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: calc(12 * var(--u));
+  height: calc(10 * var(--u));
+  margin-top: calc(-5 * var(--u));
+}
+.hud .whisker i + i {
+  left: auto;
+  right: 0;
+  transform: scaleX(-1);
+}
+.hud .whisker b {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: calc(0.6 * var(--u));
+  border-radius: calc(0.3 * var(--u));
+  background: #f4f1ea;
+  box-shadow: 0 0 0 calc(0.25 * var(--u)) rgb(0 0 0 / 0.6);
+  transform-origin: left center;
+  animation: twitch 0.12s ease-in-out infinite alternate;
+}
+.hud .whisker b:first-child {
+  transform: rotate(-16deg);
+}
+.hud .whisker b:last-child {
+  transform: rotate(16deg);
+  animation-delay: -0.06s;
+}
+@keyframes twitch {
+  from {
+    rotate: -5deg;
+  }
+  to {
+    rotate: 5deg;
+  }
 }
 `;
