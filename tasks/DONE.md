@@ -63,3 +63,7 @@
 - 50 name and rejoin: the room screen asks for the name and remembers it; a rejoin is the join. Batch A1, 2026-09-24.
 - 51 spectate from the kennel: a captured cat watches a free teammate. Batch A1, 2026-09-24.
 - 68 refusal reason: the round fold names it; the room screen says it in Ukrainian. Batch A1, 2026-09-24.
+- 59 HUD always on: phase and timer, fish counter, carried items (minesLeft extracted in src/sim/mines.ts, plant reads it too). Batch HU1, 2026-09-24.
+- 60 HUD contextual: whisker cue, plant and defuse progress, overtime warning. Batch HU1, 2026-09-24.
+- 61 teammate status and ping arrows at the screen's edge for dogs. Batch HU1, 2026-09-24.
+- 62 first-round hints; the HUD keeps only the per-viewer seen-hints list. Batch HU1, 2026-09-24.
