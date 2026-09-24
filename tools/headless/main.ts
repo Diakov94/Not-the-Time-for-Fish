@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { Level } from '../../src/content/level.ts';
 import type { Dump } from '../../src/net/dump.ts';
-import { compareDumps, MOVING_MAX, RESTING_MAX, run, VISIBLE, type Scenario } from './run.ts';
+import { compareDumps, MOVING_MAX, RESTING_MAX, run, VISIBLE, type Result, type Scenario } from './run.ts';
 
 // Found by file name, no record lists them (ADR 0011): a scenario is `scenarios/<name>.ts` with its
 // Scenario as the default export (the bots' helpers there have none); a map is
@@ -17,7 +17,8 @@ const mapOf = async (name: string): Promise<Level | undefined> => (await load(MA
 // `npm run headless -- --scenario <name> --clients N --seconds S`: no browser, no jsdom; exit 1 when a
 // judge fails, 2 for a scenario or a map it does not know. `--map <name>` plays the scenario on that map
 // instead of its own. A round scenario takes `--heist S` (the heist's length) and `--rounds N`;
-// `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay; `--compare` below.
+// `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay; `--counts` and
+// `--compare` below.
 const { values, positionals } = parseArgs({
   options: {
     scenario: { type: 'string', default: 'default' },
@@ -28,6 +29,7 @@ const { values, positionals } = parseArgs({
     rounds: { type: 'string' },
     'tick-rate': { type: 'string', default: '1' },
     delay: { type: 'string', default: '1' },
+    counts: { type: 'string' },
     compare: { type: 'boolean' },
   },
   allowPositionals: true,
@@ -60,6 +62,30 @@ const clients = Number(values.clients);
 const seconds = Number(values.seconds ?? scenario.seconds ?? 20);
 const heist = values.heist === undefined ? scenario.heist : Number(values.heist);
 const knobs = { ticks: Number(values['tick-rate']), delay: Number(values.delay), rounds: Number(values.rounds ?? scenario.rounds ?? 1), ...(heist !== undefined && { heist }) };
+const worst = (r: Result, k: 'moving' | 'resting') => Math.max(...r.divergence.map((d) => d[k]));
+// `--counts 3,4,5,6,7,8`: the scenario once per player count, one run after another, and one table: a line
+// per count of its sides, the shared judges' worst moving copy and visible desyncs, the scenario judge's
+// row, its wall time and verdict (card 132's numbers for the balance knobs).
+if (values.counts) {
+  const t0 = performance.now();
+  const rows: Record<string, string>[] = [];
+  let code = 0;
+  for (const n of values.counts.split(',').map(Number)) {
+    const t = performance.now();
+    const r = await run(scenario, n, seconds, knobs);
+    const dogs = r.clients.filter((c) => c.side === 'dog').length;
+    const verdict = r.code === 0 ? 'PASS' : 'FAIL';
+    const wall = `${((performance.now() - t) / 1000).toFixed(1)} s`;
+    rows.push({ players: String(n), sides: `${dogs} vs ${r.clients.length - dogs}`, 'moving m': worst(r, 'moving').toFixed(3), desyncs: r.desyncs.join('/'), ...r.verdict.row, wall, verdict });
+    code = Math.max(code, r.code);
+  }
+  const keys = [...new Set(rows.flatMap((x) => Object.keys(x)))];
+  const width = keys.map((k) => Math.max(k.length, ...rows.map((x) => (x[k] ?? '').length)));
+  console.log(`headless: ${values.scenario}${values.map ? ` on ${values.map}` : ''} at ${values.counts} clients, ${seconds} s each (${scenario.about}); sides dogs vs cats`);
+  for (const x of [Object.fromEntries(keys.map((k) => [k, k])), ...rows]) console.log(keys.map((k, i) => (x[k] ?? '').padEnd(width[i]!)).join('  '));
+  console.log(`wall time: ${((performance.now() - t0) / 1000).toFixed(1)} s for ${rows.length} runs; ${code === 0 ? 'PASS' : 'FAIL'}`);
+  process.exit(code);
+}
 const t0 = performance.now();
 const r = await run(scenario, clients, seconds, knobs);
 const m = (x: number) => x.toFixed(3).padStart(8);
@@ -69,8 +95,7 @@ console.log(`headless: ${values.scenario}${values.map ? ` on ${values.map}` : ''
 console.log(`sides: ${r.clients.map((c) => `${c.id} ${c.side}`).join(', ')}; ${r.sidesAgree ? 'the same' : 'NOT the same'} on every client`);
 console.log('entity    kind       moving m  resting m  exact -100 ms m (not judged)');
 for (const d of r.divergence) console.log(`${d.id.padEnd(9)} ${d.kind.padEnd(9)} ${m(d.moving)}  ${m(d.resting)}  ${m(d.exact)}`);
-const worst = (k: 'moving' | 'resting') => Math.max(...r.divergence.map((d) => d[k]));
-console.log(`max: moving ${worst('moving').toFixed(3)} m (limit ${MOVING_MAX}), resting ${worst('resting').toFixed(3)} m (limit ${RESTING_MAX})`);
+console.log(`max: moving ${worst(r, 'moving').toFixed(3)} m (limit ${MOVING_MAX}), resting ${worst(r, 'resting').toFixed(3)} m (limit ${RESTING_MAX})`);
 const visible = r.visible.reduce((n, v) => n + v.n, 0);
 console.log(
   `visible desyncs (a copy > ${VISIBLE.off} m off its owner's path for > ${VISIBLE.for / 1000} s): ${visible} (limit ${VISIBLE.max} per round)${r.desyncs.length > 1 ? `, by round ${r.desyncs.join('/')}` : ''}${r.visible.map((v) => `; ${v.id} ${v.kind} ${v.n}`).join('')}`,

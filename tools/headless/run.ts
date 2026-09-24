@@ -40,7 +40,8 @@ export type Scenario = {
   heist?: number;
   rounds?: number;
 };
-export type Verdict = { lines: string[]; ok: boolean };
+// `row`: the scenario's numbers by name, one line of a player-count sweep's table.
+export type Verdict = { lines: string[]; ok: boolean; row?: Record<string, string> };
 // The runner's knobs, none of them a norm of the game: the tick sender's rate and the interpolation delay
 // as fractions of TICK_MS's rate and DELAY_MS (card 66's negatives; `ticks: 0` sends none, card 11's), the
 // heist's length for a round scenario (card 63: every client's phase start is moved back at its heist's
@@ -466,7 +467,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     };
     const bad = div.some((d) => d.moving > MOVING_MAX || d.resting > RESTING_MAX) || desyncs.some((n) => n > VISIBLE.max);
     const ok = !bad && r.sidesAgree && r.tablesAgree && r.roundsAgree && r.doomed === 0 && errors.length === 0 && verdict.ok;
-    return { ...r, verdict: { lines: [...errors, ...verdict.lines], ok: verdict.ok }, code: ok ? 0 : 1 };
+    return { ...r, verdict: { ...verdict, lines: [...errors, ...verdict.lines] }, code: ok ? 0 : 1 };
   } finally {
     for (const l of links) if (l.state !== 'gone') l.session.ws.close();
     await relay.close();

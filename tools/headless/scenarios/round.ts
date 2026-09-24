@@ -127,12 +127,24 @@ function judge(r: Run): Verdict {
   const count = (type: string) => r.samples.reduce((n, x) => n + x.events[h]!.filter((e) => e.type === type).length, 0);
   const mines = [...kinds.values()].filter((k) => k === 'mine').length;
   const by = (type: string) => r.wires[h]!.turns.filter((t) => t.by === type).length;
+  const row = {
+    round: `${s(took)} s`,
+    fish: String(result?.secured ?? 0),
+    grab: grab && heist ? `${s((grab.t - heist.at) / 1000)} s` : 'none',
+    mines: String(mines),
+    defused: String(count('defused')),
+    blasts: String(count('blast')),
+    captured: String(by('captured')),
+    rescues: String(by('rescue')),
+    winner: result ? `${result.winner} (cats ${result.cats})` : 'none',
+    why: result?.why ?? 'none',
+  };
   const lines = [
     `the end: ${result ? `${result.why}, ${result.secured} fish, winner team ${result.winner} (cats ${result.cats})` : 'none'} on ${here.length} clients at ${oneMessage ? `one message, seq ${overs[0]!.seq}` : 'DIFFERENT messages'}; as scripted: ${scripted ?? false}`,
-    `round: ${s(took)} s of sim time from prep to the end (limit ${LIMIT(players)})${r.heist === undefined ? '' : `, heist ${r.heist} s`}`,
-    `fish delivered ${result?.secured ?? 0}; first grab ${grab && heist ? `${s((grab.t - heist.at) / 1000)} s into the heist` : 'none'}; mines armed ${mines}, defused ${count('defused')}, blasts ${count('blast')}; captured ${by('captured')}, rescues ${by('rescue')}`,
+    `round: ${row.round} of sim time from prep to the end (limit ${LIMIT(players)})${r.heist === undefined ? '' : `, heist ${r.heist} s`}`,
+    `fish delivered ${row.fish}; first grab ${row.grab === 'none' ? 'none' : `${row.grab} into the heist`}; mines armed ${row.mines}, defused ${row.defused}, blasts ${row.blasts}; captured ${row.captured}, rescues ${row.rescues}`,
   ];
-  return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players) };
+  return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players), row };
 }
 
 // Card 63: a round to the end at any roster size, the players sided by the auto-balance, the same scripts.
