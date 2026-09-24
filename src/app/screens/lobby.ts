@@ -43,7 +43,7 @@ export function lobbyScreen(room: string, send: (m: Roster | Look) => void, star
         { className: 'looks' },
         side === 'cat' ? 'Ваш кіт: ' : 'Ваш пес: ',
         ...ofSide(side).map(({ name }, look) =>
-          tag('button', { type: 'button', textContent: name, ariaPressed: String(me !== undefined && lookOf(r, me, side) === look), onclick: () => send({ type: 'look', from: sim.me, side, look }) }),
+          tag('button', { type: 'button', textContent: name, ariaPressed: String(me !== undefined && lookOf(r, me, side) === look), onclick: () => send({ type: 'look', from: sim.me, side, look, worn: me?.worn[side] ?? {} }) }),
         ),
       );
     const cats = catsTeam(r);
