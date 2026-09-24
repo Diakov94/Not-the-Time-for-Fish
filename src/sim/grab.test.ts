@@ -1,8 +1,8 @@
 import { beforeAll, expect, test } from 'vitest';
 import type { RigidBody, Vector } from '@dimforge/rapier3d-compat';
-import { isCharacter, type ClientId, type Kind } from './entities.ts';
+import { prototypeRoom } from '../content/prototype-room.ts';
+import { CRATE_HALF, isCharacter, type ClientId, type Kind } from './entities.ts';
 import { anchor, grab, handOf, throwCarried } from './grab.ts';
-import { CRATE_HALF, prototypeRoom } from './level.ts';
 import { IDLE, yawOf, type Intent } from './movement.ts';
 import { receive, type FoldMessage } from './ownership.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';

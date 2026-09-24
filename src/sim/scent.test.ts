@@ -1,5 +1,5 @@
 import { beforeAll, expect, test } from 'vitest';
-import { prototypeRoom } from './level.ts';
+import { prototypeRoom } from '../content/prototype-room.ts';
 import { IDLE } from './movement.ts';
 import { receive } from './ownership.ts';
 import { sniffed } from './scent.ts';

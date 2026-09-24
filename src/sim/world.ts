@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { Collider, EventQueue, KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
+import type { Collider, EventQueue, KinematicCharacterController, RigidBody, World } from '@dimforge/rapier3d-compat';
+import type { Level } from '../content/level.ts';
+import { build } from './build.ts';
 import type { ClientId, Entities, NetId } from './entities.ts';
-import type { Level } from './level.ts';
 import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
 import { smell, type Scent } from './scent.ts';
@@ -16,6 +17,7 @@ const GRAVITY = 9.81;
 
 export type Sim = {
   me: ClientId; // the client this sim runs on
+  level: Level; // the content level the world is built from (ADR 0008)
   world: World;
   controller: KinematicCharacterController; // drives this client's own character
   entities: Entities;
@@ -24,7 +26,10 @@ export type Sim = {
   time: number; // seconds stepped: the clock of the touch-claim limit
   inFlight: Set<NetId>; // props this client claimed or grabbed whose claim has not come back yet
   touchedAt: Map<NetId, number>; // when this client last produced a touch claim for a prop
-  climbs: Collider[]; // the level's climb volumes, sensors
+  volumes: Collider[]; // the level's volumes as sensors, index for index
+  debris: { prop: number; body: RigidBody }[]; // the level's unsynced props, local bodies with their content prop
+  doors: RigidBody[]; // the level's door panels, index for index
+  spawned: number; // this client's net id counter: ids are `<client>:<n>`
   leap: { x: number; y: number; z: number } | null; // the own character's velocity since its take-off, while airborne
   lunge: number | null; // when the own dog's dash in progress ends
   lungeReady: number; // when the own dog may lunge again
@@ -48,25 +53,13 @@ export async function init(): Promise<void> {
 export function createWorld(level: Level, me: ClientId): Sim {
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = STEP;
-  const h = level.halfSize;
-  const wall = level.wallHeight / 2;
-  world.createCollider(RAPIER.ColliderDesc.cuboid(h, 0.5, h).setTranslation(0, -0.5, 0));
-  for (const [x, z, hx, hz] of [
-    [h, 0, 0.25, h],
-    [-h, 0, 0.25, h],
-    [0, h, h, 0.25],
-    [0, -h, h, 0.25],
-  ] as const) {
-    world.createCollider(RAPIER.ColliderDesc.cuboid(hx, wall, hz).setTranslation(x, wall, z));
-  }
-  const climbs = (level.climbs ?? []).map(({ p, half }) =>
-    world.createCollider(RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(p.x, p.y, p.z).setSensor(true)),
-  );
+  const { volumes, debris, doors } = build(world, level);
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
   return {
     me,
+    level,
     world,
     controller,
     entities: new Map(),
@@ -75,7 +68,10 @@ export function createWorld(level: Level, me: ClientId): Sim {
     time: 0,
     inFlight: new Set(),
     touchedAt: new Map(),
-    climbs,
+    volumes,
+    debris,
+    doors,
+    spawned: 0,
     leap: null,
     lunge: null,
     lungeReady: 0,

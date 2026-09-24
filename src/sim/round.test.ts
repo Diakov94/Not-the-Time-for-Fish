@@ -1,7 +1,7 @@
 import { beforeAll, expect, test } from 'vitest';
+import { prototypeRoom } from '../content/prototype-room.ts';
 import { forward, join, leave, newRoom, type Out } from '../relay/room.ts';
 import type { ClientId } from './entities.ts';
-import { prototypeRoom } from './level.ts';
 import type { Left, SimMessage } from './messages.ts';
 import { IDLE, type Intent } from './movement.ts';
 import { receive } from './ownership.ts';

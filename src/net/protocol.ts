@@ -13,7 +13,7 @@ export type State = {
   from: ClientId;
   to: ClientId;
   seq: number;
-  entities: { id: NetId; kind: Kind; home: ClientId | null }[];
+  entities: { id: NetId; kind: Kind; home: ClientId | null; prop?: number }[];
   table: { rows: [NetId, Ownership][]; gone: ClientId[] };
 };
 export type GameMessage = SimMessage | Tick | State;

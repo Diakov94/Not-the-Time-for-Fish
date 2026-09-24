@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Capsule, Rotation } from '@dimforge/rapier3d-compat';
+import { volumeAt } from './build.ts';
 import { isCharacter, type Entity } from './entities.ts';
 import { carried, simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
@@ -29,7 +30,8 @@ function footing(sim: Sim, c: Entity): boolean {
   const s = c.body.collider(0).shape as Capsule;
   const down = new RAPIER.Ray(c.body.translation(), { x: 0, y: -1, z: 0 });
   const reach = s.halfHeight + s.radius + 0.1;
-  return sim.world.castRay(down, reach, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, c.body) !== null;
+  const groups = c.body.collider(0).collisionGroups(); // a blocker this character passes is no footing
+  return sim.world.castRay(down, reach, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, groups, undefined, c.body) !== null;
 }
 
 // The character this client drives: its own, while the fold leaves it here and nobody carries it.
@@ -61,7 +63,7 @@ export function drive(sim: Sim, c: Entity, intent: Intent): void {
   if (carrying) speed = Math.min(speed, s.carry);
   const k = speed / Math.max(len, 1);
   const p = c.body.translation();
-  const climbing = s.climb > 0 && intent.jump && sim.climbs.some((box) => box.containsPoint(p));
+  const climbing = s.climb > 0 && intent.jump && volumeAt(sim, 'climb', p) >= 0;
   // The mantle: a leap keeps its own velocity while airborne, so a rising character keeps its forward
   // speed against a ledge and steps onto it once its feet clear the top, where the controller's clipped
   // speed would drop it; and the lift the controller gives over a lip moves the pose, never the leap.
@@ -75,7 +77,9 @@ export function drive(sim: Sim, c: Entity, intent: Intent): void {
   const takeoff = grounded && !climbing && intent.jump && s.jump > 0;
   const vy = climbing ? s.climb : grounded ? (takeoff ? s.jump : 0) : (sim.leap ?? v).y + sim.world.gravity.y * dt;
   if (takeoff) sim.leap = { x: vx, y: vy, z: vz };
-  sim.controller.computeColliderMovement(c.body.collider(0), { x: vx * dt, y: vy * dt, z: vz * dt });
+  const body = c.body.collider(0);
+  const flags = RAPIER.QueryFilterFlags.EXCLUDE_SENSORS;
+  sim.controller.computeColliderMovement(body, { x: vx * dt, y: vy * dt, z: vz * dt }, flags, body.collisionGroups());
   const m = sim.controller.computedMovement();
   c.body.setLinvel({ x: m.x / dt, y: m.y / dt, z: m.z / dt }, true);
   if (sim.leap) sim.leap.y = Math.min(vy, m.y / dt); // a ceiling stops the rise

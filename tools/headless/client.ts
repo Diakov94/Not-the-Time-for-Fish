@@ -1,13 +1,13 @@
+import { countryHouse } from '../../src/content/country-house.ts';
 import { connect, frame, send, spawn, type Session } from '../../src/net/client.ts';
+import { spawnPoint } from '../../src/sim/build.ts';
 import { grab, throwCarried } from '../../src/sim/grab.ts';
-import { prototypeRoom } from '../../src/sim/level.ts';
 import { IDLE, type Intent } from '../../src/sim/movement.ts';
 
 const walk = (z: number): Intent => ({ move: { x: 0, z }, sprint: false, jump: false });
 
-// Every headless client's scripted input, in seconds from the start of the run: walk to the crate
-// ahead, grab it, carry it back, throw it, push it on, then walk north into the crate of the second
-// row, which the host owns, and push it to the wall.
+// Every headless client's scripted input, in seconds from the start of the run: from its cat spawn in the
+// country house's hideout it walks north, grabs, walks back, throws, and walks north to the fence.
 const SCRIPT: [at: number, intent: Intent, action: 'grab' | 'throw' | null][] = [
   [0, walk(1), null],
   [0.6, IDLE, 'grab'],
@@ -17,15 +17,14 @@ const SCRIPT: [at: number, intent: Intent, action: 'grab' | 'throw' | null][] = 
   [3.4, walk(1), null],
   [7.0, IDLE, null],
 ];
-const LANES = [-6, -3, 0, 3, 6]; // the crate columns of the Prototype room
 
 export type HeadlessClient = { session: Session; next: number };
 
 // A player's client minus render and app: sim and net over the global WebSocket, driven by SCRIPT.
-// Its character starts in its lane 4 m south of the first crate, facing it.
+// Its character starts at the level's cat spawn of its lane.
 export async function joinHeadless(url: string, lane: number): Promise<HeadlessClient> {
-  const session = await connect(url, prototypeRoom);
-  spawn(session, 'cat', { x: LANES[lane % LANES.length]!, y: 1, z: 2 });
+  const session = await connect(url, countryHouse);
+  spawn(session, 'cat', spawnPoint(countryHouse, 'cat', lane)!);
   return { session, next: 0 };
 }
 

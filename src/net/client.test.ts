@@ -1,8 +1,9 @@
 import { afterEach, beforeAll, expect, test } from 'vitest';
+import type { Level } from '../content/level.ts';
+import { prototypeRoom } from '../content/prototype-room.ts';
 import { startRelay, type Relay } from '../relay/node.ts';
 import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
-import { prototypeRoom, type Level } from '../sim/level.ts';
 import { IDLE, type Intent } from '../sim/movement.ts';
 import { init } from '../sim/world.ts';
 import { connect, frame, send, spawn, type Session } from './client.ts';
@@ -10,7 +11,7 @@ import { dump } from './dump.ts';
 
 beforeAll(init);
 
-const walls = { ...prototypeRoom, crates: [] }; // the Prototype room without the host's crates
+const walls = { ...prototypeRoom, props: [] }; // the Prototype room without the host's crates
 const west: Intent = { move: { x: -1, z: 0 }, sprint: false, jump: false };
 const north: Intent = { move: { x: 0, z: 1 }, sprint: false, jump: false };
 const south: Intent = { move: { x: 0, z: -1 }, sprint: false, jump: false };

@@ -1,8 +1,9 @@
+import { countryHouse } from '../../src/content/country-house.ts';
 import { dump, type Dump } from '../../src/net/dump.ts';
 import { DELAY_MS, TICK_MS } from '../../src/net/ticks.ts';
 import { startRelay } from '../../src/relay/node.ts';
+import { levelBodies } from '../../src/sim/build.ts';
 import { drainEvents } from '../../src/sim/events.ts';
-import { prototypeRoom } from '../../src/sim/level.ts';
 import { init } from '../../src/sim/world.ts';
 import { joinHeadless, playHeadless, type HeadlessClient } from './client.ts';
 
@@ -98,7 +99,7 @@ export async function run(clients: number, seconds: number, ticks = true): Promi
     // The game starts once every client holds every entity and shows its owner's pose of each it does
     // not own.
     const shown = ({ session: { sim, receiver } }: HeadlessClient, now: number) =>
-      sim.entities.size === prototypeRoom.crates.length + clients &&
+      sim.entities.size === levelBodies(countryHouse).length + clients &&
       [...sim.entities.keys()].every(
         (id) => sim.ownership.rows.get(id)?.owner === sim.me || (receiver.get(id)?.[0]?.at ?? Infinity) <= now - DELAY_MS,
       );

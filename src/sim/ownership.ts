@@ -122,7 +122,7 @@ export function setBodyTypes(sim: Sim): void {
 // A joiner's start (ADR 0006, Join): the host's entities and table as of the `seq` of its `state`,
 // taken whole rather than folded; the relay's messages after that `seq` are folded on top.
 export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void {
-  for (const s of entities) spawnEntity(sim.world, sim.entities, s);
+  for (const s of entities) spawnEntity(sim, s);
   sim.ownership = table;
   setBodyTypes(sim);
 }
@@ -137,7 +137,7 @@ export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
     if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
     return;
   }
-  if (m.type === 'spawn') spawnEntity(sim.world, sim.entities, m);
+  if (m.type === 'spawn') spawnEntity(sim, m);
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities);

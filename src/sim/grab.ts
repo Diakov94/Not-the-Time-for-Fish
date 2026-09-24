@@ -72,7 +72,7 @@ function reach(sim: Sim, c: Entity): Claim | null {
     REACH,
     true,
     RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-    undefined,
+    c.body.collider(0).collisionGroups(), // what the character passes, its reach passes
     undefined,
     c.body,
     holdable,

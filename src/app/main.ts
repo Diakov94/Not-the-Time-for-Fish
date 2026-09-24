@@ -1,9 +1,10 @@
+import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send, spawn } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { createView, draw } from '../render/view.ts';
+import { spawnPoint } from '../sim/build.ts';
 import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
-import { prototypeRoom } from '../sim/level.ts';
 import { carried } from '../sim/ownership.ts';
 import { init } from '../sim/world.ts';
 import { intent, listen } from './input.ts';
@@ -15,11 +16,11 @@ const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is
 // The Vite entry: it wires the zones and holds no game fact. The sim owns every pose, the entity table
 // and the fold; net carries them; render draws them; this file only moves input in and frames along.
 await init();
-const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, prototypeRoom));
+const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, countryHouse));
 const { sim } = session;
-// The Prototype room names no spawn point (the headless clients keep lanes): a random spot south of the
-// crates keeps two players who enter at once apart.
-spawn(session, 'cat', { x: (Math.random() - 0.5) * 8, y: 1, z: 0 });
+// The level's cat spawn after those the characters already in the room hold, so two players stand apart.
+const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;
+spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
 
 const canvas = document.querySelector('canvas')!;
 const input = listen(
