@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
 import type { Claim, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
-import { receiveRound } from './round.ts';
+import { isRound, receiveRound, settle, turned, type RoundMessage } from './round.ts';
 import type { Sim } from './world.ts';
 
 // ADR 0006's and 0009's messages, in the relay's order.
@@ -128,11 +128,33 @@ export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void 
 }
 
 // Every client runs this for every message of the relay's order, its own echoed ones included, with the
-// host the relay names as of that message. A noise is an event for everyone; a mark only for the marker's
-// side (ADR 0010). The round's messages go to the round table.
+// host the relay names as of that message. The round's messages go to the round table (ADR 0007); a
+// secured fish leaves play, its entity and its row; the round's own ends are checked after every
+// message; `phase prep` clears the entity table and the ownership rows before the round respawns.
 export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
-  if (m.type === 'hello' || m.type === 'roster' || m.type === 'look' || m.type === 'left') receiveRound(sim, m, host);
-  if (m.type === 'hello' || m.type === 'roster' || m.type === 'look') return;
+  const { phase, round } = sim.round;
+  const accepted = (m.type === 'left' || isRound(m)) && receiveRound(sim, m, host);
+  if (m.type === 'secured' && accepted) {
+    sim.world.removeRigidBody(sim.entities.get(m.fish)!.body);
+    sim.entities.delete(m.fish);
+    sim.ownership.rows.delete(m.fish);
+  }
+  if (!isRound(m)) apply(sim, m);
+  settle(sim.round, sim.ownership, sim.entities);
+  if (sim.round.phase === phase && sim.round.round === round) return;
+  if (sim.round.phase === 'prep') {
+    for (const e of sim.entities.values()) sim.world.removeRigidBody(e.body);
+    sim.entities.clear();
+    sim.ownership.rows.clear();
+    sim.inFlight.clear();
+    sim.scent.clear();
+    [sim.leap, sim.lunge, sim.grabbedAt] = [null, null, null];
+  }
+  turned(sim, host, m.type === 'left' ? m.id : m.from);
+}
+
+// ADR 0006's and 0010's messages. A noise is an event for everyone; a mark only for the marker's side.
+function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left): void {
   if (m.type === 'noise' || m.type === 'mark') {
     if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
     return;

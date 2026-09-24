@@ -121,7 +121,7 @@ export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: numb
 export function frame(s: Session, dt: number, intent: Intent): void {
   const now = performance.now();
   interpolate(s.sim, s.receiver, now);
-  for (const claim of step(s.sim, dt, intent)) send(s, claim);
+  for (const claim of step(s.sim, dt, intent, s.host)) send(s, claim);
   if (now - s.lastTick < TICK_MS) return;
   s.lastTick = now;
   const t = tick(s.sim, s.rested);

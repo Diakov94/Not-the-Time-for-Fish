@@ -21,6 +21,14 @@ export type Side = Extract<Kind, 'cat' | 'dog'>;
 export type Hello = { type: 'hello'; from: ClientId; name: string };
 export type Roster = { type: 'roster'; from: ClientId; name: string; team: Team };
 export type Look = { type: 'look'; from: ClientId; side: Side; look: number };
+// The host's clock: the phase whose time is up gives way to `to`, in round `round` of the match.
+export type Phase = 'lobby' | 'prep' | 'heist' | 'overtime' | 'over';
+export type PhaseMessage = { type: 'phase'; from: ClientId; to: Phase; round: number };
+// Born at the fact's owner (ADR 0007). `at` is the sender's time since the heist began, stored as sent.
+export type Secured = { type: 'secured'; from: ClientId; fish: NetId; at: number };
+export type Captured = { type: 'captured'; from: ClientId; at: number };
+export type Rescue = { type: 'rescue'; from: ClientId };
+export type DugOut = { type: 'dugOut'; from: ClientId };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Noise | Mark | Hello | Roster | Look;
+export type SimMessage = Spawn | Claim | Release | Hit | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut;
