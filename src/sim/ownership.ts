@@ -64,6 +64,15 @@ export function simulatedHere(sim: Sim, e: Entity): boolean {
   return row?.owner === sim.me && !row.held && (e.kind !== 'character' || e.home === sim.me);
 }
 
+// The entity this client carries: the fold says it holds it.
+export function carried(sim: Sim): Entity | undefined {
+  for (const e of sim.entities.values()) {
+    const row = sim.ownership.rows.get(e.id);
+    if (row?.owner === sim.me && row.held) return e;
+  }
+  return undefined;
+}
+
 // Every client runs this for every message of the relay's order, its own echoed ones included.
 export function receive(sim: Sim, m: FoldMessage): void {
   if (m.type === 'spawn') spawnEntity(sim.world, sim.entities, m);
@@ -76,9 +85,10 @@ export function receive(sim: Sim, m: FoldMessage): void {
         : RAPIER.RigidBodyType.KinematicVelocityBased;
     if (e.body.bodyType() !== type) e.body.setBodyType(type, true);
   }
+  if (m.type !== 'release') return;
   // The release carries the handoff state, so the new owner continues the throw or the drop without a gap.
-  const e = m.type === 'release' ? sim.entities.get(m.id) : undefined;
-  if (m.type === 'release' && e && simulatedHere(sim, e)) {
+  const e = sim.entities.get(m.id);
+  if (e && simulatedHere(sim, e)) {
     e.body.setTranslation(m.p, true);
     e.body.setRotation(m.q, true);
     e.body.setLinvel(m.v, true);

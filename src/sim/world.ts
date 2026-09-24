@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
 import type { ClientId, Entities } from './entities.ts';
 import type { Level } from './level.ts';
+import { carry } from './grab.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
 
@@ -49,6 +50,7 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE): void {
     sim.accumulator -= STEP;
     const c = myCharacter(sim);
     if (c) drive(sim, c, intent);
+    carry(sim);
     sim.world.step();
   }
 }

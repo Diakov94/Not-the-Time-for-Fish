@@ -10,6 +10,9 @@ export const IDLE: Intent = { move: { x: 0, z: 0 }, sprint: false, jump: false }
 export const WALK_SPEED = 4;
 export const SPRINT_SPEED = 7;
 const JUMP_SPEED = 5;
+// 720 deg/s. Rapier silently clamps angular velocity at 15 pi rad/s (45 deg per step at 60 Hz), so a
+// faster turn leaves the body short of what `drive` set, and a carried crate 0.77 m off its anchor.
+const TURN_SPEED = 4 * Math.PI;
 
 // The character this client drives: its own, while the fold leaves it here and nobody carries it.
 export function myCharacter(sim: Sim): Entity | undefined {
@@ -41,5 +44,6 @@ export function drive(sim: Sim, c: Entity, intent: Intent): void {
   const m = sim.controller.computedMovement();
   c.body.setLinvel({ x: m.x / dt, y: m.y / dt, z: m.z / dt }, true);
   const turn = len > 0 ? Math.atan2(intent.move.x, intent.move.z) - yawOf(c.body.rotation()) : 0;
-  c.body.setAngvel({ x: 0, y: Math.atan2(Math.sin(turn), Math.cos(turn)) / dt, z: 0 }, true);
+  const w = Math.atan2(Math.sin(turn), Math.cos(turn)) / dt;
+  c.body.setAngvel({ x: 0, y: Math.max(-TURN_SPEED, Math.min(TURN_SPEED, w)), z: 0 }, true);
 }
