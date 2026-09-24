@@ -6,6 +6,7 @@ import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
 import { buildLook, debrisLook, lookOf } from './looks.ts';
 import { createJuice, drawJuice, samples, type Juice } from './juice.ts';
+import { createMarkers, drawMarkers, type Markers } from './markers.ts';
 import { createSenses, drawSenses, type Senses } from './senses.ts';
 import { createWork, drawWork, type Work } from './work.ts';
 
@@ -27,6 +28,7 @@ export type View = {
   senses: Senses;
   juice: Juice;
   work: Work;
+  markers: Markers;
 };
 
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
@@ -53,7 +55,7 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
     scene.add(o);
     return o;
   });
-  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene) };
+  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers() };
   // Every effect's shader compiles now, not on the frame that first shows it (card 57: the first blast's
   // frame took 96 ms): one of each is added and the hidden overlays shown while the scene compiles.
   const effects = samples();
@@ -101,6 +103,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined, shake);
   drawSenses(view.senses, sim, scene, camera);
   drawWork(view.work, sim, objects, camera);
+  drawMarkers(view.markers, sim, scene, camera);
   renderer.render(scene, camera);
 }
 
