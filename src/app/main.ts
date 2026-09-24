@@ -1,7 +1,7 @@
 import { connect, frame, send, spawn } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { createView, draw } from '../render/view.ts';
-import { grab, throwCarried, THROW_SPEED } from '../sim/grab.ts';
+import { grab, throwCarried } from '../sim/grab.ts';
 import { prototypeRoom } from '../sim/level.ts';
 import { carried } from '../sim/ownership.ts';
 import { init } from '../sim/world.ts';
@@ -18,13 +18,13 @@ const session = await roomScreen((code) => connect(`ws://${location.hostname}:${
 const { sim } = session;
 // The Prototype room names no spawn point (the headless clients keep lanes): a random spot south of the
 // crates keeps two players who enter at once apart.
-spawn(session, 'character', { x: (Math.random() - 0.5) * 8, y: 1, z: 0 });
+spawn(session, 'cat', { x: (Math.random() - 0.5) * 8, y: 1, z: 0 });
 
 const canvas = document.querySelector('canvas')!;
 const input = listen(
   canvas,
   () => {
-    const m = carried(sim) ? throwCarried(sim, THROW_SPEED) : grab(sim);
+    const m = carried(sim) ? throwCarried(sim) : grab(sim);
     if (m) send(session, m);
   },
   () => {

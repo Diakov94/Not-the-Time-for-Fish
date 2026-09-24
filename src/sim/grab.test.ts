@@ -1,6 +1,6 @@
 import { beforeAll, expect, test } from 'vitest';
 import type { RigidBody, Vector } from '@dimforge/rapier3d-compat';
-import type { ClientId, Kind } from './entities.ts';
+import { isCharacter, type ClientId, type Kind } from './entities.ts';
 import { anchor, grab, throwCarried } from './grab.ts';
 import { CRATE_HALF, prototypeRoom } from './level.ts';
 import { IDLE, yawOf, type Intent } from './movement.ts';
@@ -35,7 +35,7 @@ function room<T extends ClientId[]>(...clients: T) {
   let n = 0;
   const spawn = (from: ClientId, kind: Kind, p: Vector) => {
     const id = `${from}:${n++}`;
-    relay({ type: 'spawn', from, id, kind, home: kind === 'character' ? from : null, p });
+    relay({ type: 'spawn', from, id, kind, home: isCharacter(kind) ? from : null, p });
     return id;
   };
   const run = (intent: Intent, steps: number) => {
@@ -46,8 +46,8 @@ function room<T extends ClientId[]>(...clients: T) {
 
 test('a crate carried 3 m stays within 0.05 m of the anchor on every step', () => {
   const { sims: [a], relay, spawn, run } = room('A');
-  const me = spawn('A', 'character', { x: -5, y: 1, z: 0 });
-  const box = spawn('A', 'crate', { x: -5, y: CRATE_HALF, z: 1.5 }); // ahead: the character faces +z
+  const me = spawn('A', 'cat', { x: -5, y: 1, z: 0 });
+  const box = spawn('A', 'prop', { x: -5, y: CRATE_HALF, z: 1.5 }); // ahead: the character faces +z
   run(IDLE, 30);
   relay(grab(a));
   const c = a.entities.get(me)!.body;
@@ -64,12 +64,12 @@ test('a crate carried 3 m stays within 0.05 m of the anchor on every step', () =
 
 test('a 6 m/s throw lands 2–4 m away', () => {
   const { sims: [a], relay, spawn, run } = room('A');
-  const me = spawn('A', 'character', { x: 0, y: 1, z: -5 });
-  const box = spawn('A', 'crate', { x: 0, y: CRATE_HALF, z: -3.5 });
+  const me = spawn('A', 'cat', { x: 0, y: 1, z: -5 });
+  const box = spawn('A', 'prop', { x: 0, y: CRATE_HALF, z: -3.5 });
   run(IDLE, 30);
   relay(grab(a));
   run(IDLE, 10);
-  relay(throwCarried(a, 6));
+  relay(throwCarried(a));
   const from = a.entities.get(me)!.body.translation();
   const crate = a.entities.get(box)!.body;
   let landed: Vector | undefined;
@@ -82,10 +82,19 @@ test('a 6 m/s throw lands 2–4 m away', () => {
   expect(d).toBeLessThanOrEqual(4);
 });
 
+test("a dog's grab at a fish makes no claim and puts nothing in flight", () => {
+  const { sims: [, b], spawn, run } = room('A', 'B');
+  spawn('B', 'dog', { x: 0, y: 1, z: 0 }); // faces +z, toward the fish
+  spawn('A', 'fish', { x: 0, y: 0.1, z: 1 });
+  run(IDLE, 30);
+  expect(grab(b)).toBeNull();
+  expect(b.inFlight.size).toBe(0);
+});
+
 test("a grabbed character's body follows its carrier", () => {
   const { sims: [a, b], relay, spawn, run } = room('A', 'B');
-  const cat = spawn('A', 'character', { x: 0, y: 1, z: 1.5 });
-  const dog = spawn('B', 'character', { x: 0, y: 1, z: 0 }); // faces +z, toward the cat
+  const cat = spawn('A', 'cat', { x: 0, y: 1, z: 1.5 });
+  const dog = spawn('B', 'dog', { x: 0, y: 1, z: 0 }); // faces +z, toward the cat
   run(IDLE, 30);
   relay(grab(b));
   const onA = a.entities.get(cat)!.body;

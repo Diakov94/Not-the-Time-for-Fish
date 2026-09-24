@@ -25,7 +25,7 @@ export type HeadlessClient = { session: Session; next: number };
 // Its character starts in its lane 4 m south of the first crate, facing it.
 export async function joinHeadless(url: string, lane: number): Promise<HeadlessClient> {
   const session = await connect(url, prototypeRoom);
-  spawn(session, 'character', { x: LANES[lane % LANES.length]!, y: 1, z: 2 });
+  spawn(session, 'cat', { x: LANES[lane % LANES.length]!, y: 1, z: 2 });
   return { session, next: 0 };
 }
 
@@ -33,7 +33,7 @@ export async function joinHeadless(url: string, lane: number): Promise<HeadlessC
 export function playHeadless(c: HeadlessClient, t: number, dt: number): void {
   for (; c.next < SCRIPT.length && SCRIPT[c.next]![0] <= t; c.next++) {
     const action = SCRIPT[c.next]![2];
-    const m = action === 'grab' ? grab(c.session.sim) : action === 'throw' ? throwCarried(c.session.sim, 6) : null;
+    const m = action === 'grab' ? grab(c.session.sim) : action === 'throw' ? throwCarried(c.session.sim) : null;
     if (m) send(c.session, m);
   }
   frame(c.session, dt, c.next > 0 ? SCRIPT[c.next - 1]![1] : IDLE);

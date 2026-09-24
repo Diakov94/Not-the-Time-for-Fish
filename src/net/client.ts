@@ -1,4 +1,4 @@
-import type { ClientId, Kind, NetId } from '../sim/entities.ts';
+import { isCharacter, type ClientId, type Kind, type NetId } from '../sim/entities.ts';
 import type { Level } from '../sim/level.ts';
 import type { Intent } from '../sim/movement.ts';
 import { adopt, receive } from '../sim/ownership.ts';
@@ -38,7 +38,7 @@ export function connect(url: string, level: Level): Promise<Session> {
         s = { sim, ws, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), spawned: 0, lastTick: 0, ticks: 0 };
         if (m.host !== m.you) return;
         held = null;
-        for (const p of level.crates) spawn(s, 'crate', p);
+        for (const p of level.crates) spawn(s, 'prop', p);
         resolve(s);
       } else if (!held) handle(s, m, at);
       else if (m.type === 'left' && m.host === s.sim.me) {
@@ -47,7 +47,7 @@ export function connect(url: string, level: Level): Promise<Session> {
         // after a state at its `seq`, which answers every joiner still owed, and then the level spawns.
         for (const [h, hAt] of [...held, [m, at] as const]) handle(s, h, hAt, m.seq);
         held = null;
-        for (const p of level.crates) spawn(s, 'crate', p);
+        for (const p of level.crates) spawn(s, 'prop', p);
         resolve(s);
       } else if (m.type !== 'state' || m.to !== s.sim.me) held.push([m, at]);
       else {
@@ -112,7 +112,7 @@ export function send(s: Session, m: GameMessage): void {
 
 export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: number }): NetId {
   const id = `${s.sim.me}:${s.spawned++}`;
-  send(s, { type: 'spawn', from: s.sim.me, id, kind, home: kind === 'character' ? s.sim.me : null, p });
+  send(s, { type: 'spawn', from: s.sim.me, id, kind, home: isCharacter(kind) ? s.sim.me : null, p });
   return id;
 }
 

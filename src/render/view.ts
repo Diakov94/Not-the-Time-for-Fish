@@ -1,7 +1,6 @@
-import type { Cuboid } from '@dimforge/rapier3d-compat';
+import type { Ball, Capsule, Cuboid, Shape } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS, type Entity, type Kind, type NetId } from '../sim/entities.ts';
-import { CRATE_HALF } from '../sim/level.ts';
+import { isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 
 // Where the camera orbits the player's character from: the app's mouse input sets it.
@@ -16,10 +15,15 @@ export type View = {
   objects: Map<NetId, THREE.Object3D>;
 };
 
-const GEOMETRY: Record<Kind, THREE.BufferGeometry> = {
-  character: new THREE.CapsuleGeometry(CAPSULE_RADIUS, 2 * CAPSULE_HALF_HEIGHT, 4, 12),
-  crate: new THREE.BoxGeometry(2 * CRATE_HALF, 2 * CRATE_HALF, 2 * CRATE_HALF),
-};
+// An entity is drawn as its body is shaped: the sim's collider is the one owner of every kind's size.
+function geometry(shape: Shape): THREE.BufferGeometry {
+  if ('halfExtents' in shape) {
+    const h = (shape as Cuboid).halfExtents;
+    return new THREE.BoxGeometry(2 * h.x, 2 * h.y, 2 * h.z);
+  }
+  if ('halfHeight' in shape) return new THREE.CapsuleGeometry((shape as Capsule).radius, 2 * (shape as Capsule).halfHeight, 4, 12);
+  return new THREE.SphereGeometry((shape as Ball).radius, 12, 8);
+}
 const NOSE = new THREE.BoxGeometry(0.15, 0.15, 0.2); // shows a character's facing: its grab reaches forward
 const CRATE = new THREE.MeshStandardMaterial({ color: 0xb07a45 });
 const MINE = new THREE.MeshStandardMaterial({ color: 0xf28c28 }); // this player's character
@@ -75,15 +79,16 @@ export function draw(view: View, sim: Sim, look: Look): void {
     scene.remove(o);
     objects.delete(id);
   }
-  const mine = [...sim.entities.values()].find((e) => e.kind === 'character' && e.home === sim.me);
+  const mine = [...sim.entities.values()].find((e) => isCharacter(e.kind) && e.home === sim.me);
   if (mine) follow(camera, objects.get(mine.id)!.position, look);
   renderer.render(scene, camera);
 }
 
 function add(view: View, sim: Sim, e: Entity): THREE.Object3D {
-  const material = e.kind === 'crate' ? CRATE : e.home === sim.me ? MINE : THEIRS;
-  const o = new THREE.Mesh(GEOMETRY[e.kind], material);
-  if (e.kind === 'character') o.add(new THREE.Mesh(NOSE, material).translateY(0.3).translateZ(CAPSULE_RADIUS));
+  const material = !isCharacter(e.kind) ? CRATE : e.home === sim.me ? MINE : THEIRS;
+  const shape = e.body.collider(0).shape;
+  const o = new THREE.Mesh(geometry(shape), material);
+  if (isCharacter(e.kind)) o.add(new THREE.Mesh(NOSE, material).translateY(0.3).translateZ((shape as Capsule).radius));
   view.scene.add(o);
   view.objects.set(e.id, o);
   return o;

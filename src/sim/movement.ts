@@ -1,5 +1,5 @@
 import type { Rotation } from '@dimforge/rapier3d-compat';
-import type { Entity } from './entities.ts';
+import { isCharacter, type Entity } from './entities.ts';
 import { simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
@@ -16,7 +16,7 @@ const TURN_SPEED = 4 * Math.PI;
 
 // The character this client drives: its own, while the fold leaves it here and nobody carries it.
 export function myCharacter(sim: Sim): Entity | undefined {
-  for (const e of sim.entities.values()) if (e.kind === 'character' && simulatedHere(sim, e)) return e;
+  for (const e of sim.entities.values()) if (isCharacter(e.kind) && simulatedHere(sim, e)) return e;
   return undefined;
 }
 

@@ -69,7 +69,7 @@ const same = (a: Session, b: Session) => JSON.stringify(facts(a)) === JSON.strin
 
 test('a crate moved on one client shows on the other within 150 ms', async () => {
   const [a, b] = await room(2);
-  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  const id = spawn(a!, 'prop', { x: 0, y: 0.5, z: 0 });
   await play(2000, () => b!.sim.entities.has(id) && a!.rested.has(id));
   const onA = a!.sim.entities.get(id)!.body;
   const onB = b!.sim.entities.get(id)!.body;
@@ -91,7 +91,7 @@ test('a crate moved on one client shows on the other within 150 ms', async () =>
 
 test('a resting crate produces 0 ticks per second', async () => {
   const [a] = await room(2);
-  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  const id = spawn(a!, 'prop', { x: 0, y: 0.5, z: 0 });
   await play(2000, () => a!.rested.has(id));
   const before = a!.ticks;
   await play(1000);
@@ -100,9 +100,9 @@ test('a resting crate produces 0 ticks per second', async () => {
 
 test("a third client joining mid-run holds the host's table and entities within 500 ms, each pose from its owner", async () => {
   const [a, b] = await room(2, prototypeRoom);
-  spawn(a!, 'character', { x: -3, y: 1, z: 0 });
-  spawn(b!, 'character', { x: 0, y: 1, z: 4.6 }); // faces +z, the crate at (0, 0.5, 6) in reach
-  const crates = () => [...a!.sim.entities.values()].filter((e) => e.kind === 'crate');
+  spawn(a!, 'cat', { x: -3, y: 1, z: 0 });
+  spawn(b!, 'cat', { x: 0, y: 1, z: 4.6 }); // faces +z, the crate at (0, 0.5, 6) in reach
+  const crates = () => [...a!.sim.entities.values()].filter((e) => e.kind === 'prop');
   await play(2000, () => b!.sim.entities.size === 12 && crates().every((e) => e.body.isSleeping()));
   const claim = grab(b!.sim);
   send(b!, claim!);
@@ -130,7 +130,7 @@ test("a third client joining mid-run holds the host's table and entities within 
 
 test("a joiner's copy of a moving crate appears at its owner's pose, not rising from under the floor", async () => {
   const [a] = await room(1);
-  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  const id = spawn(a!, 'prop', { x: 0, y: 0.5, z: 0 });
   await play(500, () => a!.sim.entities.has(id));
   a!.sim.entities.get(id)!.body.setLinvel({ x: 4, y: 0, z: 0 }, true);
   const c = await join();
@@ -144,8 +144,9 @@ test("a joiner's copy of a moving crate appears at its owner's pose, not rising 
 
 test('a client that left before the join: its departure travels with the state, so a later release agrees', async () => {
   const [a, b, d] = await room(3);
-  const cat = spawn(d!, 'character', { x: 3, y: 1, z: 0 });
-  await play(1000, () => sessions.every((s) => s.sim.entities.has(cat)));
+  const cat = spawn(d!, 'cat', { x: 3, y: 1, z: 0 });
+  spawn(b!, 'dog', { x: -3, y: 1, z: 0 }); // B's side, so its hold claim on the cat is accepted
+  await play(1000, () => sessions.every((s) => s.sim.entities.size === 2));
   leave(d!);
   await play(1000, () => a!.sim.ownership.gone.size === 1);
   const c = await join();
@@ -230,8 +231,8 @@ test('two joiners owed a state when the host leaves hold deep-equal tables withi
 
 test('a character walking into a crate another client owns moves it more than 0.2 m on both clients within 1 s', async () => {
   const [a, b] = await room(2);
-  const crate = spawn(a!, 'crate', { x: 0, y: 0.5, z: 3 });
-  spawn(b!, 'character', { x: 0, y: 1, z: 1.5 }); // 0.65 m short of the crate
+  const crate = spawn(a!, 'prop', { x: 0, y: 0.5, z: 3 });
+  spawn(b!, 'cat', { x: 0, y: 1, z: 1.5 }); // 0.65 m short of the crate
   await play(2000, () => a!.sim.entities.size === 2 && b!.sim.entities.size === 2 && a!.rested.has(crate));
   const onA = a!.sim.entities.get(crate)!.body;
   const onB = b!.sim.entities.get(crate)!.body;
@@ -256,9 +257,9 @@ test('a character walking into a crate another client owns moves it more than 0.
 // B holds a crate still, and A's character is set to walk into it: the fold rejects every touch claim of A's.
 async function holdCrate() {
   const [a, b] = await room(2);
-  spawn(b!, 'character', { x: 0, y: 1, z: 3 });
-  const crate = spawn(b!, 'crate', { x: 0, y: 0.5, z: 4.5 });
-  spawn(a!, 'character', { x: 0, y: 1, z: 7 });
+  spawn(b!, 'cat', { x: 0, y: 1, z: 3 });
+  const crate = spawn(b!, 'prop', { x: 0, y: 0.5, z: 4.5 });
+  spawn(a!, 'cat', { x: 0, y: 1, z: 7 });
   await play(2000, () => a!.sim.entities.size === 3 && b!.rested.has(crate));
   send(b!, grab(b!.sim)!);
   await play(500, () => a!.sim.ownership.rows.get(crate)?.held === true);

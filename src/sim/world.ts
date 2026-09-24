@@ -4,7 +4,8 @@ import type { ClientId, Entities, NetId } from './entities.ts';
 import type { Level } from './level.ts';
 import { carry } from './grab.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
-import { newOwnershipTable, type Claim, type OwnershipTable } from './ownership.ts';
+import type { Claim } from './messages.ts';
+import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
 import { touchClaims } from './touch.ts';
 
 export const STEP = 1 / 60;
