@@ -131,9 +131,9 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   hud.fill.style.width = `${Math.min(1, work?.done ?? 0) * 100}%`;
   hud.overtime.hidden = r.phase !== 'overtime';
   write(hud.overtime, pinging(sim) ? OVERTIME.carrier : OVERTIME.all);
-  // The teammates, in roster order: the player's own team, the player left out.
+  // The teammates, in roster order: the player's own side, the player left out.
   const me = playerOf(r, sim.me);
-  const mates = r.roster.filter((p) => p !== me && me?.team && p.team === me.team);
+  const mates = r.roster.filter((p) => p !== me && me?.side && p.side === me.side);
   pool(hud.team, mates.length, 'mate panel', '<span class="name"></span> <span class="state"></span>');
   mates.forEach((p, i) => {
     const row = hud.team.children[i] as HTMLElement;

@@ -76,6 +76,7 @@
 - bug-net-tick-cadence-at-60-hz: ticks 16.4–17.1/s → 19.9–20.1/s at 8 clients; the schedule is frame's in src/net/client.ts. Batch F1, 2026-09-24.
 - 69 overtime carrier ping: roundStep emits it for every fish carrier in overtime; red without the rule. Batch F1, 2026-09-24.
 - 70 results name the tiebreak: the round table's matchOutcome owns the deciding rule; the screen shows it in Ukrainian. Batch F1, 2026-09-24.
+- 134 the high-rise map as data on the frozen schema. Wave 0 MAP-high-rise, 2026-09-24.
 - 107 palette: owns every colour; render holds 0 colour literals. 108 patterns and decals. 109 a theme per map found by path. Wave 0 ART0-A, 2026-09-24.
 - bug-chase-kennel-rescue-rejoin-movement-sync (QA hunt): merged into bug-net-copy-freezes-at-an-ownership-change as the same defect; its numbers (3 of 8 runs at 4 clients, 0.261-0.380 m moving) were sent to that worker. Producer, 2026-09-24.
 - 100 character roster: the twelve characters' one owner is src/content/characters.ts. Wave 0 SIM-SEAMS, 2026-09-24.
@@ -90,3 +91,12 @@
 - 101 maps by file name, the headless --map; 102 the settings store (one owner of per-viewer settings); 103 the input zone and bindings. Wave 0 APP-SEAMS, 2026-09-24.
 - 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.
 - w1-settings: its cards closed (see the batch report). 2026-09-24.
+- w1-props: delivered cards closed (see the batch report). 2026-09-24.
+- fix-audio: delivered cards closed (see the batch report). 2026-09-24.
+- 123 gamepad (Gamepad API, stub-tested); 124 remap applied (the offerBindings wiring line lands after SETTINGS-UI); 125 final bindings, feel and emote keys. Wave 1 INPUT, 2026-09-24.
+- 112 the cats 1-3: concept, skeleton, detail and emotes. Wave 1 CATS-A, 2026-09-24.
+- 114 the dogs 1-3: concept, skeleton, detail and emotes. Wave 1 DOGS-A, 2026-09-24.
+- 113 the cats 4-6: concept, skeleton, detail and emotes. Wave 1 CATS-B, 2026-09-24.
+- 115 the dogs 4-6: concept, skeleton, detail and emotes. Wave 1 DOGS-B, 2026-09-24.
+- bug-net-copy-freezes-at-an-ownership-change: the fold decides once, at a tick's arrival; the 8-client round meets the card's acceptance 5/5 (a grabbed cat on the other clients 0.150-0.203 → 0.055-0.094 m). Stall divergence is filed separately. The last MVP bug, 2026-09-24.
+- 160 the rotation picks the dogs at every prep; 161 per-player score, a catch names its dog; 164 meta progress by side. ROTATION (owner decision, ADR 0014), 2026-09-24.
