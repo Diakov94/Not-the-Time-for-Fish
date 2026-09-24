@@ -6,7 +6,7 @@ import { sniffed } from '../../../src/sim/scent.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
 import { go, hold, mineNear, phase, place, plantHere, simOf, tap, until, type P } from './bots.ts';
-import { ROUTE, throughGate } from './house.ts';
+import { ROUTE, standby, throughGate } from './house.ts';
 
 type Script = Generator<Press, void>;
 const p = (x: number, z: number): P => ({ x, z });
@@ -69,7 +69,7 @@ function* listener(c: HeadlessClient): Script {
 
 const script = (c: HeadlessClient): Script => {
   const { side, n } = place(c);
-  return side === 'cat' ? (n === 0 ? sneaker(c) : trapper(c)) : n === 0 ? sniffer(c) : listener(c);
+  return side === 'cat' ? ([sneaker, trapper][n] ?? standby)(c) : n === 0 ? sniffer(c) : listener(c);
 };
 const SIDES: Side[] = ['cat', 'dog', 'cat', 'dog'];
 
@@ -112,7 +112,7 @@ function judge(r: Run): Verdict {
   return { lines, ok };
 }
 
-// Card 64 at four clients, two dogs by the host's hand: mines armed, felt, defused and set off; a trap
+// Card 64 at four clients, two dogs by the host's hand (at more, every further cat stands by): mines armed, felt, defused and set off; a trap
 // planted, sniffed out and cleared; a second one sprung across the yard.
 const minesAndTraps: Scenario = {
   about: 'a mine defused after the whisker cue, one stepped on; a trap cleared, one sprung',
