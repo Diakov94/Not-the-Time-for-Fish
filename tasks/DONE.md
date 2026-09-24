@@ -50,3 +50,8 @@
 - 52 audio engine and SFX from events: audio reads the sim's event list and entity table and keeps only its voices. Batch AU1, 2026-09-24.
 - 53 ambience and directional dogs: where the player is comes from the sim's volume query. Batch AU1, 2026-09-24.
 - 54 music by phase: calm prep, tense heist, chase while the sim's tension query is true (src/sim/tension.ts, 18 lines). Batch AU1, 2026-09-24.
+- 63 a round to the end headless: cats by 3 fish in 85.4 s at 3 clients, 69.5 s at 8; the timer gives dogs the win. Batch H2, 2026-09-24.
+- 64 mines and traps headless at 4: 1 blast, 1 defuse, 1 sprung, 1 cleared on every client; stun 2.984 s. Batch H2, 2026-09-24.
+- 65 chase, kennel, rescue, rejoin at 4: held in 15 ms, rejoin in 34 ms, next host 0 ms late; one of three runs peaked at 0.319 m moving at a grab (bug-net-copy-freezes-at-an-ownership-change). Batch H2, 2026-09-24.
+- 66 six clients × 120 s: 0 visible desyncs. Ticks measured 16.5–16.8/s against 19–21 (bug-net-tick-cadence-at-60-hz). Batch H2, 2026-09-24.
+- bug-sim-impact-between-two-clients-pings-twice: removed as a duplicate of the noise fix already on develop (#17). Producer, 2026-09-24.
