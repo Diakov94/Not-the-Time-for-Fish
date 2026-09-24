@@ -1,5 +1,5 @@
 import { beforeAll, expect, test } from 'vitest';
-import { countryHouse } from '../content/country-house.ts';
+import { countryHouse } from '../content/maps/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
 import { halfHeight, spawnOf } from './entities.ts';
 import { receive } from './ownership.ts';

@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
+import { anatomy } from '../anatomy.ts';
+import type { Box, Level, Vec3 } from '../level.ts';
 import { countryHouse } from './country-house.ts';
-import type { Box, Vec3 } from './level.ts';
 
 const { statics, volumes, points, props, doors } = countryHouse;
 // The sim's bodies the house is sized to (card 22, the C1/S1 contract): a cat's and a dog's capsule diameter.
@@ -14,43 +15,22 @@ const overlaps = (a: Box, b: Box) => AXES.every((k) => Math.abs(a.p[k] - b.p[k])
 const role = (r: string) => volumes.filter((v) => v.role === r);
 const at = (r: string) => points.filter((p) => p.role === r).map((p) => p.p);
 
-// Whether the segment a-b in the ground plane passes through the inside of the box's footprint.
-function crosses(a: Vec3, b: Vec3, box: Box): boolean {
-  let [t0, t1] = [0, 1];
-  for (const k of ['x', 'z'] as const) {
-    const d = b[k] - a[k];
-    if (d === 0) {
-      if (a[k] <= lo(box, k) || a[k] >= hi(box, k)) return false;
-      continue;
-    }
-    const [u, v] = [(lo(box, k) - a[k]) / d, (hi(box, k) - a[k]) / d];
-    [t0, t1] = [Math.max(t0, Math.min(u, v)), Math.min(t1, Math.max(u, v))];
-    if (t0 >= t1) return false;
-  }
-  return true;
-}
+// The promises every map keeps (anatomy.ts), by name, that a level breaks.
+const broken = (level: Level) => anatomy(level).filter((c) => !c.kept).map((c) => c.promise);
 
-// The shortest walk in straight lines from `from` to each of `to` around the house's walls and whatever
-// stops a dog: a visibility graph over the corners of those boxes, 5 cm out.
-function walks(from: Vec3, to: Vec3[]): number[] {
-  const blockers = statics.filter((s) => s.label === 'wall' || s.blocks === 'dogs');
-  const corner = (b: Box, i: number, j: number) => ({ x: b.p.x + i * (b.half.x + 0.05), y: 0, z: b.p.z + j * (b.half.z + 0.05) });
-  const corners = blockers.flatMap((b) => [corner(b, -1, -1), corner(b, -1, 1), corner(b, 1, -1), corner(b, 1, 1)]);
-  const nodes = [from, ...to, ...corners];
-  const dist = nodes.map((_, i) => (i === 0 ? 0 : Infinity));
-  const open = new Set(nodes.keys());
-  while (open.size > 0) {
-    const i = [...open].reduce((m, j) => (dist[j]! < dist[m]! ? j : m));
-    open.delete(i);
-    for (const j of open) {
-      const [a, b] = [nodes[i]!, nodes[j]!];
-      if (!blockers.some((box) => crosses(a, b, box))) dist[j] = Math.min(dist[j]!, dist[i]! + Math.hypot(b.x - a.x, b.z - a.z));
-    }
-  }
-  return to.map((_, i) => dist[i + 1]!);
-}
+test('the anatomy goes red on the house with one exit removed and with the fence at 2 m', () => {
+  const exit = volumes.findIndex((v) => v.role === 'exit');
+  const lowFence = statics.map((s) => (s.label === 'fence' ? { ...s, p: { ...s.p, y: 1 }, half: { ...s.half, y: 1 } } : s));
+  console.log(`broken: the house ${broken(countryHouse).length}; an exit removed: ${broken({ ...countryHouse, volumes: volumes.filter((_, i) => i !== exit) })}; the fence at 2 m: ${broken({ ...countryHouse, statics: lowFence })}`);
+  expect(broken({ ...countryHouse, volumes: volumes.filter((_, i) => i !== exit) })).toEqual(['exits']);
+  expect(broken({ ...countryHouse, statics: lowFence })).toEqual(['fence']);
+});
 
 test('the country house keeps the promises of its anatomy', () => {
+  // The map anatomy's promises (card 101): exits, carry range, fence height, fish, spawns, the tunnel.
+  for (const c of anatomy(countryHouse)) console.log(`${c.promise}: ${c.measured}${c.kept ? '' : ' BROKEN'}`);
+  expect(broken(countryHouse)).toEqual([]);
+
   // Card 17. The fence's centre line, from its boxes.
   const fence = statics.filter((s) => s.label === 'fence');
   const exits = role('exit');
@@ -89,10 +69,9 @@ test('the country house keeps the promises of its anatomy', () => {
   const hideout = role('hideout')[0]!;
   const dropOff = Math.min(...exits.map((e) => Math.hypot(e.p.x - hideout.p.x, e.p.z - hideout.p.z)));
   const widths = [...gaps.values()].map((w) => w.toFixed(2)).join(' / ');
-  console.log(`exits ${exits.length} (>= 4), gaps ${widths} m; fence height ${height} m (>= 3); mantle ledge ${ledge.toFixed(1)} m from it (>= 3)`);
+  console.log(`exit gaps ${widths} m; fence height ${height} m (>= 3); mantle ledge ${ledge.toFixed(1)} m from it (>= 3)`);
   console.log(`openings outside the exits ${stray}, exit gap points open to dogs ${open}; rooms ${rooms}`);
   console.log(`drop-off to the nearest exit ${dropOff.toFixed(1)} m (<= 15)`);
-  expect(exits.length).toBeGreaterThanOrEqual(4);
   expect(Math.min(...gaps.values())).toBeGreaterThanOrEqual(CAT);
   expect(height).toBeGreaterThanOrEqual(3);
   expect(ledge).toBeGreaterThanOrEqual(3);
@@ -101,31 +80,23 @@ test('the country house keeps the promises of its anatomy', () => {
   expect(rooms).toBeGreaterThanOrEqual(3);
   expect(dropOff).toBeLessThanOrEqual(15);
 
-  // Card 18. Five fish, each in a storage; the three access costs; every storage in carry range of the hatch.
+  // Card 18. Five fish in three storages, one of each access cost (the fish and the carry range: anatomy).
   const fish = at('fish');
   const holding = role('storage').filter((s) => fish.some((f) => inside(f, s)));
   const costs = holding.map((s) => (s.role === 'storage' ? s.access : '')).sort();
-  const loose = fish.filter((f) => !role('storage').some((s) => inside(f, s))).length;
   const hatch = at('hatch')[0]!;
-  const carry = Math.max(...walks(hatch, holding.map((s) => s.p)));
   const hideoutHolds = [...at('catSpawn'), ...at('tunnelExit')].every((p) => inside(p, hideout));
   const inFence = (b: Box) => b.p.x - b.half.x > ix0 && b.p.x + b.half.x < ix1 && b.p.z - b.half.z > iz0 && b.p.z + b.half.z < iz1;
   const fenceHolds = [...at('dogSpawn').map((p) => ({ p, half: { x: 0, y: 0, z: 0 } })), ...role('doghouse')].every(inFence);
   const cage = Math.min(...statics.filter((s) => s.label.startsWith('kennel')).map((s) => hi(s, 'y')));
   const latchOut = at('latch').every((p) => !role('kennel').some((k) => inside(p, k)));
-  console.log(`fish ${fish.length} (${loose} outside a storage) in storages ${holding.length} with costs {${costs.join(', ')}}`);
-  console.log(`walk from the farthest storage to the hatch ${carry.toFixed(1)} m (<= 20; <= 16 at a carrying dog's 2.0 m/s for 8 s)`);
+  console.log(`storages holding fish ${holding.length} with costs {${costs.join(', ')}}`);
   console.log(`tunnel exit and ${at('catSpawn').length} cat spawns in the hideout: ${hideoutHolds}`);
   console.log(`${at('dogSpawn').length} dog spawns and the doghouse inside the fence: ${fenceHolds}`);
   console.log(`bags ${at('bag').length} (>= 6), trap pickups ${at('trapPickup').length} (>= 3)`);
   console.log(`kennel walls ${cage} m (>= 2.5), hatch at ${hatch.y} m, latch outside the cage: ${latchOut}`);
-  expect(fish.length).toBe(5);
-  expect(loose).toBe(0);
   expect(costs).toEqual(['door', 'lid', 'open']);
-  expect(carry).toBeLessThanOrEqual(16);
   expect(hideoutHolds && fenceHolds && latchOut).toBe(true);
-  expect(at('catSpawn').length).toBeGreaterThanOrEqual(5);
-  expect(at('dogSpawn').length).toBeGreaterThanOrEqual(3);
   expect(at('bag').length).toBeGreaterThanOrEqual(6);
   expect(at('trapPickup').length).toBeGreaterThanOrEqual(3);
   expect(cage).toBeGreaterThanOrEqual(2.5);
