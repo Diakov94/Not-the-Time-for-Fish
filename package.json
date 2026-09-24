@@ -11,7 +11,8 @@
     "zones": "! grep -rslE \"(from|import)[ (]*['\\\"]three|document\\.|window\\.|navigator\\.\" src/sim src/net src/relay | grep . && ! grep -rslE \"(src/|\\.\\./|@)(render|app)/\" src/sim src/net src/relay | grep .",
     "test": "vitest run --passWithNoTests",
     "gates": "npm run typecheck && npm run lint && npm run zones && npm run test",
-    "relay": "node src/relay/serve.ts"
+    "relay": "node src/relay/serve.ts",
+    "headless": "node tools/headless/main.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

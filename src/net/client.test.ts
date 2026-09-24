@@ -128,6 +128,20 @@ test("a third client joining mid-run holds the host's table and entities within 
   expect(off(claim!, b!)).toBeLessThanOrEqual(0.5);
 });
 
+test("a joiner's copy of a moving crate appears at its owner's pose, not rising from under the floor", async () => {
+  const [a] = await room(1);
+  const id = spawn(a!, 'crate', { x: 0, y: 0.5, z: 0 });
+  await play(500, () => a!.sim.entities.has(id));
+  a!.sim.entities.get(id)!.body.setLinvel({ x: 4, y: 0, z: 0 }, true);
+  const c = await join();
+  let lowest = Infinity; // once the copy left the place a joiner holds it at (y = -100)
+  await play(500, undefined, () => {
+    const y = c.sim.entities.get(id)!.body.translation().y;
+    if (y > -99) lowest = Math.min(lowest, y);
+  });
+  expect(lowest).toBeGreaterThan(0.4);
+});
+
 test('a client that left before the join: its departure travels with the state, so a later release agrees', async () => {
   const [a, b, d] = await room(3);
   const cat = spawn(d!, 'character', { x: 3, y: 1, z: 0 });

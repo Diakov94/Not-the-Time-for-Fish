@@ -34,17 +34,18 @@ export type Receiver = Map<NetId, Entry[]>;
 
 // A resting pose is final: it is placed at once. A moving one joins the buffer; after a pause (the
 // body rested, or this client simulated it) the buffer restarts from the copy's current pose one tick
-// earlier, so the copy moves off without a jump.
+// earlier, so the copy moves off without a jump. An entity's first pose starts the buffer alone: a
+// joiner's copy has no pose of its own to start from.
 export function receiveTick(sim: Sim, r: Receiver, t: Tick, at: number): void {
   for (const s of t.s) {
     const e = sim.entities.get(s.id);
     if (!e) continue;
     const entry = { at, from: t.from, s };
     const list = r.get(s.id);
-    if (s.rest) {
-      applySnapshot(sim, t.from, s);
+    if (s.rest || !list) {
+      if (s.rest) applySnapshot(sim, t.from, s);
       r.set(s.id, [entry]);
-    } else if (!list || list.at(-1)!.at < at - 2 * TICK_MS) {
+    } else if (list.at(-1)!.at < at - 2 * TICK_MS) {
       r.set(s.id, [{ at: at - TICK_MS, from: t.from, s: readSnapshot(e) }, entry]);
     } else list.push(entry);
   }
