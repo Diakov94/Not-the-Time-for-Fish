@@ -21,7 +21,7 @@ const session = await roomScreen((code) => connect(`ws://${location.hostname}:${
 const { sim } = session;
 // The level's cat spawn after those the characters already in the room hold, so two players stand apart.
 const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;
-spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
+const mine = spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
 
 const canvas = document.querySelector('canvas')!;
 const input = listen(
@@ -47,7 +47,7 @@ let last = performance.now();
 requestAnimationFrame(function loop(now: number) {
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), intent(input));
   last = now;
-  draw(view, sim, input.look);
+  draw(view, sim, input.look, mine); // the camera's target: the own character until the app names another
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });
