@@ -11,7 +11,8 @@ const DOOR_CLEARANCE = 0.02; // m the panel keeps off the floor and off the jamb
 // What a content level becomes in the world (ADR 0008). Statics are fixed colliders; a `dogs` blocker is
 // met by dog bodies only. Volumes are sensors on one fixed body, in the level's order, so a volume's
 // index names it. Debris is a local dynamic body on every client, never an entity. A door is its panel
-// on a vertical hinge, swung by whoever pushes it, local until card 41 gives doors their rules. Every exit
+// on a vertical hinge, a local body on every client: fixed while shut, swung by whoever pushes it once
+// open (the round's rule, card 41). Every exit
 // also gets a cats blocker, a solid of its box that only cats meet, off until the round says prep. The
 // kennel's gate (`latch`) is a static whose groups the round sets: all while shut, dogs only while open.
 export type Built = { volumes: Collider[]; exits: Collider[]; gates: Collider[]; debris: { prop: number; body: RigidBody }[]; doors: RigidBody[] };
@@ -39,7 +40,7 @@ export function build(world: World, level: Level): Built {
     return [{ prop: i, body }];
   });
   const doors = level.doors.map(({ panel: { p, half }, hinge }) => {
-    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p.x, p.y, p.z).setAngularDamping(2));
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(p.x, p.y, p.z).setAngularDamping(2));
     const [hx, hz] = half.x > half.z ? [half.x - DOOR_CLEARANCE, half.z] : [half.x, half.z - DOOR_CLEARANCE];
     const desc = RAPIER.ColliderDesc.cuboid(hx, half.y - DOOR_CLEARANCE, hz).setTranslation(0, DOOR_CLEARANCE, 0);
     world.createCollider(desc.setMass(DOOR_MASS).setCollisionGroups(GROUPS.body), body);

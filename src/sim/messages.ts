@@ -42,6 +42,8 @@ export type Rescue = { type: 'rescue'; from: ClientId };
 export type DugOut = { type: 'dugOut'; from: ClientId };
 // A door storage (the level's volume index) a cat worked open.
 export type Opened = { type: 'opened'; from: ClientId; storage: number };
+// A house door (the level's door index) a cat worked open or a dog barged.
+export type OpenDoor = { type: 'door'; from: ClientId; door: number };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened;
+export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;

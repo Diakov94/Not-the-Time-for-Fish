@@ -8,6 +8,7 @@ import { drainEvents } from './events.ts';
 import { IDLE, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
 import { interact } from './heist.ts';
+import { hidden } from './hiding.ts';
 import { plant, stunned } from './mines.ts';
 import { receive } from './ownership.ts';
 import { advance, knobs, playerOf, playsAs } from './round.ts';
@@ -659,4 +660,31 @@ test('one trap in play per cat: with its trap planted a cat takes no pickup and 
   expect(r.sims().every((s) => !s.entities.has(pickup))).toBe(true);
   expect(fourth).toBe('spawn');
   expect(spawns()).toBe(2);
+});
+
+test("a cat in the hall box's spot is hidden on both clients; the dog shoves the box north 1 m and it is not, on both, within 150 ms", () => {
+  const r = relay(countryHouse, true);
+  const [cat, dog] = r.players(2); // P0 plays the cat, P1 the dog
+  toHeist(r);
+  const box = [...cat!.entities.values()].find((e) => e.prop !== undefined && countryHouse.props[e.prop]!.label === 'cardboard box' && e.body.translation().x < 0)!;
+  const z0 = box.body.translation().z;
+  stand(cat!, -1.575, 0, 0); // between the hall's west wall and the box
+  own(dog!).body.setTranslation({ x: -0.85, y: halfHeight('dog') + 0.01, z: -1.6 }, true);
+  r.run(5);
+  const me = own(cat!).id;
+  const hiddenOn = () => r.sims().map((s) => hidden(s, s.entities.get(me)!));
+  const before = hiddenOn().join();
+  const flipped = new Map<Sim, number>();
+  let moved = 0;
+  for (let i = 0; i < 3 * 60 && moved < 1; i++) {
+    r.run(1, (s) => (s === dog ? { move: { x: 0, z: 1 }, sprint: false, jump: false } : IDLE));
+    hiddenOn().forEach((h, k) => !h && !flipped.has(r.sims()[k]!) && flipped.set(r.sims()[k]!, r.sims()[k]!.time));
+    moved = dog!.entities.get(box.id)!.body.translation().z - z0;
+  }
+  const lag = Math.abs(flipped.get(cat!)! - flipped.get(dog!)!) * 1000;
+  console.log(`hidden before ${before}; the box shoved ${moved.toFixed(2)} m, hidden now ${hiddenOn().join()}; flipped on the cat's and the dog's clients ${lag.toFixed(0)} ms apart`);
+  expect(before).toBe('true,true');
+  expect(moved).toBeGreaterThanOrEqual(1);
+  expect(hiddenOn().join()).toBe('false,false');
+  expect(lag).toBeLessThanOrEqual(150);
 });

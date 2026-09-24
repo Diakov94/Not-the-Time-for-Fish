@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { Capsule, Rotation } from '@dimforge/rapier3d-compat';
+import type { Capsule, Collider, Rotation } from '@dimforge/rapier3d-compat';
 import { volumeAt } from './build.ts';
 import { isCharacter, type Entity } from './entities.ts';
 import { carried, simulatedHere } from './ownership.ts';
@@ -14,9 +14,11 @@ export const IDLE: Intent = { move: { x: 0, z: 0 }, sprint: false, jump: false }
 // The one table of speeds, m/s, per side (GAME.md, Movement asymmetry): dogs are faster on open ground,
 // cats sneak, jump and climb, only dogs lunge. A carrying character moves at `carry` at most; `sneak` is
 // null for a side that does not sneak, and a zero `jump`, `climb` or `lunge` is a move it does not have.
+// `push` is the mass, kg, a character shoves props with: a dog barges a 20 kg barricade and a door out
+// of its way, a cat moves light props only.
 export const SPEED = {
-  cat: { walk: 4, sprint: 6, sneak: 1.6, carry: 4.2, jump: 4.6, climb: 1.5, lunge: 0 },
-  dog: { walk: 4, sprint: 9, sneak: null, carry: 2, jump: 0, climb: 0, lunge: 7.5 },
+  cat: { walk: 4, sprint: 6, sneak: 1.6, carry: 4.2, jump: 4.6, climb: 1.5, lunge: 0, push: 0.1 },
+  dog: { walk: 4, sprint: 9, sneak: null, carry: 2, jump: 0, climb: 0, lunge: 7.5, push: 100 },
 };
 export const speedsOf = (c: Entity) => SPEED[c.kind === 'dog' ? 'dog' : 'cat'];
 // 720 deg/s. Rapier silently clamps angular velocity at 15 pi rad/s (45 deg per step at 60 Hz), so a
@@ -80,7 +82,12 @@ export function drive(sim: Sim, c: Entity, intent: Intent): void {
   if (takeoff) sim.leap = { x: vx, y: vy, z: vz };
   const body = c.body.collider(0);
   const flags = RAPIER.QueryFilterFlags.EXCLUDE_SENSORS;
-  sim.controller.computeColliderMovement(body, { x: vx * dt, y: vy * dt, z: vz * dt }, flags, body.collisionGroups());
+  // A dog barges an open door: its movement never stops at the panel, its body shoves it aside. The
+  // predicate runs inside Rapier's query, so it reads only handles taken before it.
+  const open = new Set(c.kind === 'dog' ? sim.doors.filter((d) => d.isDynamic()).map((d) => d.collider(0).handle) : []);
+  const barge = open.size > 0 ? (col: Collider) => !open.has(col.handle) : undefined;
+  sim.controller.setCharacterMass(s.push);
+  sim.controller.computeColliderMovement(body, { x: vx * dt, y: vy * dt, z: vz * dt }, flags, body.collisionGroups(), barge);
   const m = sim.controller.computedMovement();
   c.body.setLinvel({ x: m.x / dt, y: m.y / dt, z: m.z / dt }, true);
   if (sim.leap) sim.leap.y = Math.min(vy, m.y / dt); // a ceiling stops the rise

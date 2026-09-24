@@ -66,6 +66,8 @@ export type Sim = {
   resupplyAt: number | null; // since when this client's dog has stood in the doghouse
   ending: Set<NetId>; // entities this client sent the message that ends them for (a blast, a defuse, ...)
   trap: boolean; // this client's cat has a trap in hand
+  doorWork: { door: number; until: number } | null; // the own cat's work at a shut house door
+  barged: Set<number>; // house doors this client's dog barged open, ahead of the round table
 };
 
 // A timed action of the own character: when it started and ends, and where the character stood then.
@@ -130,6 +132,8 @@ export function createWorld(level: Level, me: ClientId): Sim {
     resupplyAt: null,
     ending: new Set(),
     trap: true,
+    doorWork: null,
+    barged: new Set(),
   };
 }
 

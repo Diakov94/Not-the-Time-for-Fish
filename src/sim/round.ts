@@ -1,6 +1,6 @@
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
 import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
-import type { Captured, Despawn, DugOut, Hello, Left, Look, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
+import type { Captured, Despawn, DugOut, Hello, Left, Look, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
 import type { Sim } from './world.ts';
 
@@ -20,13 +20,14 @@ export type Round = {
   round: number; // 0 in the lobby, 1 or 2 within a match
   secured: { fish: NetId; at: number }[]; // this round's, in order
   opened: number[]; // this round's door storages worked open, by volume index
+  doors: number[]; // this round's house doors open, by door index
   results: Result[]; // this match's ended rounds
   match: Team | 'draw' | null; // the outcome of the last match, from the end of its round 2
   score: Record<Team, number>; // the session's matches won, for the life of the room
 };
 
-export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened;
-const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened']);
+export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
+const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened', 'door']);
 export const isRound = (m: { type: string }): m is RoundMessage => ROUND.has(m.type);
 
 const LOOKS = 3; // per side (GAME.md, Characters)
@@ -46,7 +47,7 @@ const KNOBS = [
 export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
 
 export function newRound(): Round {
-  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], results: [], match: null, score: { A: 0, B: 0 } };
+  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], doors: [], results: [], match: null, score: { A: 0, B: 0 } };
 }
 
 export const playerOf = (r: Round, client: ClientId): Player | undefined => r.roster.find((p) => p.client === client);
@@ -182,7 +183,7 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       r.round = m.round;
       if (m.to === 'overtime' && !fishHeld(t, entities)) end(r, 'timer');
       if (m.to !== 'prep') return true;
-      [r.secured, r.opened] = [[], []];
+      [r.secured, r.opened, r.doors] = [[], [], []];
       for (const q of r.roster) q.captured = null;
       if (m.round === 1) [r.results, r.match] = [[], null];
       return true;
@@ -213,6 +214,11 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
     case 'opened':
       if (!stealing(r) || !p || playsAs(r, m.from) !== 'cat' || r.opened.includes(m.storage)) return false;
       r.opened.push(m.storage);
+      return true;
+    case 'door':
+      // A house door stays open for the rest of the round, whoever opened it.
+      if (!inPlay(r) || !p || r.doors.includes(m.door)) return false;
+      r.doors.push(m.door);
       return true;
   }
 }
@@ -257,9 +263,10 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
   [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
-  [sim.stunUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap] = [0, 0, null, null, null, true];
+  [sim.stunUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap, sim.doorWork] = [0, 0, null, null, null, true, null];
   sim.securing.clear();
   sim.ending.clear();
+  sim.barged.clear();
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }
