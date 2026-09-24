@@ -28,19 +28,31 @@ const NOWHERE = { x: 0, y: -100, z: 0 };
 
 // A join the round's fold refused (card 44): the fixed code, the name, and the fold's reason (card 68).
 export type Refused = Error & { code: 'refused'; player: string; reason: Refusal | null };
+// A join with no `welcome`, or no host's `state`, JOIN_MS after the connect: given up, the socket closed.
+export type Late = Error & { code: 'late' };
+export const JOIN_MS = 10000;
 
 // The client over the global WebSocket: one code path for Node and the browser, the one entry for the app
 // and the headless client. The relay's `welcome` names this client, so the sim is created then, and its
 // `hello {name}` goes out at once. The host spawns the level; a joiner holds every message until the host's
 // `state`, then replays them (ADR 0006, Join). It resolves once its own hello is folded on top of its world
-// and the roster names it; if the round's fold refused the name, it rejects and nothing of the join stays.
+// and the roster names it; if the round's fold refused the name, the socket failed or closed, or JOIN_MS
+// passed, it rejects and nothing of the join stays. From the resolve on, a loss is the session's `closed`.
 // `levels` are the maps by name the host may pick (card 128); the world starts from `level`.
 export function connect(url: string, level: Level, name: string, levels: Record<string, Level> = {}): Promise<Session> {
   const ws = new WebSocket(url);
   const closed = new Promise<number>((done) => ws.addEventListener('close', (e) => done(e.code)));
   return new Promise((resolve, reject) => {
-    ws.onerror = () => reject(new Error(`no relay at ${url}`));
     let s: Session;
+    const fail = (e: Error) => {
+      clearTimeout(late);
+      ws.onmessage = ws.onerror = ws.onclose = null;
+      ws.close();
+      s?.sim.world.free(); // a world only from the welcome on
+      reject(e);
+    };
+    const late = setTimeout(() => fail(Object.assign(new Error(`no welcome or state from ${url} in ${JOIN_MS} ms`), { code: 'late' })), JOIN_MS);
+    ws.onerror = ws.onclose = () => fail(new Error(`no relay at ${url}`));
     let held: [Incoming, number][] | null = [];
     let since = 0; // the seq this client's world starts after: its state's, or the `left`'s that left it none
     let mine: number | null = null; // the seq of this client's own hello, back and not yet settled
@@ -81,14 +93,12 @@ export function connect(url: string, level: Level, name: string, levels: Record<
       // Its own hello folded on top of its world: the roster names this client, or the fold refused the name.
       // A hello from before the world's start the roster does not show went into a world nobody holds: again.
       if (held || mine === null) return;
-      if (playerOf(s.sim.round, s.sim.me)) resolve(s);
-      else if (mine <= since) hello();
-      else {
-        ws.onmessage = null;
-        ws.close();
-        s.sim.world.free();
-        reject(Object.assign(new Error(`name refused: ${name}`), { code: 'refused', player: name, reason: s.sim.refused }));
-      }
+      if (playerOf(s.sim.round, s.sim.me)) {
+        clearTimeout(late);
+        ws.onerror = ws.onclose = null;
+        resolve(s);
+      } else if (mine <= since) hello();
+      else fail(Object.assign(new Error(`name refused: ${name}`), { code: 'refused', player: name, reason: s.sim.refused }));
       mine = null;
     };
   });

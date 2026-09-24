@@ -43,16 +43,20 @@ const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
 await init();
 // The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
 const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
-const { session, room } = await roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, maps['country-house']!, name, maps), room }));
-const { sim } = session;
+// The room screen's join is the session: the page's first, and a rejoin once the room is gone (`lost`).
+const enter = (lost?: { room: string; name: string }) =>
+  roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, maps['country-house']!, name, maps), room, name }), lost);
+let joined = await enter();
+let { session } = joined;
+let { sim } = session;
 // The host's button, in the lobby and the results: the round table's successor phase.
 const next = () => {
   const m = advance(sim, session.host);
   if (m) send(session, m);
 };
-const lobby = lobbyScreen(room, (m) => send(session, m), next);
+const lobby = lobbyScreen(joined.room, (m) => send(session, m), next);
 const results = resultsScreen(next);
-const hint = document.querySelector<HTMLElement>('.hint')!;
+let hint = document.querySelector<HTMLElement>('.hint')!;
 // A client's character, whichever the sim spawned this round.
 const characterOf = (client: ClientId | null) => [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind))?.id;
 const own = () => characterOf(sim.me);
@@ -135,3 +139,15 @@ requestAnimationFrame(function loop(now: number) {
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });
+
+// The room gone for this client (net's `closed`, whatever closed the socket): `frame` steps and sends
+// nothing from then on, the mouse is freed, and the room screen returns with the reason, the name and the
+// code kept. Its join is a rejoin by name, and the loop plays on in the new session.
+for (;;) {
+  await session.closed;
+  document.exitPointerLock();
+  joined = await enter(joined);
+  ({ session } = joined);
+  sim = session.sim;
+  hint = document.querySelector<HTMLElement>('.hint')!;
+}
