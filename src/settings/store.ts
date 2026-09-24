@@ -61,3 +61,13 @@ export function save(patch: Partial<Settings>): void {
   }
   cache = { ...DEFAULTS, ...chosen };
 }
+
+// Back to the defaults: nothing chosen, so a changed default reaches this viewer again.
+export function reset(): void {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    return;
+  }
+  cache = undefined;
+}

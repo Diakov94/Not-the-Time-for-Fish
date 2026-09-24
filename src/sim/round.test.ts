@@ -12,7 +12,7 @@ import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { newOwnershipTable, receive } from './ownership.ts';
-import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, successor, type RoundMessage } from './round.ts';
+import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, settle, successor, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -189,6 +189,38 @@ test('the score is per player: p3 secures 2, p0 catches 1, p1 2, a capture held 
 });
 
 // A side's looks are its characters in the roster (card 100): six per side, the fold refuses a seventh.
+// Three names folded to the heist, the table's ends settled after every message as `receive` does: p0
+// the dog, p1 and p2 the cats.
+function heistOf3() {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const fold = (m: RoundMessage | Left) => {
+    const ok = foldRound(r, m, 'c0', t, new Map());
+    settle(r, t, new Map());
+    return ok;
+  };
+  for (let i = 0; i < 3; i++) fold({ type: 'hello', from: `c${i}`, name: `p${i}` });
+  for (let k = 0; k < 2; k++) fold({ type: 'phase', from: 'c0', ...successor(r) });
+  return { r, fold };
+}
+
+test("a free cat's tab dying mid-heist, its teammate captured, ends nothing", () => {
+  const { r, fold } = heistOf3();
+  fold({ type: 'captured', from: 'c1', at: 5, by: null });
+  fold({ type: 'left', id: 'c2', host: 'c0' });
+  console.log(`${r.roster.map((p) => `${p.name}:${p.side}`).join(' ')}; phase after the free cat's left: ${r.phase}`);
+  expect(r.phase).toBe('heist');
+});
+
+test('a rescue frees a captured cat whose tab died, and its rejoin by name enters free', () => {
+  const { r, fold } = heistOf3();
+  fold({ type: 'captured', from: 'c2', at: 5, by: null });
+  fold({ type: 'left', id: 'c2', host: 'c0' });
+  const rescue = fold({ type: 'rescue', from: 'c1' });
+  fold({ type: 'hello', from: 'c9', name: 'p2' });
+  console.log(`the rescue with the captive away accepted: ${rescue}; its rejoin's captured: ${playerOf(r, 'c9')?.captured}`);
+  expect([rescue, playerOf(r, 'c9')?.captured, r.phase]).toEqual([true, null, 'heist']);
+});
+
 test('the fold accepts looks 0 to 5 on either side and refuses 6', () => {
   const [r, t] = [newRound(), newOwnershipTable()];
   foldRound(r, { type: 'hello', from: 'A', name: 'P0' }, 'A', t, new Map());
@@ -419,6 +451,28 @@ test("round 2 starts with every client's character of the side the rotation give
   expect(agree(r)).toBe(true);
 });
 
+test("the next prep puts every piece of debris knocked in round 1 back at its content pose, at rest 3 s later, on every client", () => {
+  const r = relay(countryHouse);
+  r.players(3);
+  toHeist(r);
+  const home = (s: Sim) => s.debris.filter(({ prop, body }) => {
+    const p = countryHouse.props[prop]!.p;
+    const q = body.translation();
+    return Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) <= 0.01 && body.isSleeping();
+  }).length;
+  // Every plate, cup, vase and pot swept 1.2 m south and dropped from 0.3 m, on every client.
+  for (const s of r.sims()) for (const { body } of s.debris) body.setTranslation({ x: body.translation().x, y: 0.3, z: body.translation().z - 1.2 }, true);
+  r.run(60);
+  const knocked = r.sims().map(home);
+  captureAll(r);
+  r.send(hostOf(r), advance(hostOf(r), hostOf(r).me)!);
+  r.run(3 * 60);
+  const round2 = r.sims().map(home);
+  console.log(`debris at its content pose of ${countryHouse.props.filter((p) => !p.synced).length}: knocked in round 1 ${knocked.join(' / ')}; at round 2's prep ${round2.join(' / ')} (${r.sims()[0]!.round.phase} ${r.sims()[0]!.round.round})`);
+  expect(r.sims()[0]!.round).toMatchObject({ phase: 'prep', round: 2 });
+  expect(round2).toEqual([26, 26, 26]);
+});
+
 // This client's own character, put where a test wants it, facing `yaw`.
 function stand(sim: Sim, x: number, z: number, yaw: number): Entity {
   const me = [...sim.entities.values()].find((e) => e.home === sim.me)!;
@@ -476,6 +530,35 @@ test('secured is born at the holder inside the hideout: a fish carried in counts
   expect(count()).toBe('2,2');
   expect([cat!, dog!].some((s) => s.entities.has(first) || s.ownership.rows.has(first))).toBe(false);
   expect(agree(r)).toBe(true);
+});
+
+test("a cat whose secured the fold refused, its throw delivered first, secures the same fish on its next carry", () => {
+  const r = relay(countryHouse, true);
+  const [dog, cat] = r.players(2);
+  toHeist(r);
+  const count = () => [cat!, dog!].map((s) => s.round.secured.length).join();
+  const fish = spawnOf(cat!, { kind: 'fish', p: { x: 0, y: halfHeight('fish'), z: -22.8 } });
+  r.send(cat!, fish);
+  stand(cat!, 0, -22, Math.PI); // in the hideout, facing the fish
+  r.run(10);
+  r.send(cat!, grab(cat!)!);
+  // The step that sends `secured` for the fish it holds there, and a throw pressed in the same frame and
+  // delivered first.
+  const out = step(cat!, STEP, IDLE, r.client(cat!).host);
+  r.send(cat!, throwCarried(cat!)!);
+  for (const m of out) r.send(cat!, m);
+  const refused = count();
+  r.run(120);
+  const lying = cat!.entities.get(fish.id)!.body.translation();
+  stand(cat!, lying.x, lying.z + 0.8, Math.PI);
+  r.run(2);
+  r.send(cat!, grab(cat!)!);
+  r.run(2);
+  const sent = r.history.filter(([m]) => m.type === 'secured').length;
+  console.log(`secured in the step's messages: ${out.some((m) => m.type === 'secured')}; count on cat/dog after the refusal ${refused}, after the next carry ${count()}; secured sent ${sent}`);
+  expect(refused).toBe('0,0');
+  expect(lying.z).toBeLessThan(-20); // it landed in the hideout
+  expect(count()).toBe('1,1');
 });
 
 test('in prep a cat pressing into the gate from the hideout moves 0 m through it, in heist it passes; a dog passes in neither', () => {

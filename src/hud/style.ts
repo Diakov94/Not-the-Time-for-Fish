@@ -1,11 +1,15 @@
 // The HUD's look (GAME.md, UI mood: chunky, playful, readable at a glance). Every size is in `--u`, a
-// hundredth of the height of the largest 16:9 box the window holds, so the layout keeps its proportions
+// hundredth of the height of the largest 16:9 box the window holds times the viewer's text scale
+// (`--scale`, which the HUD writes from the settings store, card 122), so the layout keeps its proportions
 // from 1280x720 to 1920x1080. `--top` leaves the top edge to the app's room hint, two 14 px lines at
-// both 1280 and 1920 px wide.
+// both 1280 and 1920 px wide. No text is under 12 px, whatever the scale. Three columns share the top: the
+// team at most 30 --u wide from the left (a long name puts its state under it), the centre's texts within
+// 33 --u of either edge, the fish counter at the right, so at the largest scale no panel meets another.
 export const CSS = `
 .hud {
-  --u: min(1vh, 0.5625vw);
+  --u: calc(min(1vh, 0.5625vw) * var(--scale, 1));
   --top: calc(7 * var(--u) + 14px);
+  --middle: calc(100vw - 66 * var(--u)); /* the widest a centred text may be */
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -67,12 +71,12 @@ export const CSS = `
   font-size: calc(3.5 * var(--u));
 }
 .hud .fish small {
-  font-size: calc(1.7 * var(--u));
+  font-size: max(12px, calc(1.7 * var(--u)));
   font-weight: 700;
 }
 .hud .fish .title {
   grid-column: 1 / -1;
-  font-size: calc(2 * var(--u));
+  font-size: max(12px, calc(2 * var(--u)));
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -88,9 +92,12 @@ export const CSS = `
   opacity: 0.5;
 }
 .hud .overtime {
+  max-width: var(--middle);
+  box-sizing: border-box;
   font-size: calc(2.6 * var(--u));
   background: rgb(150 30 20 / 0.8);
-  white-space: nowrap;
+  text-align: center;
+  text-wrap: balance;
 }
 .hud .work {
   position: absolute;
@@ -99,7 +106,7 @@ export const CSS = `
   transform: translateX(-50%);
   width: calc(32 * var(--u));
   text-align: center;
-  font-size: calc(2.2 * var(--u));
+  font-size: max(12px, calc(2.2 * var(--u)));
 }
 .hud .work .bar {
   height: calc(1.6 * var(--u));
@@ -160,9 +167,23 @@ export const CSS = `
   flex-direction: column;
   align-items: flex-start;
   gap: calc(0.8 * var(--u));
-  font-size: calc(2.2 * var(--u));
+  max-width: calc(30 * var(--u));
+  font-size: max(12px, calc(2.2 * var(--u)));
+}
+.hud .mate {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.3em;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.hud .mate .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .hud .mate .state {
+  flex: none;
   font-weight: 700;
 }
 .hud .mate[data-state='grabbed'] {
@@ -187,11 +208,9 @@ export const CSS = `
   filter: drop-shadow(0 0 calc(0.3 * var(--u)) #111);
 }
 .hud .tip {
-  position: absolute;
-  top: calc(var(--top) + 20 * var(--u));
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: calc(100 * var(--u));
+  margin-top: calc(4 * var(--u));
+  max-width: min(calc(100 * var(--u)), var(--middle));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -202,7 +221,7 @@ export const CSS = `
   animation: tip 5s linear forwards;
 }
 .hud .tip small {
-  font-size: calc(1.6 * var(--u));
+  font-size: max(12px, calc(1.6 * var(--u)));
   font-weight: 700;
   opacity: 0.8;
 }

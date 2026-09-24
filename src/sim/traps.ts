@@ -1,8 +1,8 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
-import { halfHeight, spawnOf, type Entity, type Kind, type Variant } from './entities.ts';
+import { characterOf, halfHeight, spawnOf, type Entity, type Kind, type Variant } from './entities.ts';
 import { release } from './grab.ts';
 import type { Cleared, Pickup, SimMessage, Sprung } from './messages.ts';
-import { stunned } from './mines.ts';
+import { noteUntil, stunned } from './mines.ts';
 import { myCharacter } from './movement.ts';
 import { carried } from './ownership.ts';
 import { draw } from './perks.ts';
@@ -74,11 +74,13 @@ export const slipped = (sim: Sim): boolean => myCharacter(sim)?.kind === 'dog' &
 
 // A folded end of a trap, or of a pickup of `kind` and `variant`, on this client. The springer's client
 // makes the trap's noise where it lay; a slip trap's springer is the dog that stepped on it: it tumbles, its
-// intent ignored for SLIP (its own stun), and drops the cat it carries by an ordinary release. The picker's
-// client has that trap in hand, or draws its perk.
+// intent ignored for SLIP (its own stun), and drops the cat it carries by an ordinary release; every other
+// client notes that dog stunned for SLIP. The picker's client has that trap in hand, or draws its perk.
 export function trapEnded(sim: Sim, m: Sprung | Cleared | Pickup, at: Vector, kind: Kind, variant?: Variant): void {
-  if (m.from !== sim.me) return;
   const slip = m.type === 'sprung' && variant === 'slip';
+  const dog = slip && m.from !== sim.me ? characterOf(sim.entities, m.from) : undefined;
+  if (dog) noteUntil(sim, sim.stunned, dog.id, sim.time + SLIP);
+  if (m.from !== sim.me) return;
   const held = carried(sim);
   if (slip) sim.stunUntil = sim.time + SLIP;
   if (slip && held) sim.outbox.push(release(sim, held, { x: 0, y: 0, z: 0 }));

@@ -66,6 +66,8 @@ export type Sim = {
   refused: Refusal | null; // why the fold refused this client's own latest hello (card 68)
   stunUntil: number; // when this client's cat's stun ends, by its own clock
   wetUntil: number; // when this client's cat a water bomb splashed dries, by its own clock (card 129)
+  stunned: Map<NetId, number>; // until when the others' characters are stunned, by the ends this client folded
+  soaked: Map<NetId, number>; // until when the others' cats are wet, by the splashes this client folded
   used: number; // mines this client's dog planted since its last resupply
   planting: Work | null; // this client's dog's plant in progress
   defusing: (Work & { id: NetId }) | null; // this client's cat's defuse in progress, of mine `id`
@@ -142,6 +144,8 @@ export function createWorld(level: Level, me: ClientId, levels: Sim['levels'] = 
     refused: null,
     stunUntil: 0,
     wetUntil: 0,
+    stunned: new Map(),
+    soaked: new Map(),
     used: 0,
     planting: null,
     defusing: null,
@@ -175,11 +179,14 @@ export function follow(sim: Sim): void {
 // `intent` is this client's player input, held for every step of the call. Returns the messages the
 // steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims, the host's clock and
 // removals) and the fold's outbox, for the caller to send. `host` is the host the relay names now.
-export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientId): SimMessage[] {
+// `before` runs ahead of each fixed step with the seconds of passed-in time still unstepped after it, so a
+// caller sets what a step moves to at that step's own moment (net: every copy's target).
+export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientId, before?: (left: number) => void): SimMessage[] {
   const out: SimMessage[] = sim.outbox.splice(0);
   sim.accumulator += dt;
   while (sim.accumulator >= STEP) {
     sim.accumulator -= STEP;
+    before?.(sim.accumulator);
     sim.time += STEP;
     const c = myCharacter(sim);
     const act = stunned(sim) ? IDLE : intent; // a stunned cat's or a slipped dog's intent is not its own
