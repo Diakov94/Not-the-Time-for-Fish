@@ -15,3 +15,5 @@ GAME.md, Kennel & rescue and CONTEXT.md: a cat dropped into the kennel is captur
 
 ## Test
 - Vitest through the relay for capture-by-position and for the rescue freeing all, each red with its rule removed.
+
+- From batch C1: the schema has no role yet for the kennel gate the latch opens. This card may add one to src/content (schema and data), named in the report.
