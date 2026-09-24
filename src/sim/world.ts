@@ -2,9 +2,9 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
 import type { ClientId, Entities, NetId } from './entities.ts';
 import type { Level } from './level.ts';
-import { carry } from './grab.ts';
+import { carry, grabStep } from './grab.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
-import type { Claim } from './messages.ts';
+import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
 import { touchClaims } from './touch.ts';
 
@@ -23,6 +23,10 @@ export type Sim = {
   touchedAt: Map<NetId, number>; // when this client last produced a touch claim for a prop
   climbs: Collider[]; // the level's climb volumes, sensors
   leap: { x: number; y: number; z: number } | null; // the own character's velocity since its take-off, while airborne
+  lunge: number | null; // when the own dog's dash in progress ends
+  lungeReady: number; // when the own dog may lunge again
+  grabbedAt: number | null; // when this client's hold on a cat was accepted: the carrier's clock of the wiggle-free
+  thrown: Map<NetId, number>; // props this client threw, and when
 };
 
 export async function init(): Promise<void> {
@@ -61,14 +65,18 @@ export function createWorld(level: Level, me: ClientId): Sim {
     touchedAt: new Map(),
     climbs,
     leap: null,
+    lunge: null,
+    lungeReady: 0,
+    grabbedAt: null,
+    thrown: new Map(),
   };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
-// `intent` is this client's player input, held for every step of the call. Returns the touch claims
-// the steps produced, for the caller to send.
-export function step(sim: Sim, dt: number, intent: Intent = IDLE): Claim[] {
-  const claims: Claim[] = [];
+// `intent` is this client's player input, held for every step of the call. Returns the messages the
+// steps produced (a lunge's grab, a wiggle-free, a hit, touch claims), for the caller to send.
+export function step(sim: Sim, dt: number, intent: Intent = IDLE): SimMessage[] {
+  const out: SimMessage[] = [];
   sim.accumulator += dt;
   while (sim.accumulator >= STEP) {
     sim.accumulator -= STEP;
@@ -77,7 +85,7 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE): Claim[] {
     if (c) drive(sim, c, intent);
     carry(sim);
     sim.world.step();
-    claims.push(...touchClaims(sim));
+    out.push(...grabStep(sim), ...touchClaims(sim));
   }
-  return claims;
+  return out;
 }

@@ -1,10 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
-import type { Claim, Left, Release, Spawn } from './messages.ts';
+import type { Claim, Hit, Left, Release, Spawn } from './messages.ts';
 import type { Sim } from './world.ts';
 
-// ADR 0006's messages, in the relay's order.
-export type FoldMessage = Spawn | Claim | Release | Left;
+// ADR 0006's and 0009's messages, in the relay's order.
+export type FoldMessage = Spawn | Claim | Release | Left | Hit;
 
 export type Ownership = { owner: ClientId; held: boolean };
 
@@ -72,6 +72,19 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities): b
         row.owner = homeOr(id, m.host);
       }
       return true;
+    case 'hit': {
+      // A thrown prop met a dog: what the dog holds goes home, without a handoff pose, as on `left`.
+      const dog = entities.get(m.dog);
+      if (dog?.kind !== 'dog') return false;
+      let freed = false;
+      for (const [id, row] of t.rows) {
+        if (row.owner !== dog.home || !row.held) continue;
+        row.held = false;
+        row.owner = homeOr(id, row.owner);
+        freed = true;
+      }
+      return freed;
+    }
   }
 }
 
@@ -118,14 +131,22 @@ export function receive(sim: Sim, m: FoldMessage): void {
   if (m.type === 'spawn') spawnEntity(sim.world, sim.entities, m);
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
-  if (!fold(sim.ownership, m, sim.entities) && !settled) return;
+  const accepted = fold(sim.ownership, m, sim.entities);
+  if (!accepted && !settled) return;
   setBodyTypes(sim);
-  if (m.type !== 'release') return;
-  // The release carries the handoff state, so the new owner continues the throw or the drop without a gap.
+  if (!accepted || (m.type !== 'claim' && m.type !== 'release')) return;
   const e = sim.entities.get(m.id);
-  if (e && simulatedHere(sim, e)) {
+  // The carrier's clock of the wiggle-free starts when its hold on a cat is accepted.
+  if (m.type === 'claim' && m.hold && m.from === sim.me && e?.kind === 'cat') sim.grabbedAt = sim.time;
+  if (m.type !== 'release' || !e) return;
+  // The release carries the handoff state, so the new owner continues the throw or the drop without a gap:
+  // a tossed character flies as a leap from the carrier's hands.
+  if (simulatedHere(sim, e)) {
     e.body.setTranslation(m.p, true);
     e.body.setRotation(m.q, true);
     e.body.setLinvel(m.v, true);
+    if (isCharacter(e.kind)) sim.leap = { ...m.v };
   }
+  // "Thrown" is this client's own fact: a prop it released with a velocity (ADR 0009's hit).
+  if (m.from === sim.me && !isCharacter(e.kind) && Math.hypot(m.v.x, m.v.y, m.v.z) > 0) sim.thrown.set(m.id, sim.time);
 }

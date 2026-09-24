@@ -7,6 +7,8 @@ export type Spawn = { type: 'spawn'; from: ClientId; id: NetId; kind: Kind; home
 export type Claim = { type: 'claim'; from: ClientId; id: NetId; hold: boolean };
 export type Release = { type: 'release'; from: ClientId; id: NetId; p: Vector; q: Rotation; v: Vector };
 export type Left = { type: 'left'; id: ClientId; host: ClientId };
+// A prop the sender threw met `dog` (ADR 0009).
+export type Hit = { type: 'hit'; from: ClientId; dog: NetId };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release;
+export type SimMessage = Spawn | Claim | Release | Hit;

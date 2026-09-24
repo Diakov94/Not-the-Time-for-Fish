@@ -1,7 +1,7 @@
 import { beforeAll, expect, test } from 'vitest';
 import type { RigidBody, Vector } from '@dimforge/rapier3d-compat';
 import { isCharacter, type ClientId, type Kind } from './entities.ts';
-import { anchor, grab, throwCarried } from './grab.ts';
+import { anchor, grab, handOf, throwCarried } from './grab.ts';
 import { CRATE_HALF, prototypeRoom } from './level.ts';
 import { IDLE, yawOf, type Intent } from './movement.ts';
 import { receive, type FoldMessage } from './ownership.ts';
@@ -20,9 +20,9 @@ const bottom = (b: RigidBody) => {
   const reach = Math.abs(2 * (x * y + w * z)) + Math.abs(1 - 2 * (x * x + z * z)) + Math.abs(2 * (y * z - w * x));
   return b.translation().y - CRATE_HALF * reach;
 };
-const offAnchor = (held: Vector, carrier: Sim, id: string) => {
+const offAnchor = (held: Vector, carrier: Sim, id: string, kind: Kind = 'prop') => {
   const c = carrier.entities.get(id)!.body;
-  return dist(held, anchor(c.translation(), yawOf(c.rotation())));
+  return dist(held, anchor(c.translation(), yawOf(c.rotation()), handOf(kind)));
 };
 
 // Clients behind a loopback relay: every message reaches every client at once, in one order.
@@ -96,7 +96,10 @@ test("a grabbed character's body follows its carrier", () => {
   const cat = spawn('A', 'cat', { x: 0, y: 1, z: 1.5 });
   const dog = spawn('B', 'dog', { x: 0, y: 1, z: 0 }); // faces +z, toward the cat
   run(IDLE, 30);
-  relay(grab(b));
+  grab(b); // a dog lunges: its claim comes out of the step that ends the dash (card 21)
+  let claim: FoldMessage | undefined;
+  for (let i = 0; i < 30 && !claim; i++) claim = step(b, STEP).find((m) => m.type === 'claim');
+  relay(claim!);
   const onA = a.entities.get(cat)!.body;
   const onB = b.entities.get(cat)!.body;
   const x0 = onA.translation().x;
@@ -106,7 +109,7 @@ test("a grabbed character's body follows its carrier", () => {
     // B's tick: everything B owns, the carried cat included.
     for (const [id, row] of b.ownership.rows) if (row.owner === 'B') applySnapshot(a, 'B', readSnapshot(b.entities.get(id)!));
     step(a, STEP, west); // the cat's player pulls the other way
-    worst = Math.max(worst, offAnchor(onB.translation(), b, dog), dist(onA.translation(), onB.translation()));
+    worst = Math.max(worst, offAnchor(onB.translation(), b, dog, 'cat'), dist(onA.translation(), onB.translation()));
   }
   expect(onA.translation().x - x0).toBeGreaterThan(3);
   expect(worst).toBeLessThanOrEqual(0.05);
