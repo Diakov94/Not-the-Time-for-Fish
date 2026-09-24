@@ -3,6 +3,7 @@ import type { KinematicCharacterController, World } from '@dimforge/rapier3d-com
 import type { ClientId, Entities } from './entities.ts';
 import type { Level } from './level.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
+import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
 
 export const STEP = 1 / 60;
 const GRAVITY = 9.81;
@@ -12,6 +13,7 @@ export type Sim = {
   world: World;
   controller: KinematicCharacterController; // drives this client's own character
   entities: Entities;
+  ownership: OwnershipTable;
   accumulator: number; // seconds of passed-in time not yet stepped
 };
 
@@ -36,7 +38,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
-  return { me, world, controller, entities: new Map(), accumulator: 0 };
+  return { me, world, controller, entities: new Map(), ownership: newOwnershipTable(), accumulator: 0 };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.

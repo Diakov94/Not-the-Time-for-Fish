@@ -1,5 +1,6 @@
 import type { Rotation } from '@dimforge/rapier3d-compat';
 import type { Entity } from './entities.ts';
+import { simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
 // A player's input for one step; `move` is a world-space direction, length up to 1.
@@ -10,9 +11,9 @@ export const WALK_SPEED = 4;
 export const SPRINT_SPEED = 7;
 const JUMP_SPEED = 5;
 
-// The character this client drives: its own.
+// The character this client drives: its own, while the fold leaves it here and nobody carries it.
 export function myCharacter(sim: Sim): Entity | undefined {
-  for (const e of sim.entities.values()) if (e.kind === 'character' && e.home === sim.me) return e;
+  for (const e of sim.entities.values()) if (e.kind === 'character' && simulatedHere(sim, e)) return e;
   return undefined;
 }
 
