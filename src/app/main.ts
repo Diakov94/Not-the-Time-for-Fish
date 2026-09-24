@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import { createAudio, hear } from '../audio/audio.ts';
 import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send } from '../net/client.ts';
@@ -5,11 +6,14 @@ import { dump } from '../net/dump.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
-import { drainEvents } from '../sim/events.ts';
+import { drainEvents, markAt } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
-import type { Phase } from '../sim/messages.ts';
+import { interact } from '../sim/heist.ts';
+import type { Phase, SimMessage } from '../sim/messages.ts';
+import { plant } from '../sim/mines.ts';
 import { IDLE } from '../sim/movement.ts';
 import { carried } from '../sim/ownership.ts';
+import { usePerk } from '../sim/perks.ts';
 import { advance } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
 import { intent, listen } from './input.ts';
@@ -41,13 +45,18 @@ const hint = document.querySelector<HTMLElement>('.hint')!;
 const own = () => [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind))?.id;
 
 const canvas = document.querySelector('canvas')!;
-const input = listen(
-  canvas,
-  () => {
-    const m = carried(sim) ? throwCarried(sim) : grab(sim);
-    if (m) send(session, m);
-  },
-  () => {
+// A press's sim call, sent only while the canvas is the screen; what it does is the sim's, by kind.
+const act = (call: () => SimMessage | null) => () => {
+  const m = PLAY.includes(sim.round.phase) ? call() : null;
+  if (m) send(session, m);
+};
+const input = listen(canvas, own, {
+  grab: act(() => (carried(sim) ? throwCarried(sim) : grab(sim))),
+  plant: act(() => plant(sim)),
+  interact: act(() => interact(sim)),
+  perk: act(() => usePerk(sim)),
+  mark: act(() => markAt(sim, view.camera.position, view.camera.getWorldDirection(new Vector3()))),
+  report: () => {
     // The desync report: the dump the headless runner compares, as a file.
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(dump(sim), null, 2)], { type: 'application/json' }));
@@ -55,7 +64,7 @@ const input = listen(
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
-);
+});
 const view = createView(canvas, sim);
 const audio = createAudio();
 
@@ -66,7 +75,7 @@ let last = performance.now();
 // canvas is the screen, and the mouse is freed for the lobby's and the results' buttons.
 requestAnimationFrame(function loop(now: number) {
   const playing = PLAY.includes(sim.round.phase);
-  frame(session, Math.min((now - last) / 1000, MAX_FRAME), playing ? intent(input) : IDLE);
+  frame(session, Math.min((now - last) / 1000, MAX_FRAME), playing ? intent(input, own()) : IDLE);
   last = now;
   draw(view, sim, input.look, own());
   hear(audio, sim, view.camera);
