@@ -29,6 +29,9 @@ export type Noise = { type: 'noise'; from: ClientId; p: Vector; loud: number; ca
 export type Mark = { type: 'mark'; from: ClientId; p: Vector };
 // A dog's Bark (card 42) where it stands: an event every cat's client answers for its own cat.
 export type Bark = { type: 'bark'; from: ClientId; p: Vector };
+// An emote (ADR 0013): an event, never stored; `n` indexes the emotes the roster names for the sender's
+// character.
+export type Emote = { type: 'emote'; from: ClientId; n: number };
 // The round's (ADR 0007): a joining client's name, the host's team for a name, a player's look for a side.
 export type Team = 'A' | 'B';
 export type Side = Extract<Kind, 'cat' | 'dog'>;
@@ -49,4 +52,4 @@ export type Opened = { type: 'opened'; from: ClientId; storage: number };
 export type OpenDoor = { type: 'door'; from: ClientId; door: number };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Bark | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
+export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Bark | Emote | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
