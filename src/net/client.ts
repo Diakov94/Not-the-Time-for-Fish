@@ -10,6 +10,7 @@ export type Session = {
   sim: Sim;
   ws: WebSocket;
   host: ClientId; // the relay's fact, as its `welcome` and `left` state it
+  owed: Set<ClientId>; // joiners whose `joined` this client saw and whose `state` it has not
   rested: Rested;
   receiver: Receiver;
   spawned: number; // this client's net id counter: ids are `<client>:<n>`
@@ -34,7 +35,7 @@ export function connect(url: string, level: Level): Promise<Session> {
       const at = performance.now();
       if (m.type === 'welcome') {
         const sim = createWorld(level, m.you);
-        s = { sim, ws, host: m.host, rested: new Set(), receiver: new Map(), spawned: 0, lastTick: 0, ticks: 0 };
+        s = { sim, ws, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), spawned: 0, lastTick: 0, ticks: 0 };
         if (m.host !== m.you) return;
         held = null;
         for (const p of level.crates) spawn(s, 'crate', p);
@@ -58,17 +59,28 @@ export function connect(url: string, level: Level): Promise<Session> {
 function handle(s: Session, m: Incoming, at: number, after = 0): void {
   switch (m.type) {
     case 'welcome':
+      return;
     case 'state':
+      s.owed.delete(m.to);
       return;
     case 'joined':
       s.rested.clear(); // every owner resends its resting entities once
+      s.owed.add(m.id);
       if (s.host === s.sim.me) answer(s, m.id, m.seq);
       return;
     case 'tick':
       receiveTick(s.sim, s.receiver, m, at);
       return;
-    case 'left':
+    case 'left': {
+      const hostLeft = m.id === s.host;
       s.host = m.host; // from here on this client answers joiners if it is the one named
+      s.owed.delete(m.id);
+      if (m.seq > after) receive(s.sim, m);
+      // A host's states precede its `left` in the relay's order, so the joiners still owed one were never
+      // answered: the next host owes them the state as it stands after this `left` (ADR 0006, Join).
+      if (hostLeft && s.host === s.sim.me) for (const id of s.owed) answer(s, id, m.seq);
+      return;
+    }
   }
   if (m.seq > after) receive(s.sim, m);
 }
