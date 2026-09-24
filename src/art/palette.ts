@@ -75,6 +75,40 @@ export const PAINT = {
   orange: 0xe8a33c,
 } as const;
 
+// The characters' coats (ADR 0011): the slots the roster's `palette` names for a character's fur, belly
+// (a dog's muzzle) and accent, and a nose. Keyed by the roster's names, so a character reads its own.
+export const COAT: Record<string, number> = {
+  tabbyGrey: 0x8c95a3,
+  cream: 0xe8e2d6,
+  white: 0xf6f3ee,
+  gold: GOLD.brass,
+  loafGold: 0xe3a93b,
+  crust: 0xa4632b,
+  plumeBlack: 0x2b2b2e,
+  legPink: 0xd9a6a0,
+  nose: 0xe88a9a,
+  shellWhite: 0xf4efe4,
+  yolk: 0xf2b233,
+  ginger: 0xd98a3d,
+  tracksuitBlue: PAINT.cobalt,
+  smokeGrey: 0x6e6a70,
+  wheat: 0xe2c27a,
+  black: 0x2f2a27,
+  tan: 0xb57a42,
+  ink: INK.black,
+  terrierWhite: 0xf0ebe0,
+  earBrown: WOOD.walnut,
+  brindle: 0x8a7563,
+  fawn: 0xd8c8b0,
+  collarRed: 0x9a2a2a,
+  liver: 0x7a4a36,
+  rescueOrange: 0xf07a1e,
+  houndGrey: 0x9a9ca0,
+  paleGrey: 0xc9cbcd,
+  hoodDark: 0x2e3238,
+  borderGreen: 0x4f6b3a,
+};
+
 // The kinds the sim spawns (card 30, card 57), for the props' looks (card 116).
 export const KIND = {
   fish: { body: 0x7fb3d5, fin: 0xf08c3a },

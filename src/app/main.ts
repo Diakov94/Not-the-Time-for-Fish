@@ -5,6 +5,7 @@ import type { Level } from '../content/level.ts';
 import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { createHud, drawHud } from '../hud/hud.ts';
+import { record } from '../meta/progress.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw, type Target } from '../render/view.ts';
 import { isCharacter, type ClientId } from '../sim/entities.ts';
@@ -113,6 +114,7 @@ requestAnimationFrame(function loop(now: number) {
   if (!playing && document.pointerLockElement) document.exitPointerLock();
   lobby(sim, session.host);
   results(sim, session.host);
+  record(sim); // the meta save (ADR 0013) counts this frame's ends and own events
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });
