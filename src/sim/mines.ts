@@ -31,14 +31,19 @@ export function stunned(sim: Sim): boolean {
   return sim.time < sim.stunUntil - 1e-9;
 }
 
+// The mines this client's dog has in hand, its own count: the knob's (card 27), and Sapper's while it
+// lasts, less those used since its last resupply. `plant` and the HUD read it.
+export function minesLeft(sim: Sim): number {
+  return Math.max(0, knobs(sim.round).mines + (perkOf(sim) === 'sapper' ? SAPPER : 0) - sim.used);
+}
+
 // Q (card 49), for a cat its trap's. For a dog: a dog with a mine in hand that carries nothing starts
-// planting one at its feet, in play only. The mines are the dog's own count: the knob's (card 27), and
-// Sapper's while it lasts, less those used since its last resupply.
+// planting one at its feet, in play only.
 export function plant(sim: Sim): SimMessage | null {
   const c = myCharacter(sim);
   if (c?.kind === 'cat' && !stunned(sim)) return plantOrSpring(sim, c);
   const sapper = perkOf(sim) === 'sapper';
-  if (c?.kind !== 'dog' || !inPlay(sim.round) || sim.planting || carried(sim) || sim.used >= knobs(sim.round).mines + (sapper ? SAPPER : 0)) return null;
+  if (c?.kind !== 'dog' || !inPlay(sim.round) || sim.planting || carried(sim) || minesLeft(sim) === 0) return null;
   sim.planting = { since: sim.time, until: sim.time + (sapper ? PLANT / 2 : PLANT), from: c.body.translation() };
   return null;
 }

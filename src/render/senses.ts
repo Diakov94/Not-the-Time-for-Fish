@@ -102,3 +102,9 @@ export function drawSenses(s: Senses, sim: Sim, scene: THREE.Scene, camera: THRE
     return true;
   });
 }
+
+// The pings render shows now, each where it rang and how far through its PING_TIME it is, 0 to 1 (the
+// HUD's arrows fade with them, card 61).
+export function livePings(s: Senses, sim: Sim): { p: THREE.Vector3; age: number }[] {
+  return s.pings.map(({ ring, born }) => ({ p: ring.position, age: (sim.time - born) / PING_TIME }));
+}

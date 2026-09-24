@@ -152,12 +152,18 @@ export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void 
 }
 
 // Every client runs this for every message of the relay's order, its own echoed ones included, with the
-// host the relay names as of that message. The round's messages go to the round table (ADR 0007); a
-// secured fish leaves play, its entity and its row; the round's own ends are checked after every
-// message; `phase prep` clears the entity table and the ownership rows before the round respawns.
+// host the relay names as of that message. The round's messages go to the round table (ADR 0007); an
+// accepted secure, capture, rescue or dig-out is an event where this client holds the fish or the
+// sender's character (card 55); a secured fish leaves play, its entity and its row; the round's own ends
+// are checked after every message; `phase prep` clears the entity table and the ownership rows before
+// the round respawns.
 export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   const { phase, round } = sim.round;
   const accepted = (m.type === 'left' || isRound(m)) && receiveRound(sim, m, host);
+  if (accepted && (m.type === 'secured' || m.type === 'captured' || m.type === 'rescue' || m.type === 'dugOut')) {
+    const at = m.type === 'secured' ? sim.entities.get(m.fish) : [...sim.entities.values()].find((e) => e.home === m.from && isCharacter(e.kind));
+    if (at) sim.events.push({ type: m.type, p: at.body.translation(), from: m.from });
+  }
   if (m.type === 'secured' && accepted) remove(sim, m.fish);
   if (!isRound(m)) apply(sim, m, host);
   settle(sim.round, sim.ownership, sim.entities);
@@ -182,7 +188,8 @@ function remove(sim: Sim, id: NetId): void {
 }
 
 // ADR 0006's and 0010's messages. A noise and a bark are events for everyone; a mark only for the marker's
-// side. Every cat's client answers a bark for its own cat.
+// side. Every cat's client answers a bark for its own cat. A mine's spawn, or a trap's with a home, is a
+// plant where it was put (card 55).
 function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: ClientId): void {
   if (m.type === 'noise' || m.type === 'mark' || m.type === 'bark') {
     if (m.type !== 'mark' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
@@ -190,6 +197,7 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
     return;
   }
   if (m.type === 'spawn') spawnEntity(sim, m);
+  if (m.type === 'spawn' && (m.kind === 'mine' || (m.kind === 'trap' && m.home !== null))) sim.events.push({ type: 'planted', kind: m.kind, id: m.id, p: m.p, from: m.from });
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities, host);
