@@ -73,10 +73,8 @@ export function carried(sim: Sim): Entity | undefined {
   return undefined;
 }
 
-// Every client runs this for every message of the relay's order, its own echoed ones included.
-export function receive(sim: Sim, m: FoldMessage): void {
-  if (m.type === 'spawn') spawnEntity(sim.world, sim.entities, m);
-  if (!fold(sim.ownership, m, (id) => sim.entities.get(id)?.home ?? null)) return;
+// Body types follow the table's decision, on every client at the same message.
+function setBodyTypes(sim: Sim): void {
   for (const e of sim.entities.values()) {
     const type = !simulatedHere(sim, e)
       ? RAPIER.RigidBodyType.KinematicPositionBased // a follower of its carrier or a copy of its owner
@@ -85,6 +83,21 @@ export function receive(sim: Sim, m: FoldMessage): void {
         : RAPIER.RigidBodyType.KinematicVelocityBased;
     if (e.body.bodyType() !== type) e.body.setBodyType(type, true);
   }
+}
+
+// A joiner's start (ADR 0006, Join): the host's entities and table as of the `seq` of its `state`,
+// taken whole rather than folded; the relay's messages after that `seq` are folded on top.
+export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void {
+  for (const s of entities) spawnEntity(sim.world, sim.entities, s);
+  sim.ownership = table;
+  setBodyTypes(sim);
+}
+
+// Every client runs this for every message of the relay's order, its own echoed ones included.
+export function receive(sim: Sim, m: FoldMessage): void {
+  if (m.type === 'spawn') spawnEntity(sim.world, sim.entities, m);
+  if (!fold(sim.ownership, m, (id) => sim.entities.get(id)?.home ?? null)) return;
+  setBodyTypes(sim);
   if (m.type !== 'release') return;
   // The release carries the handoff state, so the new owner continues the throw or the drop without a gap.
   const e = sim.entities.get(m.id);
