@@ -15,6 +15,7 @@ export type SimEvent =
   | { type: 'noise'; p: Vector; loud: number; from: ClientId; cause: NoiseCause }
   | { type: 'mark'; p: Vector; from: ClientId }
   | { type: 'bark'; p: Vector; from: ClientId }
+  | { type: 'emote'; n: number; from: ClientId }
   | { type: 'grab' | 'throw' | 'drop'; id: NetId; from: ClientId }
   | { type: 'hit'; dog: NetId; from: ClientId }
   | { type: 'blast' | 'defused' | 'sprung' | 'cleared' | 'pickup'; id: NetId; p: Vector; from: ClientId } // an end, where it lay
