@@ -9,8 +9,9 @@ export type NetId = string; // `<client id>:<counter>` (ADR 0006)
 export type ClientId = string;
 // ADR 0009: a character's side is its kind, `cat` or `dog`; the rest are the game's props.
 export type Kind = 'cat' | 'dog' | 'fish' | 'mine' | 'trap' | 'bag' | 'lure' | 'prop';
-// A mine's variant (card 129): the firecracker, or the water bomb.
-export type Variant = 'firecracker' | 'water';
+// A mine's variant (card 129): the firecracker, or the water bomb; a trap's (card 130): the noise maker,
+// or the slip trap.
+export type Variant = 'firecracker' | 'water' | 'noise' | 'slip';
 
 // The one owner of identity (ADR 0004). The pose and velocity live in `body`, never here.
 export type Entity = {
@@ -18,7 +19,7 @@ export type Entity = {
   kind: Kind;
   home: ClientId | null; // its player's client for a character, none for a prop
   prop?: number; // a content prop's index in the level's props: its shape, mass and label (ADR 0008)
-  variant?: Variant; // a mine's, from its spawn
+  variant?: Variant; // a mine's or a trap's, from its spawn
   body: RigidBody;
 };
 

@@ -2,13 +2,13 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, EventQueue, KinematicCharacterController, RigidBody, Vector, World } from '@dimforge/rapier3d-compat';
 import type { Level } from '../content/level.ts';
 import { build } from './build.ts';
-import type { ClientId, Entities, NetId } from './entities.ts';
+import type { ClientId, Entities, NetId, Variant } from './entities.ts';
 import { roundStep } from './heist.ts';
 import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
 import { mineStep, stunned } from './mines.ts';
 import { smell, type Scent } from './scent.ts';
-import { pickups } from './traps.ts';
+import { pickups, slips } from './traps.ts';
 import { perkStep, type Perk } from './perks.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
@@ -70,7 +70,7 @@ export type Sim = {
   defusing: (Work & { id: NetId }) | null; // this client's cat's defuse in progress, of mine `id`
   resupplyAt: number | null; // since when this client's dog has stood in the doghouse
   ending: Set<NetId>; // entities this client sent the message that ends them for (a blast, a defuse, ...)
-  trap: boolean; // this client's cat has a trap in hand
+  trap: Extract<Variant, 'noise' | 'slip'> | null; // the trap in this client's cat's hand, by variant; null for none
   doorWork: { door: number; until: number } | null; // the own cat's work at a shut house door
   barged: Set<number>; // house doors this client's dog barged open, ahead of the round table
   perk: { kind: Perk; until: number | null } | null; // this client's perk slot: until when, null for one use
@@ -145,7 +145,7 @@ export function createWorld(level: Level, me: ClientId, levels: Sim['levels'] = 
     defusing: null,
     resupplyAt: null,
     ending: new Set(),
-    trap: true,
+    trap: 'noise',
     doorWork: null,
     barged: new Set(),
     perk: null,
@@ -180,13 +180,13 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientI
     sim.accumulator -= STEP;
     sim.time += STEP;
     const c = myCharacter(sim);
-    const act = stunned(sim) ? IDLE : intent; // a stunned cat's intent is not its own
+    const act = stunned(sim) ? IDLE : intent; // a stunned cat's or a slipped dog's intent is not its own
     if (c) drive(sim, c, act);
     carry(sim);
     sim.world.step(sim.queue);
     smell(sim);
     perkStep(sim);
-    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
+    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...slips(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
   }
   return out;
 }

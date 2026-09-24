@@ -28,7 +28,7 @@ export function mayHold(holder: Kind | undefined, target: Kind): boolean {
 }
 
 // What the fold reads of the entity table: identity, never a pose.
-export type Identities = ReadonlyMap<NetId, Pick<Entity, 'kind' | 'home'>>;
+export type Identities = ReadonlyMap<NetId, Pick<Entity, 'kind' | 'home' | 'variant'>>;
 
 // A client's side: the kind of its character (ADR 0009).
 export function sideOf(entities: Identities, client: ClientId): Kind | undefined {
@@ -100,13 +100,15 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, ho
     case 'sprung':
     case 'cleared':
     case 'pickup': {
-      // A trap is set off by its own cat only and cleared by a dog; a trap no one's yet is picked up by a
-      // cat, and a bag by anyone playing. The first delivered ends it.
+      // A noise maker is set off by its own cat only, a planted slip trap by a dog, the one that stepped on
+      // it (card 130); a planted trap is cleared by a dog; a trap no one's yet is picked up by a cat, and a
+      // bag by anyone playing. The first delivered ends it.
       const e = entities.get(m.id);
       const side = sideOf(entities, m.from);
       if (m.type === 'pickup' && e?.kind === 'bag') return side !== undefined && t.rows.delete(m.id);
       if (e?.kind !== 'trap') return false;
-      const ok = m.type === 'sprung' ? e.home === m.from : m.type === 'cleared' ? e.home !== null && side === 'dog' : e.home === null && side === 'cat';
+      const sprung = e.variant === 'slip' ? e.home !== null && side === 'dog' : e.home === m.from;
+      const ok = m.type === 'sprung' ? sprung : m.type === 'cleared' ? e.home !== null && side === 'dog' : e.home === null && side === 'cat';
       return ok && t.rows.delete(m.id);
     }
   }
@@ -211,7 +213,7 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
     remove(sim, m.id);
     if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from, ...(variant && { variant }) });
     if (m.type === 'blast') blasted(sim, m, p, variant);
-    if (trapEnd) trapEnded(sim, m, p, kind);
+    if (trapEnd) trapEnded(sim, m, p, kind, variant);
   }
   if (!accepted && !settled) return;
   setBodyTypes(sim);

@@ -32,7 +32,8 @@ const WET = 20;
 
 const flat = (a: Vector, b: Vector) => Math.hypot(a.x - b.x, a.z - b.z);
 
-// This client's cat is stunned: its player's intent does not reach it (ADR 0007: its own client's fact).
+// This client's character is stunned: its player's intent does not reach it (ADR 0007: its own client's
+// fact). A cat by a blast; a dog by a slip trap (card 130).
 export function stunned(sim: Sim): boolean {
   return sim.time < sim.stunUntil - 1e-9;
 }

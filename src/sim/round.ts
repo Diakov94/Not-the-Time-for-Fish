@@ -294,7 +294,7 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
   [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
-  [sim.stunUntil, sim.wetUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap, sim.doorWork, sim.perk] = [0, 0, 0, null, null, null, true, null, null];
+  [sim.stunUntil, sim.wetUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap, sim.doorWork, sim.perk] = [0, 0, 0, null, null, null, 'noise', null, null];
   sim.securing.clear();
   sim.ending.clear();
   sim.barged.clear();
