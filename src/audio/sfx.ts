@@ -155,6 +155,43 @@ export const SOUNDS = {
     tone(k, out, t + 0.32, { type: 'triangle', f: [1047, 1047], dur: 0.6, peak: 0.3 }),
     hiss(k, out, t + 0.32, { filter: 'highpass', f: [8000, 8000], dur: 0.6, peak: 0.06 }),
   ],
+  // A water bomb burst (card 129): a wet slap under a falling spray, and bubbles.
+  splash: (k, out, t) => [
+    tone(k, out, t, { type: 'sine', f: [160, 60], dur: 0.25, peak: 0.8 }),
+    hiss(k, out, t, { filter: 'bandpass', f: [2500, 600], q: 0.8, dur: 0.9, peak: 1.2 }),
+    ...[0.15, 0.27, 0.36, 0.5, 0.62].map((d, i) => tone(k, out, t + d, { type: 'sine', f: [500 + 180 * i, 900 + 250 * i], dur: 0.05, peak: 0.2 })),
+  ],
+  // A slip trap sprung (card 130): a squeak on the soap, a slide whistle up, and the bump.
+  slip: (k, out, t) => [
+    hiss(k, out, t, { filter: 'bandpass', f: [3000, 2000], q: 4, dur: 0.1, peak: 0.4 }),
+    tone(k, out, t, { type: 'sine', f: [300, 1500], dur: 0.35, peak: 0.3, attack: 0.02 }),
+    tone(k, out, t + 0.38, { type: 'sine', f: [120, 50], dur: 0.2, peak: 0.7 }),
+  ],
+  // The emotes (card 104), four a side. A cat's: a meow, a trill, a purr, a spit.
+  meow: (k, out, t) => [
+    tone(k, out, t, { type: 'sawtooth', f: [450, 750], dur: 0.15, peak: 0.12, attack: 0.03 }),
+    tone(k, out, t + 0.12, { type: 'sawtooth', f: [750, 380], dur: 0.35, peak: 0.12 }),
+  ],
+  trill: (k, out, t) => Array.from({ length: 6 }, (_, i) => tone(k, out, t + 0.04 * i, { type: 'triangle', f: [600 + 60 * i, 700 + 60 * i], dur: 0.04, peak: 0.25 })),
+  purr: (k, out, t) => [
+    tone(k, out, t, { type: 'sawtooth', f: [26, 24], dur: 0.9, peak: 0.4, attack: 0.15 }),
+    hiss(k, out, t, { filter: 'lowpass', f: [300, 200], dur: 0.9, peak: 0.3, attack: 0.15 }),
+  ],
+  spit: (k, out, t) => [hiss(k, out, t, { filter: 'highpass', f: [2500, 4500], dur: 0.5, peak: 0.35, attack: 0.03 })],
+  // A dog's: a woof, a howl, a whine, a yip.
+  woof: (k, out, t) => [
+    tone(k, out, t, { type: 'sawtooth', f: [320, 170], dur: 0.14, peak: 0.25 }),
+    hiss(k, out, t, { filter: 'bandpass', f: [800, 400], q: 1.5, dur: 0.12, peak: 0.5 }),
+  ],
+  howl: (k, out, t) => [
+    tone(k, out, t, { type: 'triangle', f: [330, 620], dur: 0.5, peak: 0.25, attack: 0.2 }),
+    tone(k, out, t + 0.45, { type: 'triangle', f: [620, 480], dur: 0.6, peak: 0.25 }),
+  ],
+  whine: (k, out, t) => [
+    tone(k, out, t, { type: 'sine', f: [900, 1300], dur: 0.25, peak: 0.2, attack: 0.05 }),
+    tone(k, out, t + 0.22, { type: 'sine', f: [1300, 800], dur: 0.35, peak: 0.2 }),
+  ],
+  yip: (k, out, t) => [0, 0.14].map((d) => tone(k, out, t + d, { type: 'triangle', f: [1000, 650], dur: 0.08, peak: 0.3 })),
   // The phase stingers, heard everywhere. The heist begins: two horns a fifth apart, rising.
   heist: (k, out, t) => [
     tone(k, out, t, { type: 'sawtooth', f: [220, 440], dur: 0.6, peak: 0.15, attack: 0.05 }),
@@ -171,6 +208,8 @@ export const SOUNDS = {
   ],
 } satisfies Record<string, Voice>;
 export type Sound = keyof typeof SOUNDS;
+// A side's emote sounds by the emote event's number, the roster's order (ADR 0013).
+export const EMOTES: Record<'cat' | 'dog', Sound[]> = { cat: ['meow', 'trill', 'purr', 'spit'], dog: ['woof', 'howl', 'whine', 'yip'] };
 
 // A defuse under way (card 55): a timer's beeps, quicker and higher as `done` runs from 0 to 1, until
 // `stop`, at once.
