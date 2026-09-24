@@ -192,6 +192,42 @@ test("a joiner whose host leaves before answering holds the next host's table an
   expect(ms).toBeLessThanOrEqual(500);
 });
 
+// The host drops its first `drops` states and leaves at the next one, so nobody left holds the world.
+async function hostLeavesOwing(joiners: number, drops: number) {
+  const [a] = await room(1, prototypeRoom);
+  await play(1000, () => a!.sim.entities.size === 10);
+  const send0 = a!.ws.send.bind(a!.ws);
+  let states = 0;
+  let leftAt = Infinity;
+  a!.ws.send = (d) => {
+    if (JSON.parse(String(d)).type !== 'state') return send0(d);
+    if (states++ < drops) return;
+    leave(a!);
+    leftAt = performance.now();
+  };
+  const joined: Session[] = [];
+  for (let i = 0; i < joiners; i++) join(prototypeRoom).then((s) => joined.push(s), () => {});
+  const spawned = () => joined.length === joiners && joined.every((s) => s.sim.entities.size === 10);
+  await play(1500, () => spawned() && joined.every((s) => same(s, joined[0]!)));
+  return { joined, spawned: spawned(), ms: performance.now() - leftAt };
+}
+
+test('a lone joiner whose host leaves before answering is playing, the level spawned, within 500 ms of the left', async () => {
+  const { joined, spawned, ms } = await hostLeavesOwing(1, 0);
+  console.log(`stateless host playing ${ms.toFixed(0)} ms after the left`);
+  expect(spawned).toBe(true);
+  expect(joined[0]!.host).toBe(joined[0]!.sim.me);
+  expect(ms).toBeLessThanOrEqual(500);
+});
+
+test('two joiners owed a state when the host leaves hold deep-equal tables within 500 ms of the left', async () => {
+  const { joined, spawned, ms } = await hostLeavesOwing(2, 1);
+  console.log(`both joiners matched ${ms.toFixed(0)} ms after the left`);
+  expect(spawned).toBe(true);
+  expect(facts(joined[1]!)).toEqual(facts(joined[0]!));
+  expect(ms).toBeLessThanOrEqual(500);
+});
+
 test('a character walking into a crate another client owns moves it more than 0.2 m on both clients within 1 s', async () => {
   const [a, b] = await room(2);
   const crate = spawn(a!, 'crate', { x: 0, y: 0.5, z: 3 });
