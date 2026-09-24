@@ -10,8 +10,8 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #1d2330;
-        color: #f4f1ea;
+        background: var(--night);
+        color: var(--paper);
         font-family: system-ui, sans-serif;
       }
       canvas {
@@ -19,57 +19,145 @@
         width: 100vw;
         height: 100vh;
       }
-      .room {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        background: #1d2330;
-      }
-      .room h1 {
-        margin: 0 0 12px;
-      }
-      .room p {
-        margin: 0;
-      }
-      .room button,
-      .room input {
-        width: 240px;
-        padding: 10px;
-        font: inherit;
-        font-size: 18px;
-        text-align: center;
-      }
+      /* The screens (GAME.md, UI mood: chunky, playful, readable at a glance). Every colour is a palette
+         slot the screens write on the root (parts.ts); every size is in em of one base, a fortieth of the
+         height of the largest 16:9 box the window holds (18 px at 1280x720, 27 px at 1920x1080) times the
+         viewer's text scale, --scale on the root. A control is never under 44 px either way. */
+      .room,
       .screen {
         position: fixed;
         inset: 0;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 10px;
-        background: #1d2330;
+        justify-content: safe center;
+        gap: 0.7em;
+        padding: 1em;
+        overflow-y: auto;
+        font-size: calc(2.5 * min(1vh, 0.5625vw) * var(--scale, 1));
+        font-weight: 700;
+        background: radial-gradient(ellipse at 50% 35%, var(--wood), var(--night) 75%);
       }
       .screen[hidden] {
         display: none;
       }
+      .room h1,
       .screen h1,
       .screen h2,
+      .room p,
       .screen p {
         margin: 0;
       }
-      .screen h2 {
-        font-size: 18px;
+      .room h1,
+      .screen h1 {
+        font-size: 2.4em;
+        font-weight: 900;
+        line-height: 1.05;
+        color: var(--star);
+        text-shadow:
+          0 0.05em 0 var(--poppy),
+          0 0.1em 0 var(--ink);
       }
-      .screen button {
-        padding: 6px 10px;
+      .screen h2 {
+        font-size: 1.1em;
+        font-weight: 900;
+      }
+      .band {
+        align-self: stretch;
+        height: 1.1em;
+        background: var(--band) repeat-x left / auto 100%;
+        border-radius: 0.2em;
+      }
+      .room button,
+      .screen button,
+      .room input {
+        box-sizing: border-box;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.4em 0.9em;
         font: inherit;
+        font-weight: 800;
+        color: var(--ink);
+        border: 0.12em solid var(--ink);
+        border-radius: 0.6em;
+      }
+      .room button,
+      .screen button {
+        background: var(--brass);
+        box-shadow: 0 0.16em 0 var(--ink);
+        cursor: pointer;
+      }
+      .room button:hover,
+      .screen button:hover {
+        background: var(--star);
+      }
+      .room button:active,
+      .screen button:active {
+        transform: translateY(0.1em);
+        box-shadow: 0 0.06em 0 var(--ink);
+      }
+      .room button:focus-visible,
+      .screen button:focus-visible,
+      .room input:focus-visible {
+        outline: 0.14em solid var(--paper);
+        outline-offset: 0.14em;
+      }
+      .room button.quiet,
+      .screen button.quiet {
+        background: var(--linen);
+      }
+      .room input {
+        background: var(--paper);
+        text-align: center;
+      }
+      .voice {
+        font-size: 0.8em;
+        opacity: 0.85;
+      }
+      .room .card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.7em;
+        width: 34em;
+        padding: 1.4em 1.6em;
+        text-align: center;
+        background: color-mix(in srgb, var(--ink) 25%, transparent);
+        border: 0.12em solid color-mix(in srgb, var(--linen) 25%, transparent);
+        border-radius: 1em;
+      }
+      .room .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3em;
+        align-self: stretch;
+      }
+      .room .ways {
+        display: flex;
+        align-items: center;
+        gap: 0.6em;
+        align-self: stretch;
+      }
+      .room .ways > button {
+        flex: none;
+        white-space: nowrap;
+      }
+      .room .join {
+        flex: 1;
+        display: flex;
+        gap: 0.5em;
+      }
+      .room .join input {
+        flex: 1;
+        min-width: 0;
+      }
+      .room .status {
+        min-height: 1.3em;
+        color: var(--star);
       }
       .lobby [aria-pressed='true'] {
-        outline: 2px solid #f2c14e;
+        outline: 2px solid var(--star);
       }
       .teams {
         display: flex;
@@ -96,7 +184,7 @@
         align-items: center;
         gap: 6px;
         padding: 8px 16px;
-        border: 1px solid #f2c14e;
+        border: 1px solid var(--star);
       }
       .hint {
         position: fixed;
@@ -104,7 +192,7 @@
         left: 8px;
         margin: 0;
         padding: 6px 10px;
-        background: rgb(0 0 0 / 0.5);
+        background: color-mix(in srgb, var(--ink) 50%, transparent);
         font-size: 14px;
       }
     </style>

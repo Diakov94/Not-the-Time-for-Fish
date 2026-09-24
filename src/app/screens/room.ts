@@ -1,6 +1,7 @@
 import { keyOf } from '../../input/bindings.ts';
 import type { Refused } from '../../net/client.ts';
 import type { Refusal } from '../../sim/round.ts';
+import { paint, settingsButton, VOICE } from './parts.ts';
 
 // Why the round's fold refused the name (card 68), as the player reads it.
 const REFUSAL: Record<Refusal, string> = {
@@ -13,23 +14,33 @@ const REFUSAL: Record<Refusal, string> = {
 const NAME = 'name';
 const ROOM = 'room';
 
-// The room screen: a name, then create a room or join one by its code. `enter` connects to the room
-// with the name; while it fails the screen stays and says why: the fold's reason for a refused name, or
-// no relay, and the name can be changed. The name lives in its input and localStorage only; once in,
-// the round's roster is the fact. Once in, the screen leaves a one-line hint that shows the room's code,
-// so the other players can join it, and the controls, each key named by the input zone. The app's
-// player-facing text lives in its screens.
+// The room screen: a name, then create a room or join one by its code, the settings button and the
+// voice-channel reminder. `enter` connects to the room with the name; while it fails the screen stays and
+// says why: the fold's reason for a refused name, or no relay, and the name can be changed. The name
+// lives in its input and localStorage only; once in, the round's roster is the fact. Once in, the screen
+// leaves a one-line hint that shows the room's code, so the other players can join it, and the controls,
+// each key named by the input zone. The app's player-facing text lives in its screens.
 export function roomScreen<T>(enter: (code: string, name: string) => Promise<T>): Promise<T> {
+  paint();
   const screen = document.createElement('form');
   screen.className = 'room';
   screen.innerHTML = `
-    <h1>Не час для рибки</h1>
-    <input name="player" placeholder="Ваше ім’я" maxlength="20" autocomplete="off" />
-    <button type="button" name="create">Створити кімнату</button>
-    <p>або</p>
-    <input name="code" placeholder="Код кімнати" inputmode="numeric" maxlength="4" autocomplete="off" />
-    <button name="join">Приєднатися</button>
-    <p class="status"></p>`;
+    <div class="card">
+      <h1>Не час для рибки</h1>
+      <div class="band"></div>
+      <label class="field">Ваше ім’я <input name="player" maxlength="20" autocomplete="off" /></label>
+      <div class="ways">
+        <button type="button" name="create">Створити кімнату</button>
+        <p>або</p>
+        <div class="join">
+          <input name="code" placeholder="Код кімнати" inputmode="numeric" maxlength="4" autocomplete="off" />
+          <button name="join">Приєднатися</button>
+        </div>
+      </div>
+      <p class="status" role="status"></p>
+      <p class="voice">${VOICE}</p>
+    </div>`;
+  screen.querySelector('.card')!.append(settingsButton());
   document.body.append(screen);
   const status = screen.querySelector('.status')!;
   const player = screen.querySelector<HTMLInputElement>('[name=player]')!;
