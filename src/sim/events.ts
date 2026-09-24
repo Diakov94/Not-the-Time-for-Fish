@@ -31,7 +31,7 @@ const IMPACT_GAP = 0.5; // s a body that pinged an impact stays quiet
 // A character's steps: one ping per stride of travel on the ground. A dog is always loud; a sneaking cat
 // is silent, and so is a cat under Ninja, unless it is wet (card 129): then every stride pings at a dog's
 // loudness. A dog's stride is shorter, so a walking dog pings at least as often as a sprinting cat.
-const STEPS = { cat: { stride: 2, loud: 0.15 }, dog: { stride: 1.2, loud: 0.3 } };
+export const STEPS = { cat: { stride: 2, loud: 0.15 }, dog: { stride: 1.2, loud: 0.3 } };
 
 // The loop's end of a frame: every view has read the list.
 export function drainEvents(sim: Sim): SimEvent[] {

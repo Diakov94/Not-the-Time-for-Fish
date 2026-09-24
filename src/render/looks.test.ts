@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { beforeAll, expect, test } from 'vitest';
-import { countryHouse } from '../content/country-house.ts';
+import { countryHouse } from '../content/maps/country-house.ts';
 import { spawnEntity, type Kind } from '../sim/entities.ts';
 import { createWorld, init } from '../sim/world.ts';
 import { buildLook } from './looks.ts';
