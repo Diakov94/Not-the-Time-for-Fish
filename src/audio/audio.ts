@@ -2,23 +2,32 @@ import type { Vec3 } from '../content/level.ts';
 import { volumeAt } from '../sim/build.ts';
 import { isCharacter, type ClientId, type Entity, type NetId } from '../sim/entities.ts';
 import type { SimEvent } from '../sim/events.ts';
+import { progress } from '../sim/mines.ts';
 import { SPEED } from '../sim/movement.ts';
 import { tension } from '../sim/tension.ts';
 import type { Sim } from '../sim/world.ts';
 import { ambience, surround, type Ambience } from './ambience.ts';
 import { music, sequence, wanted, type Music } from './music.ts';
-import { pant, SOUNDS, whiteNoise, type Kit, type Pant, type Sound } from './sfx.ts';
+import { beeps, pant, SOUNDS, whiteNoise, type Beeps, type Kit, type Pant, type Sound } from './sfx.ts';
 
 // Where the listener stands and faces: the camera's pose (render's camera is one).
 export type Ear = { position: Vec3; quaternion: Vec3 & { w: number } };
 
-type Graph = { kit: Kit & { ctx: AudioContext }; master: GainNode; meters: AnalyserNode[]; pants: Map<NetId, Pant & { at: PannerNode }>; ambience: Ambience; music: Music };
+type Graph = {
+  kit: Kit & { ctx: AudioContext };
+  master: GainNode;
+  meters: AnalyserNode[];
+  pants: Map<NetId, Pant & { at: PannerNode }>;
+  defusing: (Beeps & { at: PannerNode }) | null;
+  ambience: Ambience;
+  music: Music;
+};
 
 // The game's sound, a view of the sim (ADR 0008): every frame it reads the event list, the entity,
 // ownership and round tables and the sim's volume and tension queries, and keeps no fact beyond the voices
 // it plays and the music's scheduler. The graph is made on the first click (the browser's autoplay rule);
 // M mutes it, a per-viewer setting. With `?audio` in the address a dev readout shows the master bus's
-// peak, the worst lag from an impact's frame to its sound leaving the speakers, and what `hear` costs the
+// peak, the worst lag from an event's frame to its sound leaving the speakers, and what `hear` costs the
 // main thread per frame.
 export type Audio = { graph: Graph | null; muted: boolean; readout: HTMLElement | null; peak: number; lag: number; cost: { sum: number; max: number; frames: number } };
 
@@ -59,7 +68,7 @@ function start(muted: boolean): Graph {
     return meter;
   });
   const kit = { ctx, noise: whiteNoise(ctx) };
-  return { kit, master, meters, pants: new Map(), ambience: ambience(kit, master), music: music(kit, master) };
+  return { kit, master, meters, pants: new Map(), defusing: null, ambience: ambience(kit, master), music: music(kit, master) };
 }
 
 // Once per frame, after the sim stepped and before the loop drains the event list.
@@ -68,8 +77,13 @@ export function hear(audio: Audio, sim: Sim, ear: Ear): void {
   if (!g) return;
   const now = performance.now();
   listen(g.kit.ctx.listener, ear);
-  for (const ev of sim.events) play(audio, g, sim, ev, now);
+  for (const ev of sim.events) {
+    const t = play(g, sim, ev);
+    const out = g.kit.ctx.getOutputTimestamp(); // the context's time leaving the speakers now, and when
+    if (t !== undefined && out.performanceTime) audio.lag = Math.max(audio.lag, out.performanceTime + (t - out.contextTime!) * 1000 - now);
+  }
   breathe(g, sim);
+  defuse(g, sim);
   // The player's body in the house, by the sim's volume query; the yard while it has no body.
   const me = characterOf(sim, sim.me);
   surround(g.ambience, g.kit, me !== undefined && volumeAt(sim, 'house', me.body.translation()) >= 0);
@@ -93,11 +107,12 @@ function at(g: Graph, p: Vec3): PannerNode {
   return panner;
 }
 
-function sound(g: Graph, s: Sound, p: Vec3, loud: number): number {
-  const panner = at(g, p);
+// A one-shot where it happened, or heard everywhere (a phase stinger) with no place.
+function sound(g: Graph, s: Sound, p: Vec3 | null, loud: number): number {
+  const out = p ? at(g, p) : g.master;
   const t = g.kit.ctx.currentTime;
-  const sources = SOUNDS[s](g.kit, panner, t, loud);
-  Promise.all(sources.map((n) => new Promise((ended) => (n.onended = ended)))).then(() => panner.disconnect());
+  const sources = SOUNDS[s](g.kit, out, t, loud);
+  if (out !== g.master) Promise.all(sources.map((n) => new Promise((ended) => (n.onended = ended)))).then(() => out.disconnect());
   return t;
 }
 
@@ -105,19 +120,44 @@ function sound(g: Graph, s: Sound, p: Vec3, loud: number): number {
 const characterOf = (sim: Sim, client: ClientId): Entity | undefined =>
   [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind));
 
-function play(audio: Audio, g: Graph, sim: Sim, ev: SimEvent, now: number): void {
+// An event's sound, and when it starts on the context's clock. A blast's and a sprung trap's noise is
+// the dogs' ping of them: they are heard at their own events, which come first.
+function play(g: Graph, sim: Sim, ev: SimEvent): number | undefined {
   if (ev.type === 'noise' && ev.cause === 'step') {
     const c = characterOf(sim, ev.from);
-    if (c?.kind === 'dog') sound(g, 'dogStep', ev.p, ev.loud * dogBoost(sim, c));
-    else sound(g, 'catStep', ev.p, ev.loud);
-  } else if (ev.type === 'noise') {
-    const t = sound(g, 'impact', ev.p, ev.loud);
-    const out = g.kit.ctx.getOutputTimestamp(); // the context's time leaving the speakers now, and when
-    if (out.performanceTime) audio.lag = Math.max(audio.lag, out.performanceTime + (t - out.contextTime!) * 1000 - now);
-  } else if (ev.type === 'grab' || ev.type === 'throw' || ev.type === 'drop') {
-    const e = sim.entities.get(ev.id);
-    if (e) sound(g, ev.type === 'grab' && e.kind === 'fish' ? 'pickup' : ev.type, e.body.translation(), 1);
+    return c?.kind === 'dog' ? sound(g, 'dogStep', ev.p, ev.loud * dogBoost(sim, c)) : sound(g, 'catStep', ev.p, ev.loud);
   }
+  if (ev.type === 'noise') return ev.cause === 'blast' || ev.cause === 'trap' ? undefined : sound(g, 'impact', ev.p, ev.loud);
+  if (ev.type === 'grab' || ev.type === 'throw' || ev.type === 'drop') {
+    const e = sim.entities.get(ev.id);
+    return e && sound(g, ev.type === 'grab' && e.kind === 'fish' ? 'pickup' : ev.type, e.body.translation(), 1);
+  }
+  if (ev.type === 'planted') return sound(g, ev.kind === 'mine' ? 'arm' : 'trapSet', ev.p, 1);
+  if (ev.type === 'blast' || ev.type === 'defused' || ev.type === 'sprung') return sound(g, ev.type, ev.p, 1);
+  if (ev.type === 'secured' || ev.type === 'captured' || ev.type === 'rescue' || ev.type === 'dugOut') return sound(g, ev.type, ev.p, 1);
+  if (ev.type === 'phase' && (ev.to === 'heist' || ev.to === 'overtime' || ev.to === 'over')) return sound(g, ev.to, null, 1);
+  return undefined;
+}
+
+// This client's defuse beeps where its cat stands while the sim's progress query says it runs, and stop
+// the frame it is interrupted or done.
+function defuse(g: Graph, sim: Sim): void {
+  const work = progress(sim);
+  const me = characterOf(sim, sim.me);
+  const t = g.kit.ctx.currentTime;
+  if (work?.what !== 'defuse' || !me) {
+    g.defusing?.stop(t);
+    g.defusing?.at.disconnect();
+    g.defusing = null;
+    return;
+  }
+  const p = me.body.translation();
+  if (!g.defusing) {
+    const panner = at(g, p);
+    g.defusing = { ...beeps(g.kit, panner), at: panner };
+  }
+  [g.defusing.at.positionX.value, g.defusing.at.positionY.value, g.defusing.at.positionZ.value] = [p.x, p.y, p.z];
+  g.defusing.set(work.done, t);
 }
 
 // A dog's step is louder the faster it goes than a walk, and twice as loud while it carries (card 53).

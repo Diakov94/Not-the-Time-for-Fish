@@ -47,6 +47,7 @@
 - 44 hello and rejoin: a taken name is refused with {code: 'refused'} in 5–7 ms. Batch N1, 2026-09-24.
 - 45 snapshot budget for eight: 58.8–60.6 kB/s down per client (budget 100; before 289.6). Batch N1, 2026-09-24.
 - 46 dead socket leaves: a silent socket is terminated and `left` follows; before, none within 60 s. Batch N1, 2026-09-24.
+- bug: one impact gave two noise pings under load; "at rest" is now the owner's reported speed. 100 ms frames: 0/10 → 10/10 one ping; the new test case red 10/10 without the fix. Trunk blocker, 2026-09-24.
 - 52 audio engine and SFX from events: audio reads the sim's event list and entity table and keeps only its voices. Batch AU1, 2026-09-24.
 - 53 ambience and directional dogs: where the player is comes from the sim's volume query. Batch AU1, 2026-09-24.
 - 54 music by phase: calm prep, tense heist, chase while the sim's tension query is true (src/sim/tension.ts, 18 lines). Batch AU1, 2026-09-24.
@@ -55,3 +56,21 @@
 - 65 chase, kennel, rescue, rejoin at 4: held in 15 ms, rejoin in 34 ms, next host 0 ms late; one of three runs peaked at 0.319 m moving at a grab (bug-net-copy-freezes-at-an-ownership-change). Batch H2, 2026-09-24.
 - 66 six clients × 120 s: 0 visible desyncs. Ticks measured 16.5–16.8/s against 19–21 (bug-net-tick-cadence-at-60-hz). Batch H2, 2026-09-24.
 - bug-sim-impact-between-two-clients-pings-twice: removed as a duplicate of the noise fix already on develop (#17). Producer, 2026-09-24.
+- 65 chase, kennel, rescue, rejoin at 4: held in 15 ms, rejoin in 34 ms, next host 0 ms late; one of three runs peaked at 0.319 m moving at a grab (see bug-net-copy-freezes-at-an-ownership-change). Batch H2, 2026-09-24.
+- bug-sim-impact-between-two-clients-pings-twice: removed as a duplicate of the noise fix already on develop (#17, the owner's reported speed decides "at rest"). Producer, 2026-09-24.
+- 55 round SFX: mines, traps, kennel and phases from sim events added where the facts are accepted (events.ts, ownership.ts). Batch R2, 2026-09-24.
+- 56 peek camera in a hiding spot. Batch R2, 2026-09-24.
+- 57 mines, traps, bags and lures in the world; blast, stun and progress drawn. Batch R2, 2026-09-24.
+- 58 team markers. Batch R2, 2026-09-24.
+- 15 single origin: the page and the relay on one origin (vite.config.ts proxy), so one tunnel carries both. Batch A1, 2026-09-24.
+- debt-one-owner-spawn-throw-port: the relay port's one owner is src/relay/address.ts; the last half closed. Batch A1, 2026-09-24.
+- 47 lobby: draws the round table's roster and only sends messages. Batch A1, 2026-09-24.
+- 48 round flow and results: the screens follow the round table's phase; the results are the table's. The screen does not yet name the rule that decided a tie. Batch A1, 2026-09-24.
+- 49 input for both kits: every key is one sim call, answered by kind. Batch A1, 2026-09-24.
+- 50 name and rejoin: the room screen asks for the name and remembers it; a rejoin is the join. Batch A1, 2026-09-24.
+- 51 spectate from the kennel: a captured cat watches a free teammate. Batch A1, 2026-09-24.
+- 68 refusal reason: the round fold names it; the room screen says it in Ukrainian. Batch A1, 2026-09-24.
+- 59 HUD always on: phase and timer, fish counter, carried items (minesLeft extracted in src/sim/mines.ts, plant reads it too). Batch HU1, 2026-09-24.
+- 60 HUD contextual: whisker cue, plant and defuse progress, overtime warning. Batch HU1, 2026-09-24.
+- 61 teammate status and ping arrows at the screen's edge for dogs. Batch HU1, 2026-09-24.
+- 62 first-round hints; the HUD keeps only the per-viewer seen-hints list. Batch HU1, 2026-09-24.

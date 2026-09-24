@@ -4,7 +4,7 @@ import { spawnOf, type ClientId, type Kind, type NetId } from '../sim/entities.t
 import { drainEvents } from '../sim/events.ts';
 import type { Intent } from '../sim/movement.ts';
 import { adopt, receive } from '../sim/ownership.ts';
-import { playerOf } from '../sim/round.ts';
+import { playerOf, type Refusal } from '../sim/round.ts';
 import { createWorld, step, type Sim } from '../sim/world.ts';
 import { decode, encode, type GameMessage, type Incoming } from './protocol.ts';
 import { interpolate, receiveTick, tick, TICK_MS, type Receiver, type Rested } from './ticks.ts';
@@ -23,8 +23,8 @@ export type Session = {
 // Where a joiner puts an entity until its owner's pose arrives: the host's state carries no pose.
 const NOWHERE = { x: 0, y: -100, z: 0 };
 
-// A join the round's fold refused (card 44): the fixed code and the name, what this client observes.
-export type Refused = Error & { code: 'refused'; player: string };
+// A join the round's fold refused (card 44): the fixed code, the name, and the fold's reason (card 68).
+export type Refused = Error & { code: 'refused'; player: string; reason: Refusal | null };
 
 // The client over the global WebSocket: one code path for Node and the browser, the one entry for the app
 // and the headless client. The relay's `welcome` names this client, so the sim is created then, and its
@@ -80,7 +80,7 @@ export function connect(url: string, level: Level, name: string): Promise<Sessio
         ws.onmessage = null;
         ws.close();
         s.sim.world.free();
-        reject(Object.assign(new Error(`name refused: ${name}`), { code: 'refused', player: name }));
+        reject(Object.assign(new Error(`name refused: ${name}`), { code: 'refused', player: name, reason: s.sim.refused }));
       }
       mine = null;
     };

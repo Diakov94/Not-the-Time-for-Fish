@@ -8,8 +8,9 @@ import { perkOf } from './perks.ts';
 import type { Sim } from './world.ts';
 
 // What happened, one list per frame (ADR 0008): appended by `receive` for the messages that are events
-// and by the fold's accepted grabs, throws, drops, hits and ends; read by every view; drained by the loop
-// that owns the frame. Never sent. `loud` runs from 0 to 1, a mine's blast or a sprung trap.
+// and by the fold's accepted grabs, throws, drops, hits and ends, plants, and the round's secures,
+// captures, rescues and dig-outs; read by every view; drained by the loop that owns the frame. Never
+// sent. `loud` runs from 0 to 1, a mine's blast or a sprung trap.
 export type SimEvent =
   | { type: 'noise'; p: Vector; loud: number; from: ClientId; cause: NoiseCause }
   | { type: 'mark'; p: Vector; from: ClientId }
@@ -17,6 +18,8 @@ export type SimEvent =
   | { type: 'grab' | 'throw' | 'drop'; id: NetId; from: ClientId }
   | { type: 'hit'; dog: NetId; from: ClientId }
   | { type: 'blast' | 'defused' | 'sprung' | 'cleared' | 'pickup'; id: NetId; p: Vector; from: ClientId } // an end, where it lay
+  | { type: 'planted'; kind: 'mine' | 'trap'; id: NetId; p: Vector; from: ClientId } // a dog's mine or a cat's trap, where it was put
+  | { type: 'secured' | 'captured' | 'rescue' | 'dugOut'; p: Vector; from: ClientId } // the fish, or the sender's character, where it was
   | { type: 'phase'; to: Phase; round: number; from: ClientId }; // the table turned, at `from`'s message (ADR 0007)
 
 export const IMPACT = 5; // a contact is an impact above this many times its body's weight
@@ -48,8 +51,11 @@ export function markAt(sim: Sim, from: Vector, dir: Vector): Mark | null {
 // that knocks a vase and digs into the floor pings once. When the other body is a synced one simulated
 // elsewhere, the owner of the lower net id sends, unless the other's owner cannot have felt it: a
 // character, a held body or a copy at rest is no dynamic body there, and this client's touch claim takes
-// a resting prop before its copy of the impact happens there. An impact left to the other client quiets
-// its bodies here all the same. The steps are this client's own character's.
+// a resting prop before its copy of the impact happens there. At rest is the owner's word, the speed in
+// its last pose applied here, never the copy's own velocity: a frame of several steps moves a copy on its
+// first and holds it still on the rest, so under load both clients would find the other at rest and both
+// send. An impact left to the other client quiets its bodies here all the same. The steps are this
+// client's own character's.
 export function noises(sim: Sim, intent: Intent): Noise[] {
   const out: Noise[] = [];
   const pressing = new Set<string>();
@@ -95,7 +101,6 @@ export function noises(sim: Sim, intent: Intent): Noise[] {
 
 function sends(sim: Sim, mine: Entity, other: Entity | undefined): boolean {
   if (!other || simulatedHere(sim, other)) return true;
-  const v = other.body.linvel();
-  const felt = !isCharacter(other.kind) && !sim.ownership.rows.get(other.id)?.held && Math.hypot(v.x, v.y, v.z) > RESTING;
+  const felt = !isCharacter(other.kind) && !sim.ownership.rows.get(other.id)?.held && (sim.ownerSpeed.get(other.id) ?? 0) > RESTING;
   return !felt || mine.id < other.id;
 }
