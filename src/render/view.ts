@@ -46,8 +46,11 @@ export type View = {
 // peek put out of sight.
 type Peek = { from: THREE.Vector3; turn: THREE.Quaternion; until: number; unseen: THREE.Object3D | null };
 
-const DISTANCE = 6; // m from the camera to the point above the character it looks at
-const EYE = 1; // m: that point's height above the character's centre
+// A party game's framing (the camera card): at 1280x720 the own cat spans 23 % of the height and a mine's
+// 0.1 m at its feet 24 px at 1080p (at 6 m and 1 m: 11 % and 13 px); the price is the dogs' overview, 6.4 m
+// of ground across at the character's depth instead of 13.2 m.
+const DISTANCE = 2.8; // m from the camera to the point above the character it looks at
+const EYE = 0.7; // m: that point's height above the character's centre
 const LENS = new RAPIER.Ball(0.2); // what the camera keeps clear of a wall: twice its near plane
 const NO_TURN = { x: 0, y: 0, z: 0, w: 1 };
 const PEEK_EYE = 0.25; // m above the cat's centre: its head, under a 0.8 m box's top
