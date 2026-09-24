@@ -5,8 +5,9 @@ import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
 import { buildLook, debrisLook, lookOf } from './looks.ts';
-import { createJuice, drawJuice, type Juice } from './juice.ts';
+import { createJuice, drawJuice, samples, type Juice } from './juice.ts';
 import { createSenses, drawSenses, type Senses } from './senses.ts';
+import { createWork, drawWork, type Work } from './work.ts';
 
 // Where the camera orbits its target from: the app's mouse input sets it.
 export type Look = { yaw: number; pitch: number }; // yaw 0 looks along +z; pitch > 0 looks down
@@ -25,6 +26,7 @@ export type View = {
   debris: THREE.Object3D[]; // the level's debris, index for index with the sim's local debris bodies
   senses: Senses;
   juice: Juice;
+  work: Work;
 };
 
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
@@ -51,7 +53,16 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
     scene.add(o);
     return o;
   });
-  return { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice() };
+  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene) };
+  // Every effect's shader compiles now, not on the frame that first shows it (card 57: the first blast's
+  // frame took 96 ms): one of each is added and the hidden overlays shown while the scene compiles.
+  const effects = samples();
+  scene.add(...effects);
+  view.work.stars.visible = view.work.ring.visible = true;
+  renderer.compile(scene, camera);
+  scene.remove(...effects);
+  view.work.stars.visible = view.work.ring.visible = false;
+  return view;
 }
 
 const size = new THREE.Vector2();
@@ -89,6 +100,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   const shake = drawJuice(view.juice, sim, scene, camera, at);
   if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined, shake);
   drawSenses(view.senses, sim, scene, camera);
+  drawWork(view.work, sim, objects, camera);
   renderer.render(scene, camera);
 }
 

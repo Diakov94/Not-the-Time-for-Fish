@@ -196,14 +196,19 @@ function fish(half: { x: number; y: number; z: number }, body: number, fin: numb
   return g;
 }
 
-// A cartoon firecracker bundle: three red sticks bound with a yellow band, a fuse with a spark.
+// A cartoon firecracker bundle: three red sticks bound with a yellow band, sunk to half their thickness
+// into the floor under the body (card 57: concealed, never hidden), and a fuse standing clear of them
+// with an unlit spark that shows from any side.
 function mine(half: { x: number; y: number; z: number }): THREE.Object3D {
   const g = new THREE.Group();
   const r = half.y * 0.95;
-  for (const z of [-2.1 * r, 0, 2.1 * r]) g.add(rod(r, 0xd8342a, [-0.8 * half.x, 0, z], [0.8 * half.x, 0, z]));
-  g.add(block(0.25 * half.x, 2.1 * r, 6.6 * r, material(0xf2c230)));
-  g.add(rod(0.008, INK, [0.8 * half.x, 0, 0], [0.95 * half.x, 1.6 * r, 0]), ball(0.035, 0xffd640, 0.95 * half.x, 1.7 * r, 0));
-  return g;
+  const y = -half.y; // the floor the body lies on
+  for (const z of [-2.1 * r, 0, 2.1 * r]) g.add(rod(r, 0xd8342a, [-0.8 * half.x, y, z], [0.8 * half.x, y, z]));
+  g.add(block(0.25 * half.x, 2.1 * r, 6.6 * r, material(0xf2c230), 0, y));
+  g.add(rod(0.008, INK, [0.8 * half.x, y, 0], [0.95 * half.x, y + 3 * r, 0]));
+  const spark = new THREE.Mesh(new THREE.IcosahedronGeometry(0.04, 0), new THREE.MeshBasicMaterial({ color: 0xffd640 }));
+  spark.position.set(0.95 * half.x, y + 3 * r + 0.03, 0);
+  return g.add(spark);
 }
 
 // A trap is a noise maker: a teal alarm clock with two brass bells, standing on its feet.
@@ -242,8 +247,8 @@ const KINDS: Partial<Record<Kind, (shape: Shape) => THREE.Object3D>> = {
   mine: (s) => mine((s as Cuboid).halfExtents),
   trap: (s) => trap((s as Cuboid).halfExtents),
   bag: (s) => bag((s as Ball).radius),
-  // Card 57: the lure is a fish-shaped decoy, pink and a third of a fish's length.
-  lure: (s) => fish({ x: 0.45 * (s as Ball).radius, y: 0.45 * (s as Ball).radius, z: (s as Ball).radius }, 0xf08aa8, 0xc0507a),
+  // Card 57: the lure is a fish-shaped decoy, pink, at its collider's size (half a fish's length).
+  lure: (s) => fish((s as Cuboid).halfExtents, 0xf08aa8, 0xc0507a),
 };
 
 export function buildLook(sim: Sim, e: Entity): THREE.Object3D {
