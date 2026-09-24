@@ -52,6 +52,8 @@ export type DugOut = { type: 'dugOut'; from: ClientId };
 export type Opened = { type: 'opened'; from: ClientId; storage: number };
 // A house door (the level's door index) a cat worked open or a dog barged.
 export type OpenDoor = { type: 'door'; from: ClientId; door: number };
+// The host's pick in the lobby: the map the next prep builds, by its name (card 128).
+export type MapPick = { type: 'map'; from: ClientId; name: string };
 
 // Every message a client sends for the sim.
-export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Bark | Emote | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
+export type SimMessage = Spawn | Claim | Release | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup | Noise | Mark | Bark | Emote | Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor | MapPick;

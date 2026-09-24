@@ -21,7 +21,8 @@ const GRAVITY = 9.81;
 
 export type Sim = {
   me: ClientId; // the client this sim runs on
-  level: Level; // the content level the world is built from (ADR 0008)
+  level: Level; // the content level the world is built from (ADR 0008): the one given, or the round's map
+  levels: Readonly<Record<string, Level>>; // the maps this client can build, by name: the ones the host may pick (card 128)
   world: World;
   controller: KinematicCharacterController; // drives this client's own character
   entities: Entities;
@@ -86,29 +87,29 @@ export async function init(): Promise<void> {
   await RAPIER.init();
 }
 
-export function createWorld(level: Level, me: ClientId): Sim {
+// What a level builds (ADR 0008): Rapier's world with the level in it, and the controller that drives this
+// client's own character there.
+function built(level: Level) {
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = STEP;
   const { volumes, exits, gates, debris, doors } = build(world, level);
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
+  return { level, world, controller, volumes, exits, gates, debris, doors };
+}
+
+export function createWorld(level: Level, me: ClientId, levels: Sim['levels'] = {}): Sim {
   return {
     me,
-    level,
-    world,
-    controller,
+    levels,
+    ...built(level),
     entities: new Map(),
     ownership: newOwnershipTable(),
     accumulator: 0,
     time: 0,
     inFlight: new Set(),
     touchedAt: new Map(),
-    volumes,
-    exits,
-    gates,
-    debris,
-    doors,
     spawned: 0,
     leap: null,
     lunge: null,
@@ -152,6 +153,18 @@ export function createWorld(level: Level, me: ClientId): Sim {
     carrierPing: null,
     emoteUntil: 0,
   };
+}
+
+// The world follows the round table's map (card 128), at prep and at a joiner's state: a map this client
+// has a level for and the world was not built from is built anew in its place, the old world freed. No
+// entity lives in it then: prep has cleared the entity and ownership tables (ADR 0007), and a joiner has
+// adopted nothing yet.
+export function follow(sim: Sim): void {
+  const level = sim.round.map === null ? undefined : sim.levels[sim.round.map];
+  if (!level || level === sim.level) return;
+  sim.world.free();
+  Object.assign(sim, built(level));
+  sim.impacts.clear();
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.

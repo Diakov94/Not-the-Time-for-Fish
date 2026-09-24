@@ -5,7 +5,7 @@ import { drainEvents } from '../sim/events.ts';
 import type { Intent } from '../sim/movement.ts';
 import { adopt, receive } from '../sim/ownership.ts';
 import { playerOf, type Refusal } from '../sim/round.ts';
-import { createWorld, step, type Sim } from '../sim/world.ts';
+import { createWorld, follow, step, type Sim } from '../sim/world.ts';
 import { decode, encode, type GameMessage, type Incoming } from './protocol.ts';
 import { interpolate, receiveTick, tick, TICK_MS, type Receiver, type Rested } from './ticks.ts';
 
@@ -31,7 +31,8 @@ export type Refused = Error & { code: 'refused'; player: string; reason: Refusal
 // `hello {name}` goes out at once. The host spawns the level; a joiner holds every message until the host's
 // `state`, then replays them (ADR 0006, Join). It resolves once its own hello is folded on top of its world
 // and the roster names it; if the round's fold refused the name, it rejects and nothing of the join stays.
-export function connect(url: string, level: Level, name: string): Promise<Session> {
+// `levels` are the maps by name the host may pick (card 128); the world starts from `level`.
+export function connect(url: string, level: Level, name: string, levels: Record<string, Level> = {}): Promise<Session> {
   const ws = new WebSocket(url);
   return new Promise((resolve, reject) => {
     ws.onerror = () => reject(new Error(`no relay at ${url}`));
@@ -45,7 +46,7 @@ export function connect(url: string, level: Level, name: string): Promise<Sessio
       const at = performance.now();
       if (m.type === 'hello' && m.from === s.sim.me) mine = m.seq;
       if (m.type === 'welcome') {
-        const sim = createWorld(level, m.you);
+        const sim = createWorld(level, m.you, levels);
         s = { sim, ws, host: m.host, owed: new Set(), rested: new Set(), receiver: new Map(), lastTick: 0, ticks: 0 };
         hello();
         if (m.host !== m.you) return;
@@ -59,14 +60,16 @@ export function connect(url: string, level: Level, name: string): Promise<Sessio
         since = m.seq;
         for (const [h, hAt] of [...held, [m, at] as const]) handle(s, h, hAt, m.seq);
         held = null;
-        for (const b of levelBodies(level)) send(s, spawnOf(s.sim, b));
+        for (const b of levelBodies(s.sim.level)) send(s, spawnOf(s.sim, b));
       } else if (m.type !== 'state' || m.to !== s.sim.me) held.push([m, at]);
       else {
         since = m.seq;
+        // The round table whole, and the phase's and the heist's start by this client's clock, a hop late;
+        // the world is built from the table's map before the entities enter it.
+        Object.assign(s.sim, { round: m.round, phaseAt: s.sim.time - m.elapsed.phase, heistAt: s.sim.time - m.elapsed.heist });
+        follow(s.sim);
         const entities = m.entities.map((e) => ({ type: 'spawn' as const, from: m.from, ...e, p: NOWHERE }));
         adopt(s.sim, entities, { rows: new Map(m.table.rows), gone: new Set(m.table.gone) });
-        // The round table whole, and the phase's and the heist's start by this client's clock, a hop late.
-        Object.assign(s.sim, { round: m.round, phaseAt: s.sim.time - m.elapsed.phase, heistAt: s.sim.time - m.elapsed.heist });
         for (const [h, hAt] of held) handle(s, h, hAt, m.seq);
         held = null;
         drainEvents(s.sim); // ADR 0010: the facts the held messages carried are folded, their events are stale

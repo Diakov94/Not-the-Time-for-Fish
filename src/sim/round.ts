@@ -1,9 +1,10 @@
 import { ofSide } from '../content/characters.ts';
+import type { Level } from '../content/level.ts';
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
 import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
-import type { Captured, Despawn, DugOut, Hello, Left, Look, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team, Worn } from './messages.ts';
+import type { Captured, Despawn, DugOut, Hello, Left, Look, MapPick, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team, Worn } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
-import type { Sim } from './world.ts';
+import { follow, type Sim } from './world.ts';
 
 // ADR 0007's round table: a pure function of the relay's order, written only by `foldRound` on every
 // client. A player is a name: its team (null until the host answers its first hello), the client it
@@ -29,10 +30,11 @@ export type Round = {
   match: Team | 'draw' | null; // the outcome of the last match, from the end of its round 2
   decided: Decider | null; // and the rule that decided it
   score: Record<Team, number>; // the session's matches won, for the life of the room
+  map: string | null; // the map the host picked, by name (card 128); null until it picks: the level the client was given
 };
 
-export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor;
-const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened', 'door']);
+export type RoundMessage = Hello | Roster | Look | PhaseMessage | Secured | Captured | Rescue | DugOut | Opened | OpenDoor | MapPick;
+const ROUND = new Set(['hello', 'roster', 'look', 'phase', 'secured', 'captured', 'rescue', 'dugOut', 'opened', 'door', 'map']);
 export const isRound = (m: { type: string }): m is RoundMessage => ROUND.has(m.type);
 
 const TO_WIN = 3; // fish secured
@@ -51,7 +53,7 @@ const KNOBS = [
 export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
 
 export function newRound(): Round {
-  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], doors: [], results: [], match: null, decided: null, score: { A: 0, B: 0 } };
+  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], doors: [], results: [], match: null, decided: null, score: { A: 0, B: 0 }, map: null };
 }
 
 export const playerOf = (r: Round, client: ClientId): Player | undefined => r.roster.find((p) => p.client === client);
@@ -156,10 +158,19 @@ export function refusal(r: Round, m: Hello): Refusal | null {
   return r.roster.some((q) => q.name === m.name && q.client) ? 'taken' : null;
 }
 
+// Why the fold refuses a map (card 128): not from the host, not in the lobby, or a name this client has
+// no level for.
+export type MapRefusal = 'host' | 'lobby' | 'unknown';
+export function mapRefusal(r: Round, m: MapPick, host: ClientId, levels: Readonly<Record<string, Level>>): MapRefusal | null {
+  if (m.from !== host) return 'host';
+  if (r.phase !== 'lobby') return 'lobby';
+  return Object.hasOwn(levels, m.name) ? null : 'unknown';
+}
+
 // Folds one message of the relay's order and says whether it was accepted. `host` is the host the relay
-// names as of the message: only its `roster` and `phase` count. The fold reads the ownership table and
-// the entities' identities; it writes only the round table.
-export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: OwnershipTable, entities: Identities): boolean {
+// names as of the message: only its `roster`, `phase` and `map` count. The fold reads the ownership table,
+// the entities' identities and the maps this client can build; it writes only the round table.
+export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: OwnershipTable, entities: Identities, levels: Readonly<Record<string, Level>> = {}): boolean {
   const p = m.type === 'left' ? undefined : playerOf(r, m.from);
   switch (m.type) {
     case 'hello': {
@@ -233,6 +244,10 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       if (!inPlay(r) || !p || r.doors.includes(m.door)) return false;
       r.doors.push(m.door);
       return true;
+    case 'map':
+      if (mapRefusal(r, m, host, levels)) return false;
+      r.map = m.name;
+      return true;
   }
 }
 
@@ -246,7 +261,7 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
   const leaver = m.type === 'left' ? playerOf(sim.round, m.id) : undefined;
   if (m.type === 'hello' && m.from === sim.me) sim.refused = refusal(sim.round, m);
-  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities)) return false;
+  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities, sim.levels)) return false;
   if (m.type === 'left') sim.away.set(m.id, { name: leaver?.name ?? null, at: sim.time });
   if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
   if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;
@@ -268,8 +283,9 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
 }
 
 // The round table turned to a new phase on this client (the entity table is already cleared for prep):
-// the phase starts now by this client's clock, and at prep the host spawns the level anew and every
-// player its character, of the side the roster gives it this round, at its side's spawn point.
+// the phase starts now by this client's clock, and at prep the world follows the table's map, the host
+// spawns the level anew and every player its character, of the side the roster gives it this round, at
+// its side's spawn point.
 export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   const r = sim.round;
   sim.phaseAt = sim.time;
@@ -282,6 +298,7 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.securing.clear();
   sim.ending.clear();
   sim.barged.clear();
+  follow(sim);
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }
