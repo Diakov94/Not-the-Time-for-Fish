@@ -14,6 +14,9 @@ export type Player = { name: string; team: Team | null; client: ClientId | null;
 export type Why = 'fish' | 'captured' | 'timer' | 'overtime';
 // An ended round: which team played cats, what it secured, the `at` of its last secure, the winner.
 export type Result = { cats: Team; secured: number; last: number | null; why: Why; winner: Team };
+// Which of GAME.md's match rules decided a match: more fish secured; on equal counts, the last fish secured
+// sooner in its round; neither (0-0, or both last fish at the same time), a draw.
+export type Decider = 'more' | 'sooner' | 'level';
 export type Round = {
   roster: Player[]; // in the order of each name's first hello
   phase: Phase;
@@ -23,6 +26,7 @@ export type Round = {
   doors: number[]; // this round's house doors open, by door index
   results: Result[]; // this match's ended rounds
   match: Team | 'draw' | null; // the outcome of the last match, from the end of its round 2
+  decided: Decider | null; // and the rule that decided it
   score: Record<Team, number>; // the session's matches won, for the life of the room
 };
 
@@ -47,7 +51,7 @@ const KNOBS = [
 export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
 
 export function newRound(): Round {
-  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], doors: [], results: [], match: null, score: { A: 0, B: 0 } };
+  return { roster: [], phase: 'lobby', round: 0, secured: [], opened: [], doors: [], results: [], match: null, decided: null, score: { A: 0, B: 0 } };
 }
 
 export const playerOf = (r: Round, client: ClientId): Player | undefined => r.roster.find((p) => p.client === client);
@@ -115,13 +119,13 @@ function fishHeld(t: OwnershipTable, entities: Identities): boolean {
   return false;
 }
 
-// The winner of a match: more fish secured; on equal counts, the team whose last fish was secured sooner
-// in its round; 0-0 (or the same second) a draw.
-function matchOutcome(results: Result[]): Team | 'draw' {
+// The winner of a match and the rule that decided it: more fish secured; on equal counts, the team whose
+// last fish was secured sooner in its round; 0-0 (or the same second) a draw.
+function matchOutcome(results: Result[]): [Team | 'draw', Decider] {
   const [a, b] = (['A', 'B'] as const).map((t) => results.find((x) => x.cats === t)!);
-  if (a!.secured !== b!.secured) return a!.secured > b!.secured ? 'A' : 'B';
-  if (a!.last === null || b!.last === null || a!.last === b!.last) return 'draw';
-  return a!.last < b!.last ? 'A' : 'B';
+  if (a!.secured !== b!.secured) return [a!.secured > b!.secured ? 'A' : 'B', 'more'];
+  if (a!.last === null || b!.last === null || a!.last === b!.last) return ['draw', 'level'];
+  return [a!.last < b!.last ? 'A' : 'B', 'sooner'];
 }
 
 function end(r: Round, why: Why): void {
@@ -130,7 +134,7 @@ function end(r: Round, why: Why): void {
   r.phase = 'over';
   r.results.push({ cats, secured: r.secured.length, last: r.secured.at(-1)?.at ?? null, why, winner });
   if (r.round < 2) return;
-  r.match = matchOutcome(r.results);
+  [r.match, r.decided] = matchOutcome(r.results);
   if (r.match !== 'draw') r.score[r.match]++;
 }
 
@@ -192,7 +196,7 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
       if (m.to !== 'prep') return true;
       [r.secured, r.opened, r.doors] = [[], [], []];
       for (const q of r.roster) q.captured = null;
-      if (m.round === 1) [r.results, r.match] = [[], null];
+      if (m.round === 1) [r.results, r.match, r.decided] = [[], null, null];
       return true;
     }
     case 'secured': {

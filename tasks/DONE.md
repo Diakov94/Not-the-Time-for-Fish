@@ -56,7 +56,6 @@
 - 65 chase, kennel, rescue, rejoin at 4: held in 15 ms, rejoin in 34 ms, next host 0 ms late; one of three runs peaked at 0.319 m moving at a grab (bug-net-copy-freezes-at-an-ownership-change). Batch H2, 2026-09-24.
 - 66 six clients × 120 s: 0 visible desyncs. Ticks measured 16.5–16.8/s against 19–21 (bug-net-tick-cadence-at-60-hz). Batch H2, 2026-09-24.
 - bug-sim-impact-between-two-clients-pings-twice: removed as a duplicate of the noise fix already on develop (#17). Producer, 2026-09-24.
-- 65 chase, kennel, rescue, rejoin at 4: held in 15 ms, rejoin in 34 ms, next host 0 ms late; one of three runs peaked at 0.319 m moving at a grab (see bug-net-copy-freezes-at-an-ownership-change). Batch H2, 2026-09-24.
 - bug-sim-impact-between-two-clients-pings-twice: removed as a duplicate of the noise fix already on develop (#17, the owner's reported speed decides "at rest"). Producer, 2026-09-24.
 - 55 round SFX: mines, traps, kennel and phases from sim events added where the facts are accepted (events.ts, ownership.ts). Batch R2, 2026-09-24.
 - 56 peek camera in a hiding spot. Batch R2, 2026-09-24.
@@ -74,3 +73,6 @@
 - 60 HUD contextual: whisker cue, plant and defuse progress, overtime warning. Batch HU1, 2026-09-24.
 - 61 teammate status and ping arrows at the screen's edge for dogs. Batch HU1, 2026-09-24.
 - 62 first-round hints; the HUD keeps only the per-viewer seen-hints list. Batch HU1, 2026-09-24.
+- bug-net-tick-cadence-at-60-hz: ticks 16.4–17.1/s → 19.9–20.1/s at 8 clients; the schedule is frame's in src/net/client.ts. Batch F1, 2026-09-24.
+- 69 overtime carrier ping: roundStep emits it for every fish carrier in overtime; red without the rule. Batch F1, 2026-09-24.
+- 70 results name the tiebreak: the round table's matchOutcome owns the deciding rule; the screen shows it in Ukrainian. Batch F1, 2026-09-24.

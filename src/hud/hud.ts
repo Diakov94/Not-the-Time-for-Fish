@@ -1,8 +1,8 @@
 import { livePings } from '../render/senses.ts';
 import { project, type View } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
+import { pinging } from '../sim/heist.ts';
 import { minesLeft, progress, whisker } from '../sim/mines.ts';
-import { carried } from '../sim/ownership.ts';
 import { perkOf } from '../sim/perks.ts';
 import { inPlay, playerOf, playsAs, remaining, type Player } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
@@ -114,7 +114,7 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   if (work) write(hud.what, WORK[work.what]);
   hud.fill.style.width = `${Math.min(1, work?.done ?? 0) * 100}%`;
   hud.overtime.hidden = r.phase !== 'overtime';
-  write(hud.overtime, carried(sim)?.kind === 'fish' ? OVERTIME.carrier : OVERTIME.all);
+  write(hud.overtime, pinging(sim) ? OVERTIME.carrier : OVERTIME.all);
   // The teammates, in roster order: the player's own team, the player left out.
   const me = playerOf(r, sim.me);
   const mates = r.roster.filter((p) => p !== me && me?.team && p.team === me.team);
