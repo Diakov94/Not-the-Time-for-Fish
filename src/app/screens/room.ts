@@ -1,5 +1,14 @@
+import type { Refused } from '../../net/client.ts';
+import type { Refusal } from '../../sim/round.ts';
+
+// Why the round's fold refused the name (card 68), as the player reads it.
+const REFUSAL: Record<Refusal, string> = {
+  taken: 'Це ім’я вже зайняте в цій кімнаті. Оберіть інше.',
+  named: 'Ви вже в цій кімнаті під іншим ім’ям.',
+};
+
 // The room screen: create a room or join one by its code. `enter` connects to the room; while it fails
-// the screen stays and says so. Once in, the screen leaves a one-line hint that shows the room's code,
+// the screen stays and says why: the fold's reason for a refused name, or no relay. Once in, the screen leaves a one-line hint that shows the room's code,
 // so the other players can join it, and the controls. The app's player-facing text lives in its screens.
 export function roomScreen<T>(enter: (code: string) => Promise<T>): Promise<T> {
   const screen = document.createElement('form');
@@ -22,8 +31,9 @@ export function roomScreen<T>(enter: (code: string) => Promise<T>): Promise<T> {
         const value = await enter(room);
         screen.replaceWith(hint(room));
         resolve(value);
-      } catch {
-        status.textContent = 'Немає зв’язку з сервером кімнат. Спробуйте ще раз.';
+      } catch (e) {
+        const reason = (e as Partial<Refused>).reason;
+        status.textContent = reason ? REFUSAL[reason] : 'Немає зв’язку з сервером кімнат. Спробуйте ще раз.';
         screen.inert = false;
       }
     };

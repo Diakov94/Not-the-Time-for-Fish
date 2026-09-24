@@ -144,6 +144,14 @@ export function settle(r: Round, t: OwnershipTable, entities: Identities): void 
   else if (r.phase === 'overtime' && !fishHeld(t, entities)) end(r, 'overtime');
 }
 
+// Why the fold refuses a hello (card 68): its name is held by a connected client, or its client already
+// has a name. A known name whose client left is no refusal: that is a rejoin.
+export type Refusal = 'taken' | 'named';
+export function refusal(r: Round, m: Hello): Refusal | null {
+  if (playerOf(r, m.from)) return 'named';
+  return r.roster.some((q) => q.name === m.name && q.client) ? 'taken' : null;
+}
+
 // Folds one message of the relay's order and says whether it was accepted. `host` is the host the relay
 // names as of the message: only its `roster` and `phase` count. The fold reads the ownership table and
 // the entities' identities; it writes only the round table.
@@ -151,10 +159,9 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
   const p = m.type === 'left' ? undefined : playerOf(r, m.from);
   switch (m.type) {
     case 'hello': {
-      // A name a connected client holds is refused, and so is a second name for one client; a known
-      // name whose client left is a rejoin: it keeps its team and gets the new client.
+      // A known name whose client left is a rejoin: it keeps its team and gets the new client.
+      if (refusal(r, m)) return false;
       const known = r.roster.find((q) => q.name === m.name);
-      if (p || known?.client) return false;
       if (known) known.client = m.from;
       else r.roster.push({ name: m.name, team: null, client: m.from, looks: {}, captured: null });
       return true;
@@ -228,9 +235,11 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
 // client notes each `left` by its own clock, with the leaver's name, for the host's removal duty. A
 // rescue opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once
 // captured, starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the
-// tunnel exit. This client's own hello with a known name mid-round is a rejoin: its character enters.
+// tunnel exit. This client's own hello with a known name mid-round is a rejoin: its character enters,
+// and its own refused hello leaves the fold's reason for its client to show.
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
   const leaver = m.type === 'left' ? playerOf(sim.round, m.id) : undefined;
+  if (m.type === 'hello' && m.from === sim.me) sim.refused = refusal(sim.round, m);
   if (!foldRound(sim.round, m, host, sim.ownership, sim.entities)) return false;
   if (m.type === 'left') sim.away.set(m.id, { name: leaver?.name ?? null, at: sim.time });
   if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
