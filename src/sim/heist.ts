@@ -87,7 +87,8 @@ export const pinging = (sim: Sim): boolean => sim.round.phase === 'overtime' && 
 // meet it while a rescue holds it open. A door storage worked on for OPENING, or a house door for
 // DOOR_WORK, by a cat still at it opens, loudly. This client's dog that meets a shut house door in play
 // barges it: open here at once, and for everyone at the message. A house door is fixed at its closed pose
-// while shut and a free panel once open. A fish this client holds inside the hideout is secured, once.
+// while shut and a free panel once open. A fish this client holds inside the hideout is secured, once
+// unless the fold refuses it.
 // While this client is the pinging carrier, its character pings every CARRIER_EVERY, the first at once.
 // This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured, naming its
 // last holder; its dig-out timer ending digs it out.

@@ -283,11 +283,15 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
 // rescue opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once
 // captured, starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the
 // tunnel exit. This client's own hello with a known name mid-round is a rejoin: its character enters,
-// and its own refused hello leaves the fold's reason for its client to show.
+// and its own refused hello leaves the fold's reason for its client to show. Its own refused `secured`
+// is forgotten, so its cat secures that fish on its next carry.
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
   const leaver = m.type === 'left' ? playerOf(sim.round, m.id) : undefined;
   if (m.type === 'hello' && m.from === sim.me) sim.refused = refusal(sim.round, m);
-  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities, sim.levels)) return false;
+  if (!foldRound(sim.round, m, host, sim.ownership, sim.entities, sim.levels)) {
+    if (m.type === 'secured' && m.from === sim.me) sim.securing.delete(m.fish);
+    return false;
+  }
   if (m.type === 'left') sim.away.set(m.id, { name: leaver?.name ?? null, at: sim.time });
   if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
   if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;

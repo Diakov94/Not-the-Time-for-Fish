@@ -532,6 +532,35 @@ test('secured is born at the holder inside the hideout: a fish carried in counts
   expect(agree(r)).toBe(true);
 });
 
+test("a cat whose secured the fold refused, its throw delivered first, secures the same fish on its next carry", () => {
+  const r = relay(countryHouse, true);
+  const [dog, cat] = r.players(2);
+  toHeist(r);
+  const count = () => [cat!, dog!].map((s) => s.round.secured.length).join();
+  const fish = spawnOf(cat!, { kind: 'fish', p: { x: 0, y: halfHeight('fish'), z: -22.8 } });
+  r.send(cat!, fish);
+  stand(cat!, 0, -22, Math.PI); // in the hideout, facing the fish
+  r.run(10);
+  r.send(cat!, grab(cat!)!);
+  // The step that sends `secured` for the fish it holds there, and a throw pressed in the same frame and
+  // delivered first.
+  const out = step(cat!, STEP, IDLE, r.client(cat!).host);
+  r.send(cat!, throwCarried(cat!)!);
+  for (const m of out) r.send(cat!, m);
+  const refused = count();
+  r.run(120);
+  const lying = cat!.entities.get(fish.id)!.body.translation();
+  stand(cat!, lying.x, lying.z + 0.8, Math.PI);
+  r.run(2);
+  r.send(cat!, grab(cat!)!);
+  r.run(2);
+  const sent = r.history.filter(([m]) => m.type === 'secured').length;
+  console.log(`secured in the step's messages: ${out.some((m) => m.type === 'secured')}; count on cat/dog after the refusal ${refused}, after the next carry ${count()}; secured sent ${sent}`);
+  expect(refused).toBe('0,0');
+  expect(lying.z).toBeLessThan(-20); // it landed in the hideout
+  expect(count()).toBe('1,1');
+});
+
 test('in prep a cat pressing into the gate from the hideout moves 0 m through it, in heist it passes; a dog passes in neither', () => {
   const past = (kind: 'cat' | 'dog', to: 'prep' | 'heist') => {
     const sim = createWorld(countryHouse, 'A');
