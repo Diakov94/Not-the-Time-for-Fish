@@ -172,6 +172,26 @@ test('after the host leaves, the next host answers the next joiner', async () =>
   expect(ms).toBeLessThanOrEqual(500);
 });
 
+test("a joiner whose host leaves before answering holds the next host's table and entities within 500 ms of the left", async () => {
+  const [a, b] = await room(2, prototypeRoom);
+  await play(1000, () => b!.sim.entities.size === 10);
+  // A leaves the moment it would answer the joiner, so its state never goes out.
+  const send0 = a!.ws.send.bind(a!.ws);
+  let leftAt = Infinity;
+  a!.ws.send = (d) => {
+    if (JSON.parse(String(d)).type !== 'state') return send0(d);
+    leave(a!);
+    leftAt = performance.now();
+  };
+  let c: Session | undefined;
+  join(prototypeRoom).then((s) => (c = s), () => {});
+  await play(1500, () => c !== undefined && same(c, b!));
+  const ms = performance.now() - leftAt;
+  console.log(`joiner orphaned by its host matched the next host ${ms.toFixed(0)} ms after the left`);
+  expect(c && facts(c)).toEqual(facts(b!));
+  expect(ms).toBeLessThanOrEqual(500);
+});
+
 test('a character walking into a crate another client owns moves it more than 0.2 m on both clients within 1 s', async () => {
   const [a, b] = await room(2);
   const crate = spawn(a!, 'crate', { x: 0, y: 0.5, z: 3 });
