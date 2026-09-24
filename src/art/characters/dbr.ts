@@ -22,7 +22,8 @@ export default {
       spike.quaternion.setFromUnitVectors(up, out);
       body.add(spike);
     }
-    rig.anchors.head.position.set(0, 0.37, 0);
-    rig.anchors.head.userData.r = 0.25;
+    rig.anchors.head.userData.r = 0.3;
+    rig.anchors.head.scale.set(1.3, 0.9, 1); // a hat takes the broad head's proportions
+    rig.anchors.collar.userData.r = 0.36; // a scarf goes round the spiked collar
   },
 } satisfies Look;

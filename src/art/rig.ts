@@ -17,8 +17,10 @@ export type Rig = {
   side: Side;
   root: THREE.Group; // the look render places on the body; its children are in frame units
   parts: Parts;
-  // Where cosmetics attach. A head anchor sits on the top of the head, +y out of it, and carries the
-  // head's radius in `userData.r` for a hat to fit; a character that reshapes its head moves it.
+  // Where cosmetics attach (src/art/cosmetics.ts), each with a size in `userData.r`: the head's on the top
+  // of the head, +y out of it, the head's radius; the collar's round the neck, the radius a ring round it
+  // clears; the back's on the back, -z out of it, the body's half width. A character that reshapes a part
+  // moves its anchor. `ears` holds whatever tops the head, and a worn hat hides it.
   anchors: Record<Anchor, THREE.Object3D>;
   emotes: Emote[]; // the character's, in its roster order
   rest: Map<THREE.Object3D, [THREE.Vector3, THREE.Euler]>; // every pivot's dressed pose
@@ -91,7 +93,8 @@ function pivot(parent: THREE.Object3D, at: V3): THREE.Group {
 
 // The skeleton's joints per side, in the frame: the body's centre, the neck, the four legs' hips and
 // shoulders, the tail's root, and the anchors.
-const JOINTS: Record<Side, { neck: V3; legs: [V3, V3, V3, V3]; tail: V3; head: V3; r: number; collar: V3; back: V3 }> = {
+// A collar's radius is what a ring round the neck must clear, the back's the body's half width.
+const JOINTS: Record<Side, { neck: V3; legs: [V3, V3, V3, V3]; tail: V3; head: V3; r: number; collar: V3; neckR: number; back: V3; backR: number }> = {
   cat: {
     neck: [0, 0.1, 0.02],
     legs: [[-0.17, -0.02, 0.02], [0.17, -0.02, 0.02], [-0.09, -0.25, 0], [0.09, -0.25, 0]],
@@ -99,7 +102,9 @@ const JOINTS: Record<Side, { neck: V3; legs: [V3, V3, V3, V3]; tail: V3; head: V
     head: [0, 0.26, 0],
     r: 0.16,
     collar: [0, 0.1, 0.02],
+    neckR: 0.15,
     back: [0, -0.06, -0.18],
+    backR: 0.19,
   },
   dog: {
     neck: [0, 0.12, 0.04],
@@ -108,7 +113,9 @@ const JOINTS: Record<Side, { neck: V3; legs: [V3, V3, V3, V3]; tail: V3; head: V
     head: [0, 0.4, 0],
     r: 0.22,
     collar: [0, 0.1, 0.04],
+    neckR: 0.22,
     back: [0, -0.12, -0.3],
+    backR: 0.3,
   },
 };
 
@@ -125,6 +132,8 @@ function skeleton(side: Side): Rig {
   const top = pivot(head, j.head);
   top.userData.r = j.r;
   const anchors = { head: top, collar: pivot(body, j.collar), back: pivot(body, j.back) };
+  anchors.collar.userData.r = j.neckR;
+  anchors.back.userData.r = j.backR;
   return { side, root, parts: { body, head, ears, muzzle, legs, tail }, anchors, emotes: [], rest: new Map(), walked: 0, at: 0, emote: null };
 }
 

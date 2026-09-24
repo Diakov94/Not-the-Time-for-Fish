@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, RigidBody, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { wear } from '../art/cosmetics.ts';
 import { emote, pose, type Facts, type Rig } from '../art/rig.ts';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEPS } from '../sim/events.ts';
@@ -9,7 +10,7 @@ import { stunned } from '../sim/mines.ts';
 import { speedsOf, yawOf } from '../sim/movement.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
-import { buildLook, debrisLook, lookOf } from './looks.ts';
+import { buildLook, debrisLook, lookOf, wornOf } from './looks.ts';
 import { createJuice, drawJuice, samples, type Juice } from './juice.ts';
 import { createMarkers, drawMarkers, type Markers } from './markers.ts';
 import { createSenses, drawSenses, type Senses } from './senses.ts';
@@ -102,7 +103,10 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     const drawn = o && o.parent ? o : add(view, sim, e);
     place(drawn, e.body, lag);
     const rig = drawn.userData.rig as Rig | undefined;
-    if (rig) pose(rig, facts(sim, e), sim.time);
+    if (rig) {
+      wear(rig, wornOf(sim, e));
+      pose(rig, facts(sim, e), sim.time);
+    }
   }
   // An emote plays on its sender's character from the frame its event arrives (ADR 0013).
   for (const ev of sim.events) {

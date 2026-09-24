@@ -1,5 +1,6 @@
 import type { Ball, Capsule, Cuboid, Shape } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import type { Worn } from '../art/cosmetics.ts';
 import { lookFor, rigFor, type Side } from '../art/rig.ts';
 import { ofSide } from '../content/characters.ts';
 import { isCharacter, type Entity, type Kind } from '../sim/entities.ts';
@@ -54,6 +55,11 @@ export function lookOf(sim: Sim, e: Entity): number {
   let h = 2166136261;
   for (const c of e.home ?? '') h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   return h % ofSide(e.kind as 'cat' | 'dog').length;
+}
+
+// What a character's player wears on its side, the round table's (ADR 0013); art draws it.
+export function wornOf(sim: Sim, e: Entity): Worn | undefined {
+  return e.home === null ? undefined : playerOf(sim.round, e.home)?.worn[e.kind as Side];
 }
 
 // A character is its roster entry's look in art (ADR 0011), posed by the view every frame. A look index

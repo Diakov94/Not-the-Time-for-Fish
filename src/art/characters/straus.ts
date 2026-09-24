@@ -19,12 +19,13 @@ export default {
     head.add(rod(0.04, belly, [0, 0, 0], [0, 0.24, 0.04]), ball(0.11, belly, [0, 0.28, 0.04]));
     catEars(rig, belly, 0.06, 0.38, 0.3, -0.08);
     for (const x of [-1, 1]) head.add(ball(0.02, INK.black, [0.045 * x, 0.3, 0.14]));
-    for (const t of [-0.35, 0, 0.35]) head.add(cone(0.025, 0.2, belly, [0.12 * Math.sin(t), 0.48, 0.02], [0, 0, -t]));
+    for (const t of [-0.35, 0, 0.35]) rig.parts.ears.add(cone(0.025, 0.2, belly, [0.12 * Math.sin(t), 0.48, 0.02], [0, 0, -t]));
     tail.position.set(0, 0, -0.2);
     for (const t of [-0.4, 0.4]) tail.add(cone(0.04, 0.2, belly, [0.05 * t, 0, -0.02], [-1.1, 0, t]));
-    rig.anchors.head.position.set(0, 0.4, 0.04);
+    rig.anchors.head.position.set(0, 0.39, 0.04);
     rig.anchors.head.userData.r = 0.11;
-    rig.anchors.collar.position.set(0, 0.06, 0.09);
-    rig.anchors.back.position.set(0, 0.08, -0.06);
+    rig.anchors.collar.position.set(0, 0.12, 0.1);
+    rig.anchors.collar.userData.r = 0.08;
+    rig.anchors.back.position.set(0, -0.06, -0.23);
   },
 } satisfies Look;

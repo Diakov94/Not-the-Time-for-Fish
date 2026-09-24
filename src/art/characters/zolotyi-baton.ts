@@ -8,7 +8,7 @@ export default {
     const { fur, accent } = coats(c);
     const { body, head, muzzle, legs, tail } = rig.parts;
     body.add(ball(0.22, fur, [0, -0.2, 0], [1.25, 1, 1.3]));
-    for (const z of [-0.22, -0.13, -0.04]) {
+    for (const z of [-0.24, -0.15, -0.06]) {
       const score = block([0.2, 0.04, 0.05], accent, [0, -0.2 + 0.22 * Math.sqrt(1 - (z / 0.286) ** 2) - 0.01, z]);
       score.rotation.y = 0.5;
       body.add(score);
@@ -27,7 +27,9 @@ export default {
     tail.add(rod(0.04, fur, [0, 0, 0], [0, 0.1, -0.1]));
     rig.anchors.head.position.set(0, 0.26, 0);
     rig.anchors.head.userData.r = 0.15;
-    rig.anchors.collar.position.set(0, -0.03, 0.09);
-    rig.anchors.back.position.set(0, 0.02, -0.12);
+    rig.anchors.collar.position.set(0, 0.03, 0.12);
+    rig.anchors.collar.userData.r = 0.17; // round the sunk head
+    rig.anchors.back.position.set(0, -0.2, -0.29);
+    rig.anchors.back.userData.r = 0.22;
   },
 } satisfies Look;
