@@ -90,8 +90,95 @@ export const SOUNDS = {
     hiss(k, out, t, { filter: 'lowpass', f: [300, 150], dur: 0.08, peak: 1.5 * loud }),
     hiss(k, out, t, { filter: 'highpass', f: [4000, 4000], dur: 0.015, peak: 0.25 * loud }),
   ],
+  // The round (card 55). A mine armed: a click and its fuse catching, a sizzle rising.
+  arm: (k, out, t) => [
+    tone(k, out, t, { type: 'square', f: [220, 110], dur: 0.05, peak: 0.35 }),
+    hiss(k, out, t + 0.03, { filter: 'highpass', f: [3500, 6000], dur: 0.6, peak: 0.18, attack: 0.03 }),
+  ],
+  // A mine defused: a snip, and the fuse snuffed out, falling.
+  defused: (k, out, t) => [
+    hiss(k, out, t, { filter: 'highpass', f: [6000, 6000], dur: 0.02, peak: 0.5 }),
+    tone(k, out, t + 0.03, { type: 'triangle', f: [1200, 300], dur: 0.35, peak: 0.25 }),
+    hiss(k, out, t + 0.03, { filter: 'bandpass', f: [2500, 500], q: 2, dur: 0.3, peak: 0.25 }),
+  ],
+  // A blast, the loudest sound in the game: a deep boom under a long roar.
+  blast: (k, out, t) => [
+    tone(k, out, t, { type: 'sine', f: [110, 28], dur: 1.4, peak: 1.4 }),
+    hiss(k, out, t, { filter: 'lowpass', f: [5000, 120], dur: 1.6, peak: 1.3 }),
+    tone(k, out, t, { type: 'square', f: [55, 25], dur: 0.5, peak: 0.35 }),
+  ],
+  // A trap set down: the alarm clock wound, four ratchet clicks and its bell tapped.
+  trapSet: (k, out, t) => [
+    ...[0, 1, 2, 3].map((i) => hiss(k, out, t + 0.07 * i, { filter: 'bandpass', f: [2500, 2500], q: 6, dur: 0.03, peak: 0.8 })),
+    tone(k, out, t + 0.3, { type: 'sine', f: [1568, 1568], dur: 0.15, peak: 0.12 }),
+  ],
+  // A trap sprung: the alarm clock ringing, its hammer between two bells for most of a second.
+  sprung: (k, out, t) =>
+    Array.from({ length: 14 }, (_, i) => tone(k, out, t + 0.05 * i, { type: 'square', f: i % 2 ? [1760, 1760] : [1568, 1568], dur: 0.05, peak: 0.22 })),
+  // A cat captured: the cage slams, a clang of unrelated partials over a thud.
+  captured: (k, out, t) => [
+    ...[310, 457, 689, 1011].map((f, i) => tone(k, out, t, { type: 'sine', f: [f, f], dur: 1 - 0.15 * i, peak: 0.3 - 0.06 * i })),
+    tone(k, out, t, { type: 'sine', f: [90, 50], dur: 0.2, peak: 0.6 }),
+    hiss(k, out, t, { filter: 'lowpass', f: [2000, 300], dur: 0.08, peak: 0.4 }),
+  ],
+  // A rescue: the latch clacks, the gate whooshes open, and a two-note "ta-da".
+  rescue: (k, out, t) => [
+    hiss(k, out, t, { filter: 'highpass', f: [3000, 3000], dur: 0.03, peak: 0.5 }),
+    hiss(k, out, t + 0.04, { filter: 'bandpass', f: [400, 2400], q: 2, dur: 0.3, peak: 0.35, attack: 0.1 }),
+    tone(k, out, t + 0.25, { type: 'sawtooth', f: [523, 523], dur: 0.15, peak: 0.15 }),
+    tone(k, out, t + 0.4, { type: 'sawtooth', f: [880, 880], dur: 0.45, peak: 0.15 }),
+  ],
+  // A dig-out: earth scratched in bursts, and a pop out of the ground.
+  dugOut: (k, out, t) => [
+    ...[0, 0.07, 0.17, 0.25, 0.36].map((d) => hiss(k, out, t + d, { filter: 'bandpass', f: [900, 500], q: 1.5, dur: 0.06, peak: 0.5 })),
+    tone(k, out, t + 0.45, { type: 'sine', f: [300, 900], dur: 0.08, peak: 0.4 }),
+  ],
+  // A fish secured, the round's reward: a fanfare up to a held high note, with a shimmer.
+  secured: (k, out, t) => [
+    ...[392, 523, 659, 784].map((f, i) => tone(k, out, t + 0.08 * i, { type: 'triangle', f: [f, f], dur: 0.12, peak: 0.3 })),
+    tone(k, out, t + 0.32, { type: 'triangle', f: [1047, 1047], dur: 0.6, peak: 0.3 }),
+    hiss(k, out, t + 0.32, { filter: 'highpass', f: [8000, 8000], dur: 0.6, peak: 0.06 }),
+  ],
+  // The phase stingers, heard everywhere. The heist begins: two horns a fifth apart, rising.
+  heist: (k, out, t) => [
+    tone(k, out, t, { type: 'sawtooth', f: [220, 440], dur: 0.6, peak: 0.15, attack: 0.05 }),
+    tone(k, out, t, { type: 'sawtooth', f: [330, 660], dur: 0.6, peak: 0.15, attack: 0.05 }),
+  ],
+  // Overtime begins: a siren, twice up and down.
+  overtime: (k, out, t) =>
+    [0, 1, 2, 3].map((i) => tone(k, out, t + 0.25 * i, { type: 'triangle', f: i % 2 ? [900, 600] : [600, 900], dur: 0.25, peak: 0.3, attack: 0.02 })),
+  // The round is over: a falling cadence onto a low gong.
+  over: (k, out, t) => [
+    ...[784, 659, 523].map((f, i) => tone(k, out, t + 0.18 * i, { type: 'triangle', f: [f, f], dur: 0.2, peak: 0.25 })),
+    tone(k, out, t + 0.54, { type: 'sine', f: [131, 131], dur: 1.5, peak: 0.4 }),
+    tone(k, out, t + 0.54, { type: 'sine', f: [393, 393], dur: 1, peak: 0.1 }),
+  ],
 } satisfies Record<string, Voice>;
 export type Sound = keyof typeof SOUNDS;
+
+// A defuse under way (card 55): a timer's beeps, quicker and higher as `done` runs from 0 to 1, until
+// `stop`, at once.
+export type Beeps = { set: (done: number, t: number) => void; stop: (t: number) => void };
+export function beeps(k: Kit, out: AudioNode): Beeps {
+  const pitch = new OscillatorNode(k.ctx, { type: 'triangle', frequency: 900 });
+  const rate = new OscillatorNode(k.ctx, { type: 'square', frequency: 3 });
+  const gate = new GainNode(k.ctx, { gain: 0.5 }); // the square's +-0.5 on top: on half of every beat
+  const level = new GainNode(k.ctx, { gain: 0.25 });
+  rate.connect(new GainNode(k.ctx, { gain: 0.5 })).connect(gate.gain);
+  pitch.connect(gate).connect(level).connect(out);
+  pitch.start();
+  rate.start();
+  return {
+    set: (done, t) => {
+      pitch.frequency.setValueAtTime(900 + 500 * done, t);
+      rate.frequency.setValueAtTime(3 + 7 * done, t);
+    },
+    stop: (t) => {
+      level.gain.setValueAtTime(0, t);
+      [pitch, rate].forEach((s) => s.stop(t + 0.01));
+    },
+  };
+}
 
 // A dog's panting, a voice that lasts as long as the dog: breathy noise swelling at `rate` breaths a
 // second, at `level`.

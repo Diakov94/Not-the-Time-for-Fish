@@ -51,6 +51,10 @@
 - 52 audio engine and SFX from events: audio reads the sim's event list and entity table and keeps only its voices. Batch AU1, 2026-09-24.
 - 53 ambience and directional dogs: where the player is comes from the sim's volume query. Batch AU1, 2026-09-24.
 - 54 music by phase: calm prep, tense heist, chase while the sim's tension query is true (src/sim/tension.ts, 18 lines). Batch AU1, 2026-09-24.
+- 55 round SFX: mines, traps, kennel and phases from sim events added where the facts are accepted (events.ts, ownership.ts). Batch R2, 2026-09-24.
+- 56 peek camera in a hiding spot. Batch R2, 2026-09-24.
+- 57 mines, traps, bags and lures in the world; blast, stun and progress drawn. Batch R2, 2026-09-24.
+- 58 team markers. Batch R2, 2026-09-24.
 - 15 single origin: the page and the relay on one origin (vite.config.ts proxy), so one tunnel carries both. Batch A1, 2026-09-24.
 - debt-one-owner-spawn-throw-port: the relay port's one owner is src/relay/address.ts; the last half closed. Batch A1, 2026-09-24.
 - 47 lobby: draws the round table's roster and only sends messages. Batch A1, 2026-09-24.
