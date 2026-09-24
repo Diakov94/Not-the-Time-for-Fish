@@ -4,16 +4,19 @@ import { entityOf, isCharacter, type ClientId, type Entity, type NetId } from '.
 import type { Mark, Noise, NoiseCause, Phase } from './messages.ts';
 import { myCharacter, type Intent } from './movement.ts';
 import { simulatedHere } from './ownership.ts';
+import { perkOf } from './perks.ts';
 import type { Sim } from './world.ts';
 
 // What happened, one list per frame (ADR 0008): appended by `receive` for the messages that are events
-// and by the fold's accepted grabs, throws, drops and hits; read by every view; drained by the loop that
-// owns the frame. Never sent. `loud` runs from 0 to 1, a mine's blast or a sprung trap.
+// and by the fold's accepted grabs, throws, drops, hits and ends; read by every view; drained by the loop
+// that owns the frame. Never sent. `loud` runs from 0 to 1, a mine's blast or a sprung trap.
 export type SimEvent =
   | { type: 'noise'; p: Vector; loud: number; from: ClientId; cause: NoiseCause }
   | { type: 'mark'; p: Vector; from: ClientId }
+  | { type: 'bark'; p: Vector; from: ClientId }
   | { type: 'grab' | 'throw' | 'drop'; id: NetId; from: ClientId }
   | { type: 'hit'; dog: NetId; from: ClientId }
+  | { type: 'blast' | 'defused' | 'sprung' | 'cleared' | 'pickup'; id: NetId; p: Vector; from: ClientId } // an end, where it lay
   | { type: 'phase'; to: Phase; round: number; from: ClientId }; // the table turned, at `from`'s message (ADR 0007)
 
 export const IMPACT = 5; // a contact is an impact above this many times its body's weight
@@ -21,7 +24,8 @@ const LOUDEST_IMPACT = 100; // weights of force that are as loud as a blast
 const RESTING = 0.05; // m/s: a copy slower than this rests on its owner
 const IMPACT_GAP = 0.5; // s a body that pinged an impact stays quiet
 // A character's steps: one ping per stride of travel on the ground. A dog is always loud; a sneaking cat
-// is silent. A dog's stride is shorter, so a walking dog pings at least as often as a sprinting cat.
+// is silent, and so is a cat under Ninja. A dog's stride is shorter, so a walking dog pings at least as
+// often as a sprinting cat.
 const STEPS = { cat: { stride: 2, loud: 0.15 }, dog: { stride: 1.2, loud: 0.3 } };
 
 // The loop's end of a frame: every view has read the list.
@@ -83,7 +87,7 @@ export function noises(sim: Sim, intent: Intent): Noise[] {
     if (sim.stride >= s.stride) {
       sim.stride -= s.stride;
       const p = c.body.translation();
-      if (c.kind === 'dog' || !intent.sneak) out.push({ type: 'noise', from: sim.me, p, loud: s.loud, cause: 'step' });
+      if (c.kind === 'dog' || !(intent.sneak || perkOf(sim) === 'ninja')) out.push({ type: 'noise', from: sim.me, p, loud: s.loud, cause: 'step' });
     }
   }
   return out;

@@ -25,6 +25,12 @@ export function isCharacter(kind: Kind): boolean {
   return kind === 'cat' || kind === 'dog';
 }
 
+// ADR 0009: mines, traps and bags are never held or pushed. Each is a fixed sensor where it was put:
+// characters walk over it, and the client that simulates a character finds it with a query of its own.
+export function isFixture(kind: Kind): boolean {
+  return kind === 'mine' || kind === 'trap' || kind === 'bag';
+}
+
 export const CRATE_HALF = 0.5; // a prop content does not describe: a test's crate, 1 kg
 
 // Collision groups, Rapier's `memberships << 16 | filter`. A blocker belongs to its own group only and
@@ -51,8 +57,8 @@ export function propCollider(prop: Prop): ColliderDesc {
 
 // Every kind's body. A character is a capsule its player drives: a cat 0.5 m wide and 0.9 m tall, a dog
 // 0.8 m wide and 1.4 m tall, so a gap between the two widths is a cat route (card 19 sizes its gaps to
-// these). Everything else is a dynamic prop. Mines, traps, bags and lures are placeholders until their
-// cards (39, 40, 42); a `prop` takes its body from content.
+// these). A fixture is a fixed sensor; everything else is a dynamic prop; a `prop` takes its body from
+// content.
 const COLLIDER: Record<Kind, () => ColliderDesc> = {
   cat: () => RAPIER.ColliderDesc.capsule(0.2, 0.25),
   dog: () => RAPIER.ColliderDesc.capsule(0.3, 0.4),
@@ -60,7 +66,7 @@ const COLLIDER: Record<Kind, () => ColliderDesc> = {
   mine: () => RAPIER.ColliderDesc.cuboid(0.25, 0.05, 0.25).setMass(2),
   trap: () => RAPIER.ColliderDesc.cuboid(0.15, 0.1, 0.15).setMass(1),
   bag: () => RAPIER.ColliderDesc.ball(0.25).setMass(1),
-  lure: () => RAPIER.ColliderDesc.ball(0.12).setMass(0.3),
+  lure: () => RAPIER.ColliderDesc.cuboid(0.06, 0.04, 0.15).setMass(0.3), // a fish-sized decoy: it slides to a stop
   prop: () => RAPIER.ColliderDesc.cuboid(CRATE_HALF, CRATE_HALF, CRATE_HALF),
 };
 
@@ -71,18 +77,24 @@ export function halfHeight(kind: Kind): number {
 }
 
 // A body to spawn, before it has an id; `spawnOf` gives it the next of this client's net ids.
-export type Body = Pick<Spawn, 'kind' | 'p' | 'q' | 'prop'>;
+export type Body = Pick<Spawn, 'kind' | 'p' | 'q' | 'prop' | 'v'>;
 export function spawnOf(sim: Sim, b: Body): Spawn {
   return { type: 'spawn', from: sim.me, id: `${sim.me}:${sim.spawned++}`, home: isCharacter(b.kind) ? sim.me : null, ...b };
 }
 
 export function spawnEntity(sim: Sim, s: Spawn): Entity {
   const { world } = sim;
-  const desc = isCharacter(s.kind) ? RAPIER.RigidBodyDesc.kinematicVelocityBased() : RAPIER.RigidBodyDesc.dynamic();
+  const desc = isCharacter(s.kind)
+    ? RAPIER.RigidBodyDesc.kinematicVelocityBased()
+    : isFixture(s.kind)
+      ? RAPIER.RigidBodyDesc.fixed()
+      : RAPIER.RigidBodyDesc.dynamic();
   const body = world.createRigidBody(desc.setTranslation(s.p.x, s.p.y, s.p.z).setRotation(s.q ?? { x: 0, y: 0, z: 0, w: 1 }));
+  if (isFixture(s.kind)) body.sleep(); // at rest from the start: its owner sends its pose once (ADR 0006)
+  if (s.v && s.from === sim.me) body.setLinvel(s.v, true); // thrown by its owner, this client
   const prop = s.prop === undefined ? undefined : sim.level.props[s.prop];
   const kindGroups = s.kind === 'dog' ? GROUPS.dog : s.kind === 'cat' ? GROUPS.cat : GROUPS.body;
-  const collider = world.createCollider(prop ? propCollider(prop) : COLLIDER[s.kind]().setCollisionGroups(kindGroups), body);
+  const collider = world.createCollider(prop ? propCollider(prop) : COLLIDER[s.kind]().setCollisionGroups(kindGroups).setSensor(isFixture(s.kind)), body);
   // Contacts that press above IMPACT weights are reported: the noise of an impact (ADR 0010).
   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
   collider.setContactForceEventThreshold(IMPACT * collider.mass() * -world.gravity.y);

@@ -1,8 +1,10 @@
+import { createAudio, hear } from '../audio/audio.ts';
 import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw } from '../render/view.ts';
+import { isCharacter } from '../sim/entities.ts';
 import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import type { Phase } from '../sim/messages.ts';
@@ -24,10 +26,9 @@ const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
 await init();
 // The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
 const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
-const { session, room } = await roomScreen(async (room) => ({ session: await connect(`${relay}/${room}`, countryHouse), room }));
+const name = `Гравець ${1000 + Math.floor(Math.random() * 9000)}`; // until the room screen asks for one (card 50)
+const { session, room } = await roomScreen(async (room) => ({ session: await connect(`${relay}/${room}`, countryHouse, name), room }));
 const { sim } = session;
-// Until card 44's `connect` sends the hello with the name card 50 asks for: delete this line then.
-send(session, { type: 'hello', from: sim.me, name: `Гравець ${sim.me}` });
 // The host's button, in the lobby and the results: the round table's successor phase.
 const next = () => {
   const m = advance(sim, session.host);
@@ -36,6 +37,8 @@ const next = () => {
 const lobby = lobbyScreen(room, (m) => send(session, m), next);
 const results = resultsScreen(next);
 const hint = document.querySelector<HTMLElement>('.hint')!;
+// The camera's target: this client's own character, whichever the sim spawned it this round.
+const own = () => [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind))?.id;
 
 const canvas = document.querySelector('canvas')!;
 const input = listen(
@@ -54,6 +57,7 @@ const input = listen(
   },
 );
 const view = createView(canvas, sim);
+const audio = createAudio();
 
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
 // between the last two of them.
@@ -64,7 +68,8 @@ requestAnimationFrame(function loop(now: number) {
   const playing = PLAY.includes(sim.round.phase);
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), playing ? intent(input) : IDLE);
   last = now;
-  draw(view, sim, input.look);
+  draw(view, sim, input.look, own());
+  hear(audio, sim, view.camera);
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
   lobby(sim, session.host);

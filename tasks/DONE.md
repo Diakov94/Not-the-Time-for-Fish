@@ -32,3 +32,21 @@
 - 35 runner for the MVP: scenarios by name; judges divergence, end tables, sides, doomed claims = 0. Batch H1, 2026-09-24.
 - 36 scenario grab-toss-wiggle-hit at 3 clients: 3 of 3 runs; hit frees in 18–20 ms, wiggle-free at 7.99–8.01 s, moving peak 0.241 m (limit 0.25). Batch H1, 2026-09-24.
 - 37 eight clients within budget: measured 289.6 kB/s down per client, relay 169.9 msg/s, 16.7 ticks/s; the budget itself is card 45. Batch H1, 2026-09-24.
+- 38 rejoin mid-round and removal after 60 s. Batch S3, 2026-09-24.
+- 39 mines: plant, blast, defuse, whisker cue, resupply; entity rows ended only by the fold. Producer: "only a cat ends a mine" has no test (a dog's client never sends blast or defused). Batch S3, 2026-09-24.
+- 40 traps: planted, set off, cleared, pickups. Batch S3, 2026-09-24.
+- 41 hiding spots, doors and barricades; the round table holds the open house doors. Batch S3, 2026-09-24.
+- 42 perks: mystery bags and the eight effects; the slot is the picker's client's alone. Batch S3, 2026-09-24.
+- 30 kinds and looks: every kind drawn from the entity table, six looks from the roster. Batch R1, 2026-09-24.
+- 31 the level from content: the real house, 26 prop entities by label, 26 debris, 5 doors, 5 fish; 8 characters at 120 FPS in two tabs, p99 frame 10.3 ms. Batch R1, 2026-09-24.
+- 32 scent and pings in the world: from the event list and the sniff query. Batch R1, 2026-09-24.
+- 33 juice: stars on noise with cause impact or blast (the sim's word), shake proportional to loudness. Batch R1, 2026-09-24.
+- 34 camera target named by the app. Batch R1, 2026-09-24.
+- 14 camera collision: the camera no longer sees through walls. Batch R1, 2026-09-24.
+- 43 state carries the round: a joiner's timer is within 34 ms of the host's (limit 250); 20 pings held before the state reach it as 0 events. Batch N1, 2026-09-24.
+- 44 hello and rejoin: a taken name is refused with {code: 'refused'} in 5–7 ms. Batch N1, 2026-09-24.
+- 45 snapshot budget for eight: 58.8–60.6 kB/s down per client (budget 100; before 289.6). Batch N1, 2026-09-24.
+- 46 dead socket leaves: a silent socket is terminated and `left` follows; before, none within 60 s. Batch N1, 2026-09-24.
+- 52 audio engine and SFX from events: audio reads the sim's event list and entity table and keeps only its voices. Batch AU1, 2026-09-24.
+- 53 ambience and directional dogs: where the player is comes from the sim's volume query. Batch AU1, 2026-09-24.
+- 54 music by phase: calm prep, tense heist, chase while the sim's tension query is true (src/sim/tension.ts, 18 lines). Batch AU1, 2026-09-24.

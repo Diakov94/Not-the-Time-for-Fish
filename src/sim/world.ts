@@ -1,16 +1,19 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { Collider, EventQueue, KinematicCharacterController, RigidBody, World } from '@dimforge/rapier3d-compat';
+import type { Collider, EventQueue, KinematicCharacterController, RigidBody, Vector, World } from '@dimforge/rapier3d-compat';
 import type { Level } from '../content/level.ts';
 import { build } from './build.ts';
 import type { ClientId, Entities, NetId } from './entities.ts';
 import { roundStep } from './heist.ts';
 import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
+import { mineStep, stunned } from './mines.ts';
 import { smell, type Scent } from './scent.ts';
+import { pickups } from './traps.ts';
+import { perkStep, type Perk } from './perks.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
-import { clock, newRound, type Round } from './round.ts';
+import { clock, newRound, removals, type Round } from './round.ts';
 import { touchClaims } from './touch.ts';
 
 export const STEP = 1 / 60;
@@ -45,6 +48,7 @@ export type Sim = {
   stride: number; // m the own character has walked since its last step ping
   scent: Map<NetId, Scent[]>; // each cat's and lure's trail as this client applied its poses (ADR 0010)
   sniffing: boolean; // the own dog sniffs this step
+  sneaking: boolean; // the own cat sneaks this step
   round: Round; // ADR 0007's round table
   outbox: SimMessage[]; // what the fold asked this client to send (the host's answers, spawns), for the next step
   phaseAt: number; // this client's time at the fold of the current phase: the start its remaining time counts from
@@ -55,7 +59,24 @@ export type Sim = {
   capturing: boolean; // this client's cat sent `captured` and the table has not answered
   digOut: number | null; // when this client's captured cat digs out, by its own clock
   gateUntil: number; // this client's time the kennel's gate shuts again after a rescue
+  away: Map<ClientId, { name: string | null; at: number }>; // who left, as whom, and when by this client's clock
+  stunUntil: number; // when this client's cat's stun ends, by its own clock
+  used: number; // mines this client's dog planted since its last resupply
+  planting: Work | null; // this client's dog's plant in progress
+  defusing: (Work & { id: NetId }) | null; // this client's cat's defuse in progress, of mine `id`
+  resupplyAt: number | null; // since when this client's dog has stood in the doghouse
+  ending: Set<NetId>; // entities this client sent the message that ends them for (a blast, a defuse, ...)
+  trap: boolean; // this client's cat has a trap in hand
+  doorWork: { door: number; until: number } | null; // the own cat's work at a shut house door
+  barged: Set<number>; // house doors this client's dog barged open, ahead of the round table
+  perk: { kind: Perk; until: number | null } | null; // this client's perk slot: until when, null for one use
+  outside: Vector | null; // where the own character last stood outside a hiding spot
+  jumpHeld: boolean; // the own character's jump was held last step
+  airJumped: boolean; // the own cat used its Acrobat jump since it last stood
 };
+
+// A timed action of the own character: when it started and ends, and where the character stood then.
+export type Work = { since: number; until: number; from: Vector };
 
 export async function init(): Promise<void> {
   await RAPIER.init();
@@ -97,6 +118,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     stride: 0,
     scent: new Map(),
     sniffing: false,
+    sneaking: false,
     round: newRound(),
     outbox: [],
     phaseAt: 0,
@@ -107,13 +129,27 @@ export function createWorld(level: Level, me: ClientId): Sim {
     capturing: false,
     digOut: null,
     gateUntil: 0,
+    away: new Map(),
+    stunUntil: 0,
+    used: 0,
+    planting: null,
+    defusing: null,
+    resupplyAt: null,
+    ending: new Set(),
+    trap: true,
+    doorWork: null,
+    barged: new Set(),
+    perk: null,
+    outside: null,
+    jumpHeld: false,
+    airJumped: false,
   };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
 // `intent` is this client's player input, held for every step of the call. Returns the messages the
-// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims, the host's clock) and the
-// fold's outbox, for the caller to send. `host` is the host the relay names now.
+// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims, the host's clock and
+// removals) and the fold's outbox, for the caller to send. `host` is the host the relay names now.
 export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientId): SimMessage[] {
   const out: SimMessage[] = sim.outbox.splice(0);
   sim.accumulator += dt;
@@ -121,11 +157,13 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientI
     sim.accumulator -= STEP;
     sim.time += STEP;
     const c = myCharacter(sim);
-    if (c) drive(sim, c, intent);
+    const act = stunned(sim) ? IDLE : intent; // a stunned cat's intent is not its own
+    if (c) drive(sim, c, act);
     carry(sim);
     sim.world.step(sim.queue);
     smell(sim);
-    out.push(...grabStep(sim), ...noises(sim, intent), ...touchClaims(sim), ...roundStep(sim), ...clock(sim, host));
+    perkStep(sim);
+    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
   }
   return out;
 }

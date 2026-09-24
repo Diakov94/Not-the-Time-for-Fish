@@ -8,6 +8,9 @@ import { drainEvents } from './events.ts';
 import { IDLE, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
 import { interact } from './heist.ts';
+import { hidden } from './hiding.ts';
+import { perkOf } from './perks.ts';
+import { plant, stunned } from './mines.ts';
 import { receive } from './ownership.ts';
 import { advance, knobs, playerOf, playsAs } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
@@ -461,4 +464,255 @@ test("a free cat's interact at the latch frees both captured cats on every clien
   for (const t of closed.values()) expect(Math.abs(t - 5)).toBeLessThanOrEqual(STEP);
   expect(dug).toBe(0);
   expect(agree(r)).toBe(true);
+});
+
+test('a captured cat that leaves and rejoins by name mid-heist: its old body is gone, it is back in the kennel captured on every client, and digs out 60 s after the rejoin', { timeout: 30000 }, () => {
+  const r = relay(countryHouse, true);
+  const [, , cat] = r.players(3); // P2 plays a cat
+  toHeist(r);
+  stand(cat!, 0, 10, Math.PI); // on the kennel's floor
+  r.run(2);
+  const old = own(cat!).id;
+  const caught = capturedOn(r, cat!).join();
+  r.drop(cat!);
+  r.run(20 * 60);
+  const back = r.add();
+  r.send(back, hello(back, 'P2'));
+  const t0 = new Map(r.sims().map((s) => [s, s.time]));
+  let steps = 0;
+  const settled = () => r.sims().every((s) => !s.entities.has(old) && [...s.entities.values()].some((e) => e.home === back.me));
+  for (; steps < 30 && !settled(); steps++) r.run(1);
+  const at = own(back).body.translation();
+  const kinds = r.sims().map((s) => [...s.entities.values()].find((e) => e.home === back.me)?.kind).join();
+  const captured = capturedOn(r, back).join();
+  r.until(() => playerOf(back.round, back.me)!.captured === null, 61 * 60);
+  const dug = back.time - t0.get(back)!;
+  console.log(
+    `captured before leaving: ${caught}; after the hello: old body in any table ${r.sims().some((s) => s.entities.has(old) || s.ownership.rows.has(old))}, ` +
+      `the new ${kinds} after ${steps} step(s) at (${at.x.toFixed(2)}, ${at.y.toFixed(2)}, ${at.z.toFixed(2)}), in the kennel ${inKennel(at)}, captured ${captured}; dug out ${dug.toFixed(3)} s after the rejoin`,
+  );
+  expect(caught).toBe('true,true,true');
+  expect(steps).toBeLessThanOrEqual(30); // 500 ms
+  expect(r.sims().some((s) => s.entities.has(old) || s.ownership.rows.has(old))).toBe(false);
+  expect(kinds).toBe('cat,cat,cat');
+  expect(inKennel(at)).toBe(true);
+  expect(captured).toBe('true,true,true');
+  expect(Math.abs(dug - 60)).toBeLessThanOrEqual(0.1);
+  expect(agree(r)).toBe(true);
+});
+
+// A dog's mine at its feet at (x, z): it plants and stands still for the 1.5 s the plant takes.
+function mineAt(r: Relay, dog: Sim, x: number, z: number): NetId {
+  own(dog).body.setTranslation({ x, y: halfHeight('dog') + 0.01, z }, true);
+  r.run(2);
+  plant(dog);
+  r.until(() => r.sims().every((s) => [...s.entities.values()].some((e) => e.kind === 'mine' && Math.hypot(e.body.translation().x - x, e.body.translation().z - z) < 0.1)), 2 * 60);
+  return [...dog.entities.values()].find((e) => e.kind === 'mine' && Math.hypot(e.body.translation().x - x, e.body.translation().z - z) < 0.1)!.id;
+}
+const walking = (x: number): Intent => ({ move: { x, z: 0 }, sprint: false, jump: false });
+const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
+
+test('two cats walk onto one mine in the same step: one blast accepted; each stunned 3 s and thrown, the carrier drops its fish at once; the dog 1 m off is pushed, not stunned; one noise', () => {
+  const r = relay(countryHouse, true);
+  const [b, dog, a] = r.players(3); // P0 and P2 play cats, P1 the dog
+  toHeist(r);
+  const mine = mineAt(r, dog!, 0, -10);
+  own(dog!).body.setTranslation({ x: 0, y: halfHeight('dog') + 0.01, z: -9 }, true);
+  stand(a!, -1.5, -10, Math.PI / 2);
+  stand(b!, 1.5, -10, -Math.PI / 2);
+  const fish = spawnOf(a!, { kind: 'fish', p: { x: -0.8, y: halfHeight('fish'), z: -10 } });
+  r.send(a!, fish);
+  r.send(a!, { type: 'claim', from: a!.me, id: fish.id, hold: true });
+  r.run(5);
+  // Every client steps before the relay orders what any sent, so both cats' blasts are in flight at once.
+  const walk = (s: Sim) => walking(s === a ? 1 : s === b ? -1 : 0);
+  const blasts = () => r.history.filter(([m]) => m.type === 'blast').length;
+  for (let i = 0; i < 60 && blasts() === 0; i++) {
+    const outs = r.clients.map((c) => [c.sim, step(c.sim, STEP, walk(c.sim), c.host)] as const);
+    for (const [s, ms] of outs) for (const m of ms) r.send(s, m);
+  }
+  const at = r.history.findIndex(([m]) => m.type === 'blast');
+  const t0 = new Map(r.sims().map((s) => [s, s.time]));
+  const from = new Map([a!, b!, dog!].map((s) => [s, { ...own(s).body.translation() }]));
+  const walksAgain = new Map<Sim, number>();
+  const thrown = new Map<Sim, number>();
+  let dogMoved = 0;
+  for (let i = 0; i < 4 * 60; i++) {
+    r.run(1, walk);
+    for (const s of [a!, b!]) {
+      const v = own(s).body.linvel();
+      if (!walksAgain.has(s) && s.time - t0.get(s)! > 0.5 && v.x * (s === a ? 1 : -1) >= 0.9 * 4) walksAgain.set(s, s.time - t0.get(s)!);
+      if (Math.abs(s.time - t0.get(s)! - 2.9) < STEP / 2) thrown.set(s, flat(own(s).body.translation(), from.get(s)!));
+    }
+    dogMoved = Math.max(dogMoved, flat(own(dog!).body.translation(), from.get(dog!)!));
+  }
+  // What the carrier sends once it folded the blast; a blast of its own was already in flight.
+  const next = r.history.slice(at + 1).find(([m]) => m.type !== 'blast' && m.type !== 'left' && m.from === a!.me)?.[0];
+  const noises = r.history.filter(([m]) => m.type === 'noise' && m.cause === 'blast').length;
+  console.log(
+    `blasts sent ${blasts()}, noises from a blast ${noises}, mine in any table ${r.sims().some((s) => s.entities.has(mine))}; ` +
+      `the carrier's next message: ${next?.type} of ${next?.type === 'release' ? next.id : '-'}, fish held on ${r.sims().map((s) => s.ownership.rows.get(fish.id)?.held).join()}; ` +
+      `cats walk again ${[...walksAgain.values()].map((t) => t.toFixed(3)).join(' / ')} s after the blast, thrown ${[...thrown.values()].map((d) => d.toFixed(2)).join(' / ')} m; ` +
+      `the dog 1 m off moved ${dogMoved.toFixed(2)} m, stunned ${stunned(dog!)}`,
+  );
+  expect(blasts()).toBe(2);
+  expect(noises).toBe(1);
+  expect(r.sims().some((s) => s.entities.has(mine) || s.ownership.rows.has(mine))).toBe(false);
+  expect(next).toMatchObject({ type: 'release', id: fish.id });
+  expect(r.sims().map((s) => s.ownership.rows.get(fish.id)?.held)).toEqual([false, false, false]);
+  expect(walksAgain.size).toBe(2);
+  for (const t of walksAgain.values()) expect(Math.abs(t - 3)).toBeLessThanOrEqual(0.1);
+  for (const d of thrown.values()) expect(d).toBeGreaterThanOrEqual(1.5);
+  expect(dogMoved).toBeGreaterThanOrEqual(0.5);
+  expect(stunned(dog!)).toBe(false);
+});
+
+test('a defuse held 3 s still removes the mine on both clients; moving at 2 s restarts it, and so does a grab', () => {
+  const r = relay(countryHouse, true);
+  const [cat, dog] = r.players(2); // P0 plays the cat, P1 the dog
+  toHeist(r);
+  const first = mineAt(r, dog!, 0, -10);
+  const second = mineAt(r, dog!, 4, -10);
+  own(dog!).body.setTranslation({ x: 4, y: halfHeight('dog') + 0.01, z: -12 }, true);
+  const on = (id: NetId) => r.sims().map((s) => s.entities.has(id)).join();
+  const hold = (steps: number, z = 0) => r.run(steps, (s) => (s === cat ? { move: { x: 0, z }, sprint: false, jump: false, defuse: true } : IDLE));
+  // At the first mine: 2 s held, a step aside while holding (still within reach), then held still.
+  stand(cat!, -0.8, -10, Math.PI / 2);
+  r.run(2);
+  hold(120);
+  hold(6, 1);
+  const restart = cat!.time;
+  hold(75);
+  const moved = on(first); // 3.4 s since the first press
+  r.until(() => !cat!.entities.has(first), 4 * 60, (s) => (s === cat ? { ...IDLE, defuse: true } : IDLE));
+  const done = cat!.time - restart;
+  const gone = on(first);
+  // At the second: 2 s held, then the dog grabs the cat, which holds E on.
+  stand(cat!, 3.2, -10, Math.PI / 2);
+  r.run(2);
+  hold(120);
+  r.send(dog!, { type: 'claim', from: dog!.me, id: own(cat!).id, hold: true });
+  hold(90);
+  const grabbed = on(second);
+  console.log(`mine after 2 s, a step aside, 1.25 s more: ${moved}; removed ${done.toFixed(3)} s after the restart: ${gone}; after 2 s and a grab, 1.5 s more: ${grabbed}`);
+  expect(moved).toBe('true,true');
+  expect(Math.abs(done - 3)).toBeLessThanOrEqual(0.1);
+  expect(gone).toBe('false,false');
+  expect(grabbed).toBe('true,true');
+});
+
+const trapsOf = (sim: Sim, home: ClientId | null) => [...sim.entities.values()].filter((e) => e.kind === 'trap' && e.home === home);
+
+test("a dog's clear delivered before the cat's spring: the trap is gone everywhere, the spring is rejected and no ping follows", () => {
+  const r = relay(countryHouse, true);
+  const [, dog, cat] = r.players(3);
+  toHeist(r);
+  stand(cat!, 0, -10, 0);
+  r.run(2);
+  r.send(cat!, plant(cat!)!);
+  const set = trapsOf(dog!, cat!.me)[0]!.id;
+  stand(cat!, 0, -3, 0);
+  own(dog!).body.setTranslation({ x: 1, y: halfHeight('dog') + 0.01, z: -10 }, true);
+  r.run(2);
+  // Both pressed at once: the dog's clear reaches the relay first.
+  const [cleared, sprung] = [interact(dog!), plant(cat!)];
+  r.send(dog!, cleared!);
+  r.send(cat!, sprung!);
+  r.run(30);
+  const pings = r.history.filter(([m]) => m.type === 'noise' && m.cause === 'trap').length;
+  console.log(`clear then spring: ${cleared?.type} and ${sprung?.type} of ${set}; trap in any table ${r.sims().some((s) => s.entities.has(set) || s.ownership.rows.has(set))}; trap pings ${pings}`);
+  expect([cleared?.type, sprung?.type]).toEqual(['cleared', 'sprung']);
+  expect(r.sims().some((s) => s.entities.has(set) || s.ownership.rows.has(set))).toBe(false);
+  expect(pings).toBe(0);
+});
+
+test('one trap in play per cat: with its trap planted a cat takes no pickup and Q plants nothing; with none, Q does nothing; a pickup gives it one to plant', () => {
+  const r = relay(countryHouse, true);
+  const [, , cat] = r.players(3);
+  toHeist(r);
+  const pickup = trapsOf(cat!, null).find((e) => flat(e.body.translation(), { x: -10, z: -13 }) < 0.1)!.id;
+  const spawns = () => r.history.filter(([m]) => m.type === 'spawn' && m.kind === 'trap' && m.from === cat!.me).length;
+  const press = () => {
+    const m = plant(cat!);
+    if (m) r.send(cat!, m);
+    r.run(2);
+    return m?.type ?? 'nothing';
+  };
+  stand(cat!, -10, -11, Math.PI);
+  r.run(2);
+  const first = press();
+  stand(cat!, -10, -13, Math.PI); // on the pickup, the trap still planted
+  r.run(30);
+  const whilePlanted = { pickups: r.history.filter(([m]) => m.type === 'pickup').length, there: r.sims().every((s) => s.entities.has(pickup)) };
+  stand(cat!, -10, -9, Math.PI); // off the pickup
+  r.run(2);
+  const second = press();
+  const third = press();
+  stand(cat!, -10, -12.8, Math.PI);
+  r.run(2);
+  const fourth = press();
+  console.log(
+    `Q: ${first}; on a pickup with its trap planted: ${whilePlanted.pickups} pickups, still there ${whilePlanted.there}; Q: ${second}; Q: ${third}; ` +
+      `on it with none: pickup gone everywhere ${r.sims().every((s) => !s.entities.has(pickup))}; Q: ${fourth}; trap spawns ${spawns()}`,
+  );
+  expect(first).toBe('spawn');
+  expect(whilePlanted).toEqual({ pickups: 0, there: true });
+  expect([second, third]).toEqual(['sprung', 'nothing']);
+  expect(r.sims().every((s) => !s.entities.has(pickup))).toBe(true);
+  expect(fourth).toBe('spawn');
+  expect(spawns()).toBe(2);
+});
+
+test("a cat in the hall box's spot is hidden on both clients; the dog shoves the box north 1 m and it is not, on both, within 150 ms", () => {
+  const r = relay(countryHouse, true);
+  const [cat, dog] = r.players(2); // P0 plays the cat, P1 the dog
+  toHeist(r);
+  const box = [...cat!.entities.values()].find((e) => e.prop !== undefined && countryHouse.props[e.prop]!.label === 'cardboard box' && e.body.translation().x < 0)!;
+  const z0 = box.body.translation().z;
+  stand(cat!, -1.575, 0, 0); // between the hall's west wall and the box
+  own(dog!).body.setTranslation({ x: -0.85, y: halfHeight('dog') + 0.01, z: -1.6 }, true);
+  r.run(5);
+  const me = own(cat!).id;
+  const hiddenOn = () => r.sims().map((s) => hidden(s, s.entities.get(me)!));
+  const before = hiddenOn().join();
+  const flipped = new Map<Sim, number>();
+  let moved = 0;
+  for (let i = 0; i < 3 * 60 && moved < 1; i++) {
+    r.run(1, (s) => (s === dog ? { move: { x: 0, z: 1 }, sprint: false, jump: false } : IDLE));
+    hiddenOn().forEach((h, k) => !h && !flipped.has(r.sims()[k]!) && flipped.set(r.sims()[k]!, r.sims()[k]!.time));
+    moved = dog!.entities.get(box.id)!.body.translation().z - z0;
+  }
+  const lag = Math.abs(flipped.get(cat!)! - flipped.get(dog!)!) * 1000;
+  console.log(`hidden before ${before}; the box shoved ${moved.toFixed(2)} m, hidden now ${hiddenOn().join()}; flipped on the cat's and the dog's clients ${lag.toFixed(0)} ms apart`);
+  expect(before).toBe('true,true');
+  expect(moved).toBeGreaterThanOrEqual(1);
+  expect(hiddenOn().join()).toBe('false,false');
+  expect(lag).toBeLessThanOrEqual(150);
+});
+
+test('a cat and a dog touch one mystery bag in the same step: one picker, the first delivered, holds a perk; the bag is gone everywhere', () => {
+  const r = relay(countryHouse, true);
+  const [, dog, cat] = r.players(3);
+  toHeist(r);
+  const bag = [...cat!.entities.values()].find((e) => e.kind === 'bag' && flat(e.body.translation(), { x: 13, z: -4 }) < 0.1)!.id;
+  stand(cat!, 12, -4, Math.PI / 2);
+  own(dog!).body.setTranslation({ x: 14, y: halfHeight('dog') + 0.01, z: -4 }, true);
+  r.run(2);
+  // Both step before the relay orders either's pickup.
+  const walk = (s: Sim) => walking(s === cat ? 1 : s === dog ? -1 : 0);
+  const pickups = () => r.history.filter(([m]) => m.type === 'pickup');
+  for (let i = 0; i < 60 && pickups().length === 0; i++) {
+    const outs = r.clients.map((c) => [c.sim, step(c.sim, STEP, walk(c.sim), c.host)] as const);
+    for (const [s, ms] of outs) for (const m of ms) r.send(s, m);
+  }
+  r.run(5);
+  const first = pickups()[0]![0] as { from: ClientId };
+  const pickers = [cat!, dog!].filter((s) => perkOf(s) !== null);
+  console.log(
+    `pickups sent ${pickups().length} (${pickups().map(([m]) => (m as { from: ClientId }).from).join(', ')}); perks: cat ${perkOf(cat!)}, dog ${perkOf(dog!)}; ` +
+      `bag in any table ${r.sims().some((s) => s.entities.has(bag) || s.ownership.rows.has(bag))}`,
+  );
+  expect(pickups().length).toBe(2);
+  expect(pickers.map((s) => s.me)).toEqual([first.from]);
+  expect(r.sims().some((s) => s.entities.has(bag) || s.ownership.rows.has(bag))).toBe(false);
 });

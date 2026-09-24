@@ -5,8 +5,9 @@ import { startRelay, type Relay } from '../relay/node.ts';
 import { drainEvents } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import { IDLE, type Intent } from '../sim/movement.ts';
+import { playerOf, remaining } from '../sim/round.ts';
 import { init } from '../sim/world.ts';
-import { connect, frame, send, spawn, type Session } from './client.ts';
+import { connect, frame, send, spawn, type Refused, type Session } from './client.ts';
 import { dump } from './dump.ts';
 
 beforeAll(init);
@@ -18,14 +19,15 @@ const south: Intent = { move: { x: 0, z: -1 }, sprint: false, jump: false };
 let relay: Relay | undefined;
 let url = '';
 let sessions: Session[] = [];
+let names = 0; // every client of a test run hellos with a name of its own
 
 afterEach(async () => {
   for (const s of sessions) s.ws.close();
   await relay?.close();
 });
 
-async function join(level: Level = walls): Promise<Session> {
-  const s = await connect(url, level);
+async function join(level: Level = walls, name = `p${names++}`): Promise<Session> {
+  const s = await connect(url, level, name);
   sessions.push(s);
   return s;
 }
@@ -128,6 +130,57 @@ test("a third client joining mid-run holds the host's table and entities within 
   };
   expect(Math.max(...crates().filter((e) => e.id !== claim!.id).map((e) => off(e, a!)))).toBeLessThanOrEqual(0.02);
   expect(off(claim!, b!)).toBeLessThanOrEqual(0.5);
+});
+
+test("a joiner during heist holds the host's round within 500 ms, its timer a hop off; pings held before its state are dropped", async () => {
+  const [a, b] = await room(2);
+  for (const to of ['prep', 'heist'] as const) send(a!, { type: 'phase', from: a!.sim.me, to, round: 1 });
+  await play(500, () => b!.sim.round.phase === 'heist');
+  spawn(b!, 'cat', { x: 0, y: 1, z: 0 });
+  const fish = spawn(a!, 'fish', { x: 0, y: 0.1, z: 2 });
+  send(b!, { type: 'claim', from: b!.sim.me, id: fish, hold: true });
+  send(b!, { type: 'secured', from: b!.sim.me, fish, at: 1.5 });
+  await play(1000, () => a!.sim.round.secured.length === 1 && a!.sim.round.roster.every((p) => p.team !== null));
+  // A holds its state until 20 of B's pings are in the relay's order after the join.
+  const send0 = a!.ws.send.bind(a!.ws);
+  let state: string | undefined;
+  a!.ws.send = (d) => (JSON.parse(String(d)).type === 'state' ? (state = String(d)) : send0(d));
+  const ping = () => send(b!, { type: 'noise', from: b!.sim.me, p: { x: 0, y: 0, z: 0 }, loud: 0.1, cause: 'step' });
+  const pings = (s: Session) => s.sim.events.filter((e) => e.type === 'noise').length;
+  const t0 = performance.now();
+  const joining = join();
+  await play(500, () => state !== undefined);
+  drainEvents(a!.sim);
+  for (let i = 0; i < 20; i++) ping();
+  await play(500, () => pings(a!) === 20);
+  send0(state!);
+  const c = await joining;
+  await play(500, () => JSON.stringify(c.sim.round) === JSON.stringify(a!.sim.round));
+  const ms = performance.now() - t0;
+  console.log(`joiner held the round ${ms.toFixed(0)} ms after connect; remaining ${remaining(c.sim)?.toFixed(3)} s against ${remaining(a!.sim)?.toFixed(3)} s`);
+  expect(c.sim.round).toEqual(a!.sim.round);
+  expect(ms).toBeLessThanOrEqual(500);
+  expect(c.sim.round.phase).toBe('heist');
+  expect(c.sim.round.secured.length).toBe(1);
+  expect(Math.abs(remaining(c.sim)! - remaining(a!.sim)!)).toBeLessThanOrEqual(0.25);
+  expect(pings(c)).toBe(0);
+  ping();
+  await play(500, () => pings(c) > 0);
+  expect(pings(c)).toBe(1);
+});
+
+test('a second client with a name in use is refused within 500 ms and closed; the first plays on', async () => {
+  const [a] = await room(1);
+  const name = playerOf(a!.sim.round, a!.sim.me)!.name;
+  const t0 = performance.now();
+  const refused = await connect(url, walls, name).then(() => undefined, (e: Refused) => e);
+  const ms = performance.now() - t0;
+  await play(500, () => a!.sim.ownership.gone.size > 0);
+  console.log(`a second "${name}": ${refused?.code} after ${ms.toFixed(0)} ms; left announced to the first: ${a!.sim.ownership.gone.size}`);
+  expect(refused).toMatchObject({ code: 'refused', player: name });
+  expect(ms).toBeLessThanOrEqual(500);
+  expect(a!.sim.ownership.gone.size).toBe(1); // the relay's `left` for the refused socket: one member stays
+  expect(playerOf(a!.sim.round, a!.sim.me)?.name).toBe(name);
 });
 
 test("a joiner's copy of a moving crate appears at its owner's pose, not rising from under the floor", async () => {
