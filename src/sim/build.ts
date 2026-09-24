@@ -55,11 +55,13 @@ function onPoint(pt: Point, kind: Kind): Pick<Body, 'p' | 'q'> {
   return { p: { x: pt.p.x, y: pt.p.y + halfHeight(kind), z: pt.p.z }, q: { x: 0, y: Math.sin(pt.yaw / 2), z: 0, w: Math.cos(pt.yaw / 2) } };
 }
 
-// What the host spawns for a level: its synced props, and a fish at every `fish` point.
+// What the host spawns for a level: its synced props, a fish at every `fish` point and a trap, no one's
+// yet, at every `trapPickup` point.
 export function levelBodies(level: Level): Body[] {
   return [
     ...level.props.flatMap((prop, i) => (prop.synced ? [{ kind: 'prop' as const, p: prop.p, prop: i }] : [])),
     ...level.points.filter((pt) => pt.role === 'fish').map((pt) => ({ kind: 'fish' as const, ...onPoint(pt, 'fish') })),
+    ...level.points.filter((pt) => pt.role === 'trapPickup').map((pt) => ({ kind: 'trap' as const, ...onPoint(pt, 'trap') })),
   ];
 }
 

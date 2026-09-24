@@ -8,6 +8,7 @@ import { noises, type SimEvent } from './events.ts';
 import { carry, grabStep } from './grab.ts';
 import { mineStep, stunned } from './mines.ts';
 import { smell, type Scent } from './scent.ts';
+import { pickups } from './traps.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
@@ -63,7 +64,8 @@ export type Sim = {
   planting: Work | null; // this client's dog's plant in progress
   defusing: (Work & { id: NetId }) | null; // this client's cat's defuse in progress, of mine `id`
   resupplyAt: number | null; // since when this client's dog has stood in the doghouse
-  ending: Set<NetId>; // entities this client sent the message that ends them for (a blast, a defuse)
+  ending: Set<NetId>; // entities this client sent the message that ends them for (a blast, a defuse, ...)
+  trap: boolean; // this client's cat has a trap in hand
 };
 
 // A timed action of the own character: when it started and ends, and where the character stood then.
@@ -127,6 +129,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     defusing: null,
     resupplyAt: null,
     ending: new Set(),
+    trap: true,
   };
 }
 
@@ -146,7 +149,7 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientI
     carry(sim);
     sim.world.step(sim.queue);
     smell(sim);
-    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
+    out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
   }
   return out;
 }

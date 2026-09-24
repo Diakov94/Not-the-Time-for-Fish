@@ -6,6 +6,7 @@ import type { Blast, SimMessage } from './messages.ts';
 import { myCharacter, type Intent } from './movement.ts';
 import { carried, simulatedHere } from './ownership.ts';
 import { inPlay, knobs } from './round.ts';
+import { plantOrSpring } from './traps.ts';
 import type { Sim } from './world.ts';
 
 const PLANT = 1.5; // s a dog stands still to plant a mine
@@ -28,11 +29,12 @@ export function stunned(sim: Sim): boolean {
   return sim.time < sim.stunUntil - 1e-9;
 }
 
-// Q for a dog (card 49): a dog with a mine in hand that carries nothing starts planting one at its feet,
-// in play only. The mines are the dog's own count: the knob's (card 27) less those used since its last
-// resupply.
+// Q (card 49), for a cat its trap's. For a dog: a dog with a mine in hand that carries nothing starts
+// planting one at its feet, in play only. The mines are the dog's own count: the knob's (card 27) less
+// those used since its last resupply.
 export function plant(sim: Sim): SimMessage | null {
   const c = myCharacter(sim);
+  if (c?.kind === 'cat' && !stunned(sim)) return plantOrSpring(sim, c);
   if (c?.kind !== 'dog' || !inPlay(sim.round) || sim.planting || carried(sim) || sim.used >= knobs(sim.round).mines) return null;
   sim.planting = { since: sim.time, until: sim.time + PLANT, from: c.body.translation() };
   return null;

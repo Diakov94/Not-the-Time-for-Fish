@@ -4,6 +4,7 @@ import { volumeAt } from './build.ts';
 import { GROUPS, type Entity } from './entities.ts';
 import type { SimMessage } from './messages.ts';
 import { stunned } from './mines.ts';
+import { clear } from './traps.ts';
 import { myCharacter } from './movement.ts';
 import { carried } from './ownership.ts';
 import { playerOf } from './round.ts';
@@ -46,11 +47,12 @@ export function stored(sim: Sim, cat: Entity): Entity | undefined {
   return undefined;
 }
 
-// A cat's interact (E tapped, card 49): a free cat at the kennel's latch rescues at once while a cat is
-// captured; at a shut door storage it starts the work that opens it. Returns the message an interact
-// sends at once, if any.
+// The interact (E tapped, card 49). A dog's clears a planted trap nearby. A cat's: a free cat at the
+// kennel's latch rescues at once while a cat is captured; at a shut door storage it starts the work that
+// opens it. Returns the message an interact sends at once, if any.
 export function interact(sim: Sim): SimMessage | null {
   const c = myCharacter(sim);
+  if (c?.kind === 'dog') return clear(sim, c);
   if (c?.kind !== 'cat' || stunned(sim)) return null;
   const p = c.body.translation();
   const latch = sim.level.points.find((pt) => pt.role === 'latch')?.p;

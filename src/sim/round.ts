@@ -257,7 +257,7 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
   [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
-  [sim.stunUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt] = [0, 0, null, null, null];
+  [sim.stunUntil, sim.used, sim.planting, sim.defusing, sim.resupplyAt, sim.trap] = [0, 0, null, null, null, true];
   sim.securing.clear();
   sim.ending.clear();
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));

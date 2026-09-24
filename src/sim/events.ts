@@ -14,7 +14,7 @@ export type SimEvent =
   | { type: 'mark'; p: Vector; from: ClientId }
   | { type: 'grab' | 'throw' | 'drop'; id: NetId; from: ClientId }
   | { type: 'hit'; dog: NetId; from: ClientId }
-  | { type: 'blast' | 'defused'; id: NetId; p: Vector; from: ClientId } // a mine's end, where it lay
+  | { type: 'blast' | 'defused' | 'sprung' | 'cleared' | 'pickup'; id: NetId; p: Vector; from: ClientId } // an end, where it lay
   | { type: 'phase'; to: Phase; round: number; from: ClientId }; // the table turned, at `from`'s message (ADR 0007)
 
 export const IMPACT = 5; // a contact is an impact above this many times its body's weight

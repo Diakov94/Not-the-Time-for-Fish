@@ -1,12 +1,13 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
-import type { Blast, Claim, Defused, Despawn, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
+import type { Blast, Claim, Cleared, Defused, Despawn, Hit, Left, Pickup, Release, SimMessage, Spawn, Sprung } from './messages.ts';
 import { blasted } from './mines.ts';
+import { trapEnded } from './traps.ts';
 import { isRound, receiveRound, settle, turned, type RoundMessage } from './round.ts';
 import type { Sim } from './world.ts';
 
 // ADR 0006's, 0007's and 0009's messages, in the relay's order.
-export type FoldMessage = Spawn | Claim | Release | Left | Hit | Despawn | Blast | Defused;
+export type FoldMessage = Spawn | Claim | Release | Left | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup;
 
 export type Ownership = { owner: ClientId; held: boolean };
 
@@ -95,6 +96,17 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, ho
     case 'defused':
       // A cat stepped on a mine or defused it: the first delivered ends the mine.
       return entities.get(m.id)?.kind === 'mine' && sideOf(entities, m.from) === 'cat' && t.rows.delete(m.id);
+    case 'sprung':
+    case 'cleared':
+    case 'pickup': {
+      // A trap is set off by its own cat only and cleared by a dog; a pickup, a trap no one's yet, is
+      // taken by a cat. The first delivered ends it.
+      const e = entities.get(m.id);
+      if (e?.kind !== 'trap') return false;
+      const side = sideOf(entities, m.from);
+      const ok = m.type === 'sprung' ? e.home === m.from : m.type === 'cleared' ? e.home !== null && side === 'dog' : e.home === null && side === 'cat';
+      return ok && t.rows.delete(m.id);
+    }
   }
 }
 
@@ -177,13 +189,15 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities, host);
-  // A message that ends an entity takes it out of play; a mine's end is an event where it lay, and a blast
-  // acts on the bodies this client simulates.
-  if (accepted && (m.type === 'despawn' || m.type === 'blast' || m.type === 'defused')) {
+  // A message that ends an entity takes it out of play; the end of a mine, a trap or a pickup is an event
+  // where it lay, and a blast acts on the bodies this client simulates.
+  const trapEnd = m.type === 'sprung' || m.type === 'cleared' || m.type === 'pickup';
+  if (accepted && (m.type === 'despawn' || m.type === 'blast' || m.type === 'defused' || trapEnd)) {
     const p = sim.entities.get(m.id)!.body.translation();
     remove(sim, m.id);
     if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from });
     if (m.type === 'blast') blasted(sim, m, p);
+    if (trapEnd) trapEnded(sim, m, p);
   }
   if (!accepted && !settled) return;
   setBodyTypes(sim);

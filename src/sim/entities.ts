@@ -25,10 +25,10 @@ export function isCharacter(kind: Kind): boolean {
   return kind === 'cat' || kind === 'dog';
 }
 
-// ADR 0009: a mine is never held or pushed. It is a fixed sensor where it was put: characters walk over
-// it, and the client that simulates a character finds it with a query of its own.
+// ADR 0009: mines and traps are never held or pushed. Each is a fixed sensor where it was put: characters
+// walk over it, and the client that simulates a character finds it with a query of its own.
 export function isFixture(kind: Kind): boolean {
-  return kind === 'mine';
+  return kind === 'mine' || kind === 'trap';
 }
 
 export const CRATE_HALF = 0.5; // a prop content does not describe: a test's crate, 1 kg
@@ -57,8 +57,8 @@ export function propCollider(prop: Prop): ColliderDesc {
 
 // Every kind's body. A character is a capsule its player drives: a cat 0.5 m wide and 0.9 m tall, a dog
 // 0.8 m wide and 1.4 m tall, so a gap between the two widths is a cat route (card 19 sizes its gaps to
-// these). A fixture is a fixed sensor; everything else is a dynamic prop. Traps, bags and lures are
-// placeholders until their cards (40, 42); a `prop` takes its body from content.
+// these). A fixture is a fixed sensor; everything else is a dynamic prop. Bags and lures are
+// placeholders until their card (42); a `prop` takes its body from content.
 const COLLIDER: Record<Kind, () => ColliderDesc> = {
   cat: () => RAPIER.ColliderDesc.capsule(0.2, 0.25),
   dog: () => RAPIER.ColliderDesc.capsule(0.3, 0.4),

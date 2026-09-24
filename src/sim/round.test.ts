@@ -598,3 +598,65 @@ test('a defuse held 3 s still removes the mine on both clients; moving at 2 s re
   expect(gone).toBe('false,false');
   expect(grabbed).toBe('true,true');
 });
+
+const trapsOf = (sim: Sim, home: ClientId | null) => [...sim.entities.values()].filter((e) => e.kind === 'trap' && e.home === home);
+
+test("a dog's clear delivered before the cat's spring: the trap is gone everywhere, the spring is rejected and no ping follows", () => {
+  const r = relay(countryHouse, true);
+  const [, dog, cat] = r.players(3);
+  toHeist(r);
+  stand(cat!, 0, -10, 0);
+  r.run(2);
+  r.send(cat!, plant(cat!)!);
+  const set = trapsOf(dog!, cat!.me)[0]!.id;
+  stand(cat!, 0, -3, 0);
+  own(dog!).body.setTranslation({ x: 1, y: halfHeight('dog') + 0.01, z: -10 }, true);
+  r.run(2);
+  // Both pressed at once: the dog's clear reaches the relay first.
+  const [cleared, sprung] = [interact(dog!), plant(cat!)];
+  r.send(dog!, cleared!);
+  r.send(cat!, sprung!);
+  r.run(30);
+  const pings = r.history.filter(([m]) => m.type === 'noise' && m.cause === 'trap').length;
+  console.log(`clear then spring: ${cleared?.type} and ${sprung?.type} of ${set}; trap in any table ${r.sims().some((s) => s.entities.has(set) || s.ownership.rows.has(set))}; trap pings ${pings}`);
+  expect([cleared?.type, sprung?.type]).toEqual(['cleared', 'sprung']);
+  expect(r.sims().some((s) => s.entities.has(set) || s.ownership.rows.has(set))).toBe(false);
+  expect(pings).toBe(0);
+});
+
+test('one trap in play per cat: with its trap planted a cat takes no pickup and Q plants nothing; with none, Q does nothing; a pickup gives it one to plant', () => {
+  const r = relay(countryHouse, true);
+  const [, , cat] = r.players(3);
+  toHeist(r);
+  const pickup = trapsOf(cat!, null).find((e) => flat(e.body.translation(), { x: -10, z: -13 }) < 0.1)!.id;
+  const spawns = () => r.history.filter(([m]) => m.type === 'spawn' && m.kind === 'trap' && m.from === cat!.me).length;
+  const press = () => {
+    const m = plant(cat!);
+    if (m) r.send(cat!, m);
+    r.run(2);
+    return m?.type ?? 'nothing';
+  };
+  stand(cat!, -10, -11, Math.PI);
+  r.run(2);
+  const first = press();
+  stand(cat!, -10, -13, Math.PI); // on the pickup, the trap still planted
+  r.run(30);
+  const whilePlanted = { pickups: r.history.filter(([m]) => m.type === 'pickup').length, there: r.sims().every((s) => s.entities.has(pickup)) };
+  stand(cat!, -10, -9, Math.PI); // off the pickup
+  r.run(2);
+  const second = press();
+  const third = press();
+  stand(cat!, -10, -12.8, Math.PI);
+  r.run(2);
+  const fourth = press();
+  console.log(
+    `Q: ${first}; on a pickup with its trap planted: ${whilePlanted.pickups} pickups, still there ${whilePlanted.there}; Q: ${second}; Q: ${third}; ` +
+      `on it with none: pickup gone everywhere ${r.sims().every((s) => !s.entities.has(pickup))}; Q: ${fourth}; trap spawns ${spawns()}`,
+  );
+  expect(first).toBe('spawn');
+  expect(whilePlanted).toEqual({ pickups: 0, there: true });
+  expect([second, third]).toEqual(['sprung', 'nothing']);
+  expect(r.sims().every((s) => !s.entities.has(pickup))).toBe(true);
+  expect(fourth).toBe('spawn');
+  expect(spawns()).toBe(2);
+});
