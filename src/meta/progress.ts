@@ -37,7 +37,7 @@ export function progress(): Readonly<Progress> {
 }
 
 // Once a frame, before the loop drains the events: an `over` the table turned to counts the round's
-// result for this player's team, and a match once its second round is over; this client's own events
+// result for the side this player played, and a match once its second round is over; this client's own events
 // count once each.
 export function record(sim: Pick<Sim, 'me' | 'round' | 'events'>): void {
   const p = progress() as Progress;
@@ -48,10 +48,10 @@ export function record(sim: Pick<Sim, 'me' | 'round' | 'events'>): void {
     seen.add(ev);
     const mine = ev.from === sim.me;
     if (ev.type === 'phase' && ev.to === 'over') {
-      const team = playerOf(r, sim.me)?.team;
+      const side = playerOf(r, sim.me)?.side;
       const result = r.results[ev.round - 1];
-      if (!team || !result) continue;
-      if (result.winner === team) p.wins[result.cats === team ? 'cat' : 'dog']++;
+      if (!side || !result) continue;
+      if (result.winner === side) p.wins[side]++;
       if (ev.round === 2) p.matches++;
     } else if (ev.type === 'captured' && playsAs(r, sim.me) === 'dog') p.captured++;
     else if (mine && ev.type === 'secured') p.fish++;

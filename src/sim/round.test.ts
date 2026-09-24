@@ -12,7 +12,7 @@ import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { newOwnershipTable, receive } from './ownership.ts';
-import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, type RoundMessage } from './round.ts';
+import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, successor, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -85,7 +85,7 @@ function relay(level = prototypeRoom, poses = false) {
   const until = (done: () => boolean, max: number, intent?: (sim: Sim) => Intent) => {
     for (let i = 0; i < max && !done(); i++) run(1, intent);
   };
-  // n clients that said hello, each answered by the host.
+  // n clients that said hello.
   const players = (n: number) =>
     Array.from({ length: n }, (_, i) => {
       const sim = add();
@@ -98,10 +98,10 @@ function relay(level = prototypeRoom, poses = false) {
 }
 
 const hello = (sim: Sim, name: string): SimMessage => ({ type: 'hello', from: sim.me, name });
-const teams = (sim: Sim) => sim.round.roster.map(({ name, team }) => `${name}:${team}`).join(' ');
-const count = (sim: Sim, team: string) => sim.round.roster.filter((p) => p.team === team).length;
+const sides = (sim: Sim) => sim.round.roster.map(({ name, side }) => `${name}:${side}`).join(' ');
+const count = (sim: Sim, side: string) => sim.round.roster.filter((p) => p.side === side).length;
 
-test('auto-balance: 3 hellos give 1 dog vs 2 cats and 6 give 2 vs 4 on every client, one message after the last hello', () => {
+test('no hello is answered; the prep sides 3 players 1 dog vs 2 cats and 6 2 vs 4 on every client at that message', () => {
   for (const [n, dogs] of [
     [3, 1],
     [6, 2],
@@ -110,29 +110,44 @@ test('auto-balance: 3 hellos give 1 dog vs 2 cats and 6 give 2 vs 4 on every cli
     const sims = Array.from({ length: n }, () => r.add());
     for (const [i, s] of sims.entries()) {
       r.send(s, hello(s, `P${i}`));
-      if (i < n - 1) r.run(1); // the host answers each hello at its next step
+      r.run(1);
     }
-    const last = r.sent();
-    r.run(1);
-    console.log(`${n} hellos: ${teams(sims[0]!)}; agreed ${r.sent() - last} message(s) after the last hello`);
-    expect(r.sent() - last).toBe(1);
+    const answers = r.sent() - n;
+    const lobby = sides(sims[0]!);
+    r.send(sims[0]!, advance(sims[0]!, sims[0]!.me)!);
+    console.log(`${n} hellos: ${answers} message(s) besides them, lobby ${lobby}; at the prep: ${sides(sims[0]!)}`);
+    expect(answers).toBe(0);
     for (const s of sims) {
-      expect(teams(s)).toBe(teams(sims[0]!));
-      expect([count(s, 'B'), count(s, 'A')]).toEqual([dogs, n - dogs]); // team B plays dogs in round 1
+      expect(sides(s)).toBe(sides(sims[0]!));
+      expect([count(s, 'dog'), count(s, 'cat')]).toEqual([dogs, n - dogs]);
     }
   }
 });
 
-test("the host moves a name at that message on every client; a non-host's roster is rejected everywhere", () => {
-  const r = relay();
-  const [a, b, c] = [r.add(), r.add(), r.add()];
-  for (const s of [a!, b!, c!]) r.send(s, hello(s, s.me));
-  r.run(1);
-  const before = teams(a!);
-  r.send(b!, { type: 'roster', from: b!.me, name: c!.me, team: 'B' });
-  for (const s of r.sims()) expect(teams(s)).toBe(before);
-  r.send(a!, { type: 'roster', from: a!.me, name: c!.me, team: 'B' });
-  for (const s of r.sims()) expect(s.round.roster.find((p) => p.name === c!.me)?.team).toBe('B');
+// ADR 0014's rotation over a whole match: n seated names, the host's phases to the match's end (each round
+// ends on the heist timer, no fish held), the dogs each prep sides.
+function rotated(n: number) {
+  const [r, t] = [newRound(), newOwnershipTable()];
+  const fold = (m: RoundMessage) => foldRound(r, m, 'c0', t, new Map());
+  for (let i = 0; i < n; i++) fold({ type: 'hello', from: `c${i}`, name: `p${i}` });
+  const dogs: string[][] = [];
+  fold({ type: 'phase', from: 'c0', ...successor(r) });
+  while (r.phase === 'prep') {
+    dogs.push(r.roster.filter((p) => p.side === 'dog').map((p) => p.name));
+    for (let k = 0; k < 3; k++) fold({ type: 'phase', from: 'c0', ...successor(r) }); // heist, overtime (over at once), next
+  }
+  const times = r.roster.map((p) => dogs.filter((d) => d.includes(p.name)).length);
+  return { dogs, rounds: r.results.length, spread: [Math.min(...times), Math.max(...times)] };
+}
+
+test('the rotation at every seated count 3-8: GAME.md dog counts, 3 4 3 3 4 3 rounds, every name a dog once or twice at most one apart', () => {
+  const at = [3, 4, 5, 6, 7, 8].map(rotated);
+  for (const [i, m] of at.entries()) console.log(`${i + 3} seated: ${m.rounds} rounds, dogs ${m.dogs.map((d) => d.join('+')).join(' | ')}; dog rounds per name ${m.spread.join('-')}`);
+  expect(at.map((m) => m.dogs.map((d) => d.length))).toEqual([[1, 1, 1], [1, 1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2, 2], [3, 3, 3]]);
+  expect(at.map((m) => m.rounds)).toEqual([3, 4, 3, 3, 4, 3]);
+  for (const m of at) expect(m.spread[0]).toBeGreaterThanOrEqual(1);
+  for (const m of at) expect(m.spread[1]! - m.spread[0]!).toBeLessThanOrEqual(1);
+  expect(at[5]!.dogs).toEqual([['p0', 'p1', 'p2'], ['p3', 'p4', 'p5'], ['p0', 'p6', 'p7']]);
 });
 
 // A side's looks are its characters in the roster (card 100): six per side, the fold refuses a seventh.
@@ -177,30 +192,31 @@ test("the fold takes a map from the host in the lobby only, by a name it has a l
   expect(r.map).toBe('prototype-room');
 });
 
-test('a known name whose client left rejoins on its team from a new client; a name in use is refused everywhere', () => {
+test('a known name whose client left rejoins on its side for the round from a new client; a name in use is refused everywhere', () => {
   const r = relay();
   const sims = [r.add(), r.add(), r.add()];
   for (const [i, s] of sims.entries()) {
     r.send(s, hello(s, `P${i}`));
     r.run(1);
   }
-  const dog = sims[1]!; // P1: team B
-  r.drop(dog);
+  r.send(sims[0]!, advance(sims[0]!, sims[0]!.me)!);
+  const cat = sims[1]!; // P1: a cat this round
+  r.drop(cat);
   const back = r.add();
   r.send(back, hello(back, 'P1'));
   r.run(1);
   const late = r.add();
-  const before = r.sims().map(teams);
+  const before = r.sims().map(sides);
   r.send(late, hello(late, 'P0')); // P0 is connected
   r.run(1);
-  console.log(`after the rejoin: ${teams(back)}; a hello with a name in use: roster ${r.sims().map(teams).join(' | ') === before.join(' | ') ? 'unchanged' : 'changed'}`);
+  console.log(`after the rejoin: ${sides(back)}; a hello with a name in use: roster ${r.sims().map(sides).join(' | ') === before.join(' | ') ? 'unchanged' : 'changed'}`);
   for (const s of r.sims()) {
     const p1 = s.round.roster.find((p) => p.name === 'P1');
-    expect(p1).toMatchObject({ team: 'B', client: back.me });
+    expect(p1).toMatchObject({ side: 'cat', client: back.me });
     expect(s.round.roster.length).toBe(3);
     expect(s.round.roster.some((p) => p.client === late.me)).toBe(false);
   }
-  expect(r.sims().map(teams)).toEqual(before);
+  expect(r.sims().map(sides)).toEqual(before);
   // The fold names why (card 68): the name is taken; a named client's second hello is refused as named.
   r.send(back, hello(back, 'P9'));
   r.run(1);
@@ -251,7 +267,7 @@ test('prep lasts 45.0 s on every client; three secured fish end the round with c
   console.log(`prep ${preps.map((t) => t.toFixed(3)).join(' / ')} s; phases after each secured: ${after.join(' | ')}`);
   for (const t of preps) expect(Math.abs(t - 45)).toBeLessThanOrEqual(0.1);
   expect(after).toEqual(['heist,heist,heist', 'heist,heist,heist', 'over,over,over']);
-  for (const s of r.sims()) expect(s.round.results).toEqual([{ cats: 'A', secured: 3, last: s.round.secured.at(-1)!.at, why: 'fish', winner: 'A' }]);
+  for (const s of r.sims()) expect(s.round.results).toEqual([{ dogs: ['P0'], secured: 3, last: s.round.secured.at(-1)!.at, why: 'fish', winner: 'cat' }]);
   expect(agree(r)).toBe(true);
 });
 
@@ -266,7 +282,7 @@ test('every cat captured ends the round with dogs on every client at the same me
   console.log(`phases with 1 of 2 cats captured: ${one}; with both: ${phases(r)}`);
   expect(one).toBe('heist,heist,heist');
   expect(phases(r)).toBe('over,over,over');
-  for (const s of r.sims()) expect(s.round.results[0]).toMatchObject({ why: 'captured', winner: 'B' });
+  for (const s of r.sims()) expect(s.round.results[0]).toMatchObject({ why: 'captured', winner: 'dog' });
   expect(agree(r)).toBe(true);
 });
 
@@ -290,7 +306,7 @@ test("the heist timer out with a fish held gives overtime; the fish's release en
     ends.push(`${how}: overtime from ${late.map((t) => t.toFixed(3)).join(' / ')} s after ${heist} s of heist, over after ${overtime.map((t) => t.toFixed(3)).join(' / ')} s`);
     for (const t of late) expect(Math.abs(t)).toBeLessThanOrEqual(STEP);
     expect(phases(r)).toBe('over,over,over');
-    for (const s of r.sims()) expect(s.round.results[0]).toMatchObject({ why: 'overtime', winner: 'B' });
+    for (const s of r.sims()) expect(s.round.results[0]).toMatchObject({ why: 'overtime', winner: 'dog' });
     if (how === 'cap') for (const t of overtime) expect(Math.abs(t - 60)).toBeLessThanOrEqual(0.1);
     expect(agree(r)).toBe(true);
   }
@@ -345,11 +361,11 @@ test('the host leaves mid-heist: the next host ends the heist on time; no phase 
   console.log(`heist ended ${late.map((t) => (t * 1000).toFixed(0)).join(' / ')} ms after the old host's time; phases folded: ${turns.join(' | ')}`);
   for (const t of late) expect(Math.abs(t)).toBeLessThanOrEqual(0.25);
   for (const t of turns) expect(t).toBe('prep1 heist1 over1');
-  for (const s of r.sims()) expect(s.round.results).toMatchObject([{ why: 'timer', winner: 'B' }]);
+  for (const s of r.sims()) expect(s.round.results).toMatchObject([{ why: 'timer', winner: 'dog' }]);
   expect(agree(r)).toBe(true);
 });
 
-test("round 2 starts with every client's character of the other kind", () => {
+test("round 2 starts with every client's character of the side the rotation gives it", () => {
   const r = relay(countryHouse);
   r.players(3);
   const kinds = () => r.sims().map((s) => [...s.entities.values()].find((e) => e.home === s.me)?.kind).join();
@@ -359,33 +375,8 @@ test("round 2 starts with every client's character of the other kind", () => {
   r.send(hostOf(r), advance(hostOf(r), hostOf(r).me)!);
   r.run(2);
   console.log(`own characters, round 1: ${first}; round 2: ${kinds()}; entities per client ${r.sims().map((s) => s.entities.size).join(' / ')}`);
-  expect(first).toBe('cat,dog,cat');
-  expect(kinds()).toBe('dog,cat,dog');
-  expect(agree(r)).toBe(true);
-});
-
-test('a 2-2 match goes to the team whose last fish came sooner; 0-0 is a draw; the session score survives the lobby', { timeout: 30000 }, () => {
-  const r = relay();
-  r.players(3);
-  const round = (ats: number[]) => {
-    toHeist(r);
-    const [cat] = catsOf(r);
-    character(r, cat!);
-    for (const at of ats) secure(r, cat!, holdFish(r, cat!), at);
-    captureAll(r);
-  };
-  round([300, 400]); // team A's 2, the last at 400 s
-  round([100, 350]); // team B's 2, the last at 350 s
-  const won = { match: r.sims()[0]!.round.match, score: { ...r.sims()[0]!.round.score } };
-  r.send(hostOf(r), advance(hostOf(r), hostOf(r).me)!);
-  const lobby = { phase: r.sims()[0]!.round.phase, score: { ...r.sims()[0]!.round.score } };
-  round([]);
-  round([]);
-  const drawn = { match: r.sims()[0]!.round.match, score: r.sims()[0]!.round.score };
-  console.log(`2-2: ${JSON.stringify(won)}; then ${JSON.stringify(lobby)}; 0-0: ${JSON.stringify(drawn)}`);
-  expect(won).toEqual({ match: 'B', score: { A: 0, B: 1 } });
-  expect(lobby).toEqual({ phase: 'lobby', score: { A: 0, B: 1 } });
-  expect(drawn).toEqual({ match: 'draw', score: { A: 0, B: 1 } });
+  expect(first).toBe('dog,cat,cat');
+  expect(kinds()).toBe('cat,dog,cat');
   expect(agree(r)).toBe(true);
 });
 
@@ -399,7 +390,7 @@ function stand(sim: Sim, x: number, z: number, yaw: number): Entity {
 
 test('secured is born at the holder inside the hideout: a fish carried in counts on both clients; one thrown in, once a cat holds it there', () => {
   const r = relay(countryHouse, true);
-  const [cat, dog] = r.players(2); // one cat (the host) and one dog
+  const [dog, cat] = r.players(2); // one dog (the host) and one cat
   toHeist(r);
   const count = () => [cat!, dog!].map((s) => s.round.secured.length).join();
   const sent = () => r.history.filter(([m]) => m.type === 'secured').length;
@@ -472,7 +463,7 @@ const own = (sim: Sim) => [...sim.entities.values()].find((e) => e.home === sim.
 
 test('a cat a dog tosses through the hatch is captured on every client when its body rests inside; it cannot press its way out', () => {
   const r = relay(countryHouse, true);
-  const [, dog, cat] = r.players(3); // P1 plays the dog, P2 a cat
+  const [dog, , cat] = r.players(3); // P0 plays the dog, P2 a cat
   toHeist(r);
   stand(dog!, -2.2, 10, Math.PI / 2); // 1 m west of the cage, facing it
   stand(cat!, -1.45, 10, 0);
@@ -503,7 +494,7 @@ test('a cat a dog tosses through the hatch is captured on every client when its 
 
 test("a free cat's interact at the latch frees both captured cats on every client at once; the gate lets them out and shuts 5 s later; the rescue ends their dig-out", { timeout: 30000 }, () => {
   const r = relay(countryHouse, true);
-  const [free, , a, b] = r.players(4); // one dog, three cats
+  const [, free, a, b] = r.players(4); // one dog, three cats
   toHeist(r);
   stand(a!, -0.6, 10, Math.PI);
   stand(b!, 0, 10, Math.PI);
@@ -591,7 +582,7 @@ const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.
 
 test('two cats walk onto one mine in the same step: one blast accepted; each stunned 3 s and thrown, the carrier drops its fish at once; the dog 1 m off is pushed, not stunned; one noise', () => {
   const r = relay(countryHouse, true);
-  const [b, dog, a] = r.players(3); // P0 and P2 play cats, P1 the dog
+  const [dog, b, a] = r.players(3); // P0 plays the dog, P1 and P2 cats
   toHeist(r);
   const mine = mineAt(r, dog!, 0, -10);
   own(dog!).body.setTranslation({ x: 0, y: halfHeight('dog') + 0.01, z: -9 }, true);
@@ -646,7 +637,7 @@ test('two cats walk onto one mine in the same step: one blast accepted; each stu
 
 test('a defuse held 3 s still removes the mine on both clients; moving at 2 s restarts it, and so does a grab', () => {
   const r = relay(countryHouse, true);
-  const [cat, dog] = r.players(2); // P0 plays the cat, P1 the dog
+  const [dog, cat] = r.players(2); // P0 plays the dog, P1 the cat
   toHeist(r);
   const first = mineAt(r, dog!, 0, -10);
   const second = mineAt(r, dog!, 4, -10);
@@ -682,7 +673,7 @@ const trapsOf = (sim: Sim, home: ClientId | null) => [...sim.entities.values()].
 
 test("a dog's clear delivered before the cat's spring: the trap is gone everywhere, the spring is rejected and no ping follows", () => {
   const r = relay(countryHouse, true);
-  const [, dog, cat] = r.players(3);
+  const [dog, , cat] = r.players(3);
   toHeist(r);
   stand(cat!, 0, -10, 0);
   r.run(2);
@@ -742,7 +733,7 @@ test('one trap in play per cat: with its trap planted a cat takes no pickup and 
 
 test("a cat in the hall box's spot is hidden on both clients; the dog shoves the box north 1 m and it is not, on both, within 150 ms", () => {
   const r = relay(countryHouse, true);
-  const [cat, dog] = r.players(2); // P0 plays the cat, P1 the dog
+  const [dog, cat] = r.players(2); // P0 plays the dog, P1 the cat
   toHeist(r);
   const box = [...cat!.entities.values()].find((e) => e.prop !== undefined && countryHouse.props[e.prop]!.label === 'cardboard box' && e.body.translation().x < 0)!;
   const z0 = box.body.translation().z;
@@ -769,7 +760,7 @@ test("a cat in the hall box's spot is hidden on both clients; the dog shoves the
 
 test('a cat and a dog touch one mystery bag in the same step: one picker, the first delivered, holds a perk; the bag is gone everywhere', () => {
   const r = relay(countryHouse, true);
-  const [, dog, cat] = r.players(3);
+  const [dog, , cat] = r.players(3);
   toHeist(r);
   const bag = [...cat!.entities.values()].find((e) => e.kind === 'bag' && flat(e.body.translation(), { x: 13, z: -4 }) < 0.1)!.id;
   stand(cat!, 12, -4, Math.PI / 2);
