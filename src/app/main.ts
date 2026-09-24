@@ -110,7 +110,7 @@ requestAnimationFrame(function loop(now: number) {
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), acting() ? intent(input, own()) : IDLE);
   last = now;
   if (playing) draw(view, sim, input.look, target());
-  hear(audio, sim, view.camera);
+  hear(audio, sim, { position: view.orbit, quaternion: view.camera.quaternion });
   drawHud(hud, sim, view);
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
