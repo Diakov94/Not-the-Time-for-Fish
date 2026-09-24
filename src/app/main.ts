@@ -111,7 +111,7 @@ requestAnimationFrame(function loop(now: number) {
   last = now;
   if (playing) draw(view, sim, input.look, target());
   hear(audio, sim, { position: view.orbit, quaternion: view.camera.quaternion });
-  drawHud(hud, sim, view);
+  drawHud(hud, sim, view, target());
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
   lobby(sim, session.host);
