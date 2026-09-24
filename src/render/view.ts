@@ -9,7 +9,6 @@ import { STEPS } from '../sim/events.ts';
 import { hidden } from '../sim/hiding.ts';
 import { stunned } from '../sim/mines.ts';
 import { speedsOf, yawOf } from '../sim/movement.ts';
-import { playerOf } from '../sim/round.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
 import { buildLook, debrisLook, lookOf, wornOf } from './looks.ts';
