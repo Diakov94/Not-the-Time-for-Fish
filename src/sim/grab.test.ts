@@ -30,7 +30,7 @@ function room<T extends ClientId[]>(...clients: T) {
   const sims = clients.map((me) => createWorld(prototypeRoom, me)) as { [K in keyof T]: Sim };
   const relay = (m: FoldMessage | null) => {
     expect(m).not.toBeNull();
-    for (const sim of sims) receive(sim, m!);
+    for (const sim of sims) receive(sim, m!, clients[0]!);
   };
   let n = 0;
   const spawn = (from: ClientId, kind: Kind, p: Vector) => {

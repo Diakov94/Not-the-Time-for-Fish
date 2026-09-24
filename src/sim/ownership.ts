@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
 import type { Claim, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
+import { receiveRound } from './round.ts';
 import type { Sim } from './world.ts';
 
 // ADR 0006's and 0009's messages, in the relay's order.
@@ -126,9 +127,12 @@ export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void 
   setBodyTypes(sim);
 }
 
-// Every client runs this for every message of the relay's order, its own echoed ones included. A noise
-// is an event for everyone; a mark only for the marker's side (ADR 0010).
-export function receive(sim: Sim, m: SimMessage | Left): void {
+// Every client runs this for every message of the relay's order, its own echoed ones included, with the
+// host the relay names as of that message. A noise is an event for everyone; a mark only for the marker's
+// side (ADR 0010). The round's messages go to the round table.
+export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
+  if (m.type === 'hello' || m.type === 'roster' || m.type === 'look' || m.type === 'left') receiveRound(sim, m, host);
+  if (m.type === 'hello' || m.type === 'roster' || m.type === 'look') return;
   if (m.type === 'noise' || m.type === 'mark') {
     if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
     return;

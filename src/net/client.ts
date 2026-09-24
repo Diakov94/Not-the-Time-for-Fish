@@ -83,14 +83,14 @@ function handle(s: Session, m: Incoming, at: number, after = 0): void {
       const hostLeft = m.id === s.host;
       s.host = m.host; // from here on this client answers joiners if it is the one named
       s.owed.delete(m.id);
-      if (m.seq > after) receive(s.sim, m);
+      if (m.seq > after) receive(s.sim, m, s.host);
       // A host's states precede its `left` in the relay's order, so the joiners still owed one were never
       // answered: the next host owes them the state as it stands after this `left` (ADR 0006, Join).
       if (hostLeft && s.host === s.sim.me) for (const id of s.owed) answer(s, id, m.seq);
       return;
     }
   }
-  if (m.seq > after) receive(s.sim, m);
+  if (m.seq > after) receive(s.sim, m, s.host);
 }
 
 // The host's duty on `joined`: the entities and the table as they stand after that message.

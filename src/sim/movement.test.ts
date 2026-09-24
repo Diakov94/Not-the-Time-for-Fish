@@ -13,7 +13,7 @@ function room() {
   let n = 0;
   const add = (kind: Kind, p: Vector) => {
     const id = `A:${n++}`;
-    receive(sim, { type: 'spawn', from: 'A', id, kind, home: isCharacter(kind) ? 'A' : null, p });
+    receive(sim, { type: 'spawn', from: 'A', id, kind, home: isCharacter(kind) ? 'A' : null, p }, 'A');
     return sim.entities.get(id)!.body;
   };
   return { sim, add };

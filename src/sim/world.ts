@@ -8,6 +8,7 @@ import { smell, type Scent } from './scent.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
+import { newRound, type Round } from './round.ts';
 import { touchClaims } from './touch.ts';
 
 export const STEP = 1 / 60;
@@ -36,6 +37,8 @@ export type Sim = {
   stride: number; // m the own character has walked since its last step ping
   scent: Map<NetId, Scent[]>; // each cat's and lure's trail as this client applied its poses (ADR 0010)
   sniffing: boolean; // the own dog sniffs this step
+  round: Round; // ADR 0007's round table
+  outbox: SimMessage[]; // what the fold asked this client to send (the host's answers), for the next step
 };
 
 export async function init(): Promise<void> {
@@ -85,14 +88,17 @@ export function createWorld(level: Level, me: ClientId): Sim {
     stride: 0,
     scent: new Map(),
     sniffing: false,
+    round: newRound(),
+    outbox: [],
   };
 }
 
 // Advances the sim by `dt` seconds of passed-in time in fixed 60 Hz steps; the sim never reads a clock.
 // `intent` is this client's player input, held for every step of the call. Returns the messages the
-// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims), for the caller to send.
+// steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims) and the fold's outbox, for the
+// caller to send.
 export function step(sim: Sim, dt: number, intent: Intent = IDLE): SimMessage[] {
-  const out: SimMessage[] = [];
+  const out: SimMessage[] = sim.outbox.splice(0);
   sim.accumulator += dt;
   while (sim.accumulator >= STEP) {
     sim.accumulator -= STEP;
