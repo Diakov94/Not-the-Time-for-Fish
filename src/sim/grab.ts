@@ -6,7 +6,7 @@ import { stunned } from './mines.ts';
 import { perkOf } from './perks.ts';
 import type { Claim, Hit, Release, SimMessage } from './messages.ts';
 import { myCharacter, speedsOf, yawOf } from './movement.ts';
-import { carried, mayHold, setBodyTypes, simulatedHere } from './ownership.ts';
+import { carried, massOf, mayHold, setBodyTypes, simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
 const REACH = 1.5; // the forward shape cast travels at most this far; Bulldog's BULLDOG
@@ -96,7 +96,7 @@ function ahead(sim: Sim, c: Entity): Entity | undefined {
     loose,
   );
   const e = entityOf(sim.entities, hit?.collider);
-  return e && mayHold(c.kind, e.kind) && !locked(sim, e, c) ? e : undefined;
+  return e && mayHold(c.kind, e.kind, massOf(e, sim.level)) && !locked(sim, e, c) ? e : undefined;
 }
 
 // Runs every fixed step after the carrier moved: the carried entity is a kinematic follower sent to

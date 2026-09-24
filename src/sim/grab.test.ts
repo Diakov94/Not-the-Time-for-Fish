@@ -95,6 +95,15 @@ test("a dog's grab at a fish makes no claim and puts nothing in flight", () => {
   expect(b.inFlight.size).toBe(0);
 });
 
+test("a cat's grab at the 20 kg barricade makes no claim and puts nothing in flight", () => {
+  const { sims: [a], spawn, run } = room(countryHouse, 'A');
+  spawn('A', 'prop', { x: -8, y: 0.5, z: 13 }, { prop: countryHouse.props.findIndex((p) => p.label === 'barricade') });
+  spawn('A', 'cat', { x: -8, y: halfHeight('cat'), z: 11.8 }); // faces +z, toward it
+  run(IDLE, 30);
+  expect(grab(a)).toBeNull();
+  expect(a.inFlight.size).toBe(0);
+});
+
 test("a grabbed character's body follows its carrier", () => {
   const { sims: [a, b], relay, spawn, run } = room(prototypeRoom, 'A', 'B');
   const cat = spawn('A', 'cat', { x: 0, y: 1, z: 1.5 });
