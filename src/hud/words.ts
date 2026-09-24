@@ -7,6 +7,7 @@ export const FISH = { title: 'Рибка', secured: 'вкрадено', left: '�
 export const ITEMS = { mines: 'Міни', trap: 'Пастка', perk: 'Перк', none: 'немає', inHand: 'є' };
 export const WORK = { plant: 'Мінування', defuse: 'Знешкодження' };
 export const OVERTIME = { all: 'Час вийшов: раунд триває, поки несуть рибку', carrier: 'Ти несеш рибку: собаки чують, де ти' };
+export const MATE = { free: 'вільний', grabbed: 'схоплений', captured: 'у вольєрі' };
 export const PERK: Record<Perk, string> = {
   sapper: 'Сапер',
   bloodhound: 'Нюхач',

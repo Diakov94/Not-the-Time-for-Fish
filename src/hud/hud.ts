@@ -1,10 +1,13 @@
+import { livePings } from '../render/senses.ts';
+import { project, type View } from '../render/view.ts';
+import { isCharacter } from '../sim/entities.ts';
 import { minesLeft, progress, whisker } from '../sim/mines.ts';
 import { carried } from '../sim/ownership.ts';
 import { perkOf } from '../sim/perks.ts';
-import { inPlay, playsAs, remaining } from '../sim/round.ts';
+import { inPlay, playerOf, playsAs, remaining, type Player } from '../sim/round.ts';
 import type { Sim } from '../sim/world.ts';
 import { CSS } from './style.ts';
-import { FISH, ITEMS, OVERTIME, PERK, PHASE, WORK } from './words.ts';
+import { FISH, ITEMS, MATE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
 
 // GAME.md, UI / HUD: the in-round overlay (ADR 0008), a view of the sim as render and audio are. Once per
 // frame it reads the round table, the entity table and this client's own character state and writes what
@@ -23,6 +26,8 @@ export type Hud = {
   what: HTMLElement;
   fill: HTMLElement;
   whisker: HTMLElement;
+  team: HTMLElement;
+  arrows: HTMLElement;
 };
 
 export function createHud(): Hud {
@@ -42,7 +47,9 @@ export function createHud(): Hud {
     </div>
     <div class="items"><span class="mines panel"></span><span class="trap panel"></span><span class="perk panel"></span></div>
     <div class="work panel"><span class="what"></span><div class="bar"><div class="fill"></div></div></div>
-    <div class="whisker"><i><b></b><b></b><b></b></i><i><b></b><b></b><b></b></i></div>`;
+    <div class="whisker"><i><b></b><b></b><b></b></i><i><b></b><b></b><b></b></i></div>
+    <div class="team"></div>
+    <div class="arrows"></div>`;
   document.body.append(root);
   const $ = (selector: string) => root.querySelector<HTMLElement>(selector)!;
   return {
@@ -59,11 +66,13 @@ export function createHud(): Hud {
     what: $('.what'),
     fill: $('.fill'),
     whisker: $('.whisker'),
+    team: $('.team'),
+    arrows: $('.arrows'),
   };
 }
 
 // Once per frame, after the sim stepped and before the loop drains the event list.
-export function drawHud(hud: Hud, sim: Sim): void {
+export function drawHud(hud: Hud, sim: Sim, view: View): void {
   const r = sim.round;
   hud.root.hidden = !inPlay(r);
   if (hud.root.hidden) return;
@@ -94,6 +103,48 @@ export function drawHud(hud: Hud, sim: Sim): void {
   hud.fill.style.width = `${Math.min(1, work?.done ?? 0) * 100}%`;
   hud.overtime.hidden = r.phase !== 'overtime';
   write(hud.overtime, carried(sim)?.kind === 'fish' ? OVERTIME.carrier : OVERTIME.all);
+  // The teammates, in roster order: the player's own team, the player left out.
+  const me = playerOf(r, sim.me);
+  const mates = r.roster.filter((p) => p !== me && me?.team && p.team === me.team);
+  pool(hud.team, mates.length, 'mate panel', '<span class="name"></span> <span class="state"></span>');
+  mates.forEach((p, i) => {
+    const row = hud.team.children[i] as HTMLElement;
+    const state = stateOf(sim, p);
+    write(row.firstElementChild as HTMLElement, p.name);
+    write(row.lastElementChild as HTMLElement, MATE[state]);
+    row.dataset.state = state;
+  });
+  // A dog's arrows: every ping render shows whose source is off screen, at the screen's edge toward it,
+  // fading with its ring. The ring marks the ones on screen.
+  const w = innerWidth;
+  const h = innerHeight;
+  const off = livePings(view.senses, sim)
+    .map((ping) => ({ ...project(view, ping.p), age: ping.age }))
+    .filter(({ x, y, behind }) => behind || x < 0 || x > w || y < 0 || y > h);
+  pool(hud.arrows, off.length, 'arrow', '');
+  off.forEach(({ x, y, behind, age }, i) => {
+    // From the centre toward the point, turned back when it lies behind the camera, to the edge.
+    const [dx, dy] = behind ? [w / 2 - x, h / 2 - y] : [x - w / 2, y - h / 2];
+    const k = Math.min((w / 2 - EDGE) / Math.abs(dx), (h / 2 - EDGE) / Math.abs(dy));
+    const arrow = hud.arrows.children[i] as HTMLElement;
+    arrow.style.transform = `translate(${w / 2 + dx * k}px, ${h / 2 + dy * k}px) rotate(${Math.atan2(dy, dx)}rad)`;
+    arrow.style.opacity = String(1 - age);
+  });
+}
+
+const EDGE = 28; // px from the screen's edge to an arrow's centre
+
+// A teammate is captured by the round table, grabbed by the ownership table (its character held), else free.
+function stateOf(sim: Sim, p: Player): keyof typeof MATE {
+  if (p.captured !== null) return 'captured';
+  const body = [...sim.entities.values()].find((e) => e.home === p.client && isCharacter(e.kind));
+  return body && sim.ownership.rows.get(body.id)?.held ? 'grabbed' : 'free';
+}
+
+// `n` children of `parent`, made or dropped to fit: the rows the frame shows, never a list of its own.
+function pool(parent: HTMLElement, n: number, className: string, html: string): void {
+  while (parent.children.length < n) parent.append(Object.assign(document.createElement('div'), { className, innerHTML: html }));
+  while (parent.children.length > n) parent.lastElementChild!.remove();
 }
 
 // Seconds as m:ss, rounded up: 0:00 only once the time is out.

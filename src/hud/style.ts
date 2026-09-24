@@ -92,7 +92,7 @@ export const CSS = `
 }
 .hud .work {
   position: absolute;
-  bottom: calc(3 * var(--u));
+  bottom: calc(8 * var(--u));
   left: 50%;
   transform: translateX(-50%);
   width: calc(32 * var(--u));
@@ -149,5 +149,39 @@ export const CSS = `
   to {
     rotate: 5deg;
   }
+}
+.hud .team {
+  position: absolute;
+  top: calc(7 * var(--u));
+  left: calc(2 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(0.8 * var(--u));
+  font-size: calc(2.2 * var(--u));
+}
+.hud .mate .state {
+  font-weight: 700;
+}
+.hud .mate[data-state='grabbed'] {
+  background: rgb(170 110 0 / 0.85);
+}
+.hud .mate[data-state='captured'] {
+  background: rgb(150 30 20 / 0.85);
+}
+.hud .arrow {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.hud .arrow::before {
+  content: '';
+  position: absolute;
+  top: calc(-2 * var(--u));
+  left: calc(-2 * var(--u));
+  border-left: calc(4 * var(--u)) solid #f4f1ea;
+  border-top: calc(2 * var(--u)) solid transparent;
+  border-bottom: calc(2 * var(--u)) solid transparent;
+  filter: drop-shadow(0 0 calc(0.3 * var(--u)) #111);
 }
 `;

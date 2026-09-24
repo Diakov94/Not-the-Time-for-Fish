@@ -98,7 +98,7 @@ requestAnimationFrame(function loop(now: number) {
   last = now;
   if (playing) draw(view, sim, input.look, target());
   hear(audio, sim, view.camera);
-  drawHud(hud, sim);
+  drawHud(hud, sim, view);
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
   lobby(sim, session.host);
