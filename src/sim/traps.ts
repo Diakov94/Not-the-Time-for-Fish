@@ -1,7 +1,8 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
-import { halfHeight, spawnOf, type Entity } from './entities.ts';
+import { halfHeight, spawnOf, type Entity, type Kind } from './entities.ts';
 import type { Cleared, Pickup, SimMessage, Sprung } from './messages.ts';
 import { myCharacter } from './movement.ts';
+import { draw } from './perks.ts';
 import { inPlay } from './round.ts';
 import type { Sim } from './world.ts';
 
@@ -33,22 +34,27 @@ export function clear(sim: Sim, c: Entity): Cleared | null {
   return t ? end(sim, { type: 'cleared', from: sim.me, id: t.id }) : null;
 }
 
-// Every step, what this client's character touches: a cat with no trap in play, planted or in hand,
-// picks up a trap pickup within PICK, once; the fold names the first picker.
+// Every step, what this client's character touches within PICK, once each; the fold names the first
+// picker. Any character picks up a mystery bag; a cat with no trap in play, planted or in hand, a trap
+// pickup.
 export function pickups(sim: Sim): Pickup[] {
   const c = myCharacter(sim);
-  if (c?.kind !== 'cat' || sim.trap || planted(sim)) return [];
+  if (!c) return [];
   const p = c.body.translation();
-  const t = [...sim.entities.values()].find((e) => e.kind === 'trap' && e.home === null && !sim.ending.has(e.id) && flat(e.body.translation(), p) <= PICK);
+  const trapFree = c.kind === 'cat' && !sim.trap && !planted(sim);
+  const t = [...sim.entities.values()].find(
+    (e) => (e.kind === 'bag' || (trapFree && e.kind === 'trap' && e.home === null)) && !sim.ending.has(e.id) && flat(e.body.translation(), p) <= PICK,
+  );
   return t ? [end(sim, { type: 'pickup', from: sim.me, id: t.id })] : [];
 }
 
-// A folded end of a trap, or of a pickup, on this client. The springer's client makes the trap's noise
-// where it lay; the picker's client has a trap in hand.
-export function trapEnded(sim: Sim, m: Sprung | Cleared | Pickup, at: Vector): void {
+// A folded end of a trap, or of a pickup of `kind`, on this client. The springer's client makes the
+// trap's noise where it lay; the picker's client has a trap in hand, or draws its perk.
+export function trapEnded(sim: Sim, m: Sprung | Cleared | Pickup, at: Vector, kind: Kind): void {
   if (m.from !== sim.me) return;
   if (m.type === 'sprung') sim.outbox.push({ type: 'noise', from: sim.me, p: at, loud: LOUD, cause: 'trap' });
-  if (m.type === 'pickup') sim.trap = true;
+  if (m.type === 'pickup' && kind === 'trap') sim.trap = true;
+  if (m.type === 'pickup' && kind === 'bag') draw(sim);
 }
 
 // A message that ends an entity is sent once: this client remembers it until the fold answers.

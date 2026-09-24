@@ -9,6 +9,7 @@ import { carry, grabStep } from './grab.ts';
 import { mineStep, stunned } from './mines.ts';
 import { smell, type Scent } from './scent.ts';
 import { pickups } from './traps.ts';
+import { perkStep, type Perk } from './perks.ts';
 import { drive, IDLE, myCharacter, type Intent } from './movement.ts';
 import type { SimMessage } from './messages.ts';
 import { newOwnershipTable, type OwnershipTable } from './ownership.ts';
@@ -68,6 +69,10 @@ export type Sim = {
   trap: boolean; // this client's cat has a trap in hand
   doorWork: { door: number; until: number } | null; // the own cat's work at a shut house door
   barged: Set<number>; // house doors this client's dog barged open, ahead of the round table
+  perk: { kind: Perk; until: number | null } | null; // this client's perk slot: until when, null for one use
+  outside: Vector | null; // where the own character last stood outside a hiding spot
+  jumpHeld: boolean; // the own character's jump was held last step
+  airJumped: boolean; // the own cat used its Acrobat jump since it last stood
 };
 
 // A timed action of the own character: when it started and ends, and where the character stood then.
@@ -134,6 +139,10 @@ export function createWorld(level: Level, me: ClientId): Sim {
     trap: true,
     doorWork: null,
     barged: new Set(),
+    perk: null,
+    outside: null,
+    jumpHeld: false,
+    airJumped: false,
   };
 }
 
@@ -153,6 +162,7 @@ export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientI
     carry(sim);
     sim.world.step(sim.queue);
     smell(sim);
+    perkStep(sim);
     out.push(...grabStep(sim), ...noises(sim, act), ...touchClaims(sim), ...mineStep(sim, act), ...pickups(sim), ...roundStep(sim), ...clock(sim, host), ...removals(sim, host));
   }
   return out;

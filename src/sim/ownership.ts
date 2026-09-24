@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
 import type { Blast, Claim, Cleared, Defused, Despawn, Hit, Left, Pickup, Release, SimMessage, Spawn, Sprung } from './messages.ts';
 import { blasted } from './mines.ts';
+import { barked } from './perks.ts';
 import { trapEnded } from './traps.ts';
 import { isRound, receiveRound, settle, turned, type RoundMessage } from './round.ts';
 import type { Sim } from './world.ts';
@@ -99,11 +100,12 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, ho
     case 'sprung':
     case 'cleared':
     case 'pickup': {
-      // A trap is set off by its own cat only and cleared by a dog; a pickup, a trap no one's yet, is
-      // taken by a cat. The first delivered ends it.
+      // A trap is set off by its own cat only and cleared by a dog; a trap no one's yet is picked up by a
+      // cat, and a bag by anyone playing. The first delivered ends it.
       const e = entities.get(m.id);
-      if (e?.kind !== 'trap') return false;
       const side = sideOf(entities, m.from);
+      if (m.type === 'pickup' && e?.kind === 'bag') return side !== undefined && t.rows.delete(m.id);
+      if (e?.kind !== 'trap') return false;
       const ok = m.type === 'sprung' ? e.home === m.from : m.type === 'cleared' ? e.home !== null && side === 'dog' : e.home === null && side === 'cat';
       return ok && t.rows.delete(m.id);
     }
@@ -179,10 +181,12 @@ function remove(sim: Sim, id: NetId): void {
   sim.inFlight.delete(id);
 }
 
-// ADR 0006's and 0010's messages. A noise is an event for everyone; a mark only for the marker's side.
+// ADR 0006's and 0010's messages. A noise and a bark are events for everyone; a mark only for the marker's
+// side. Every cat's client answers a bark for its own cat.
 function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: ClientId): void {
-  if (m.type === 'noise' || m.type === 'mark') {
-    if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
+  if (m.type === 'noise' || m.type === 'mark' || m.type === 'bark') {
+    if (m.type !== 'mark' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
+    if (m.type === 'bark') barked(sim, m);
     return;
   }
   if (m.type === 'spawn') spawnEntity(sim, m);
@@ -190,14 +194,15 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
   const accepted = fold(sim.ownership, m, sim.entities, host);
   // A message that ends an entity takes it out of play; the end of a mine, a trap or a pickup is an event
-  // where it lay, and a blast acts on the bodies this client simulates.
+  // where it lay; a blast acts on the bodies this client simulates, a pickup fills its picker's hand.
   const trapEnd = m.type === 'sprung' || m.type === 'cleared' || m.type === 'pickup';
   if (accepted && (m.type === 'despawn' || m.type === 'blast' || m.type === 'defused' || trapEnd)) {
-    const p = sim.entities.get(m.id)!.body.translation();
+    const { kind, body } = sim.entities.get(m.id)!;
+    const p = body.translation();
     remove(sim, m.id);
     if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from });
     if (m.type === 'blast') blasted(sim, m, p);
-    if (trapEnd) trapEnded(sim, m, p);
+    if (trapEnd) trapEnded(sim, m, p, kind);
   }
   if (!accepted && !settled) return;
   setBodyTypes(sim);

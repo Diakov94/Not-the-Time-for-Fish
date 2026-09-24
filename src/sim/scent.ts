@@ -1,6 +1,7 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
 import type { NetId } from './entities.ts';
 import { myCharacter } from './movement.ts';
+import { perkOf } from './perks.ts';
 import type { Sim } from './world.ts';
 
 export type Scent = { p: Vector; t: number }; // a pose sample and the sim time it was taken
@@ -29,8 +30,8 @@ export function smell(sim: Sim): void {
 
 // What this client's dog smells while it sniffs: the samples laid in the last `window` s within `radius`
 // m of it, and the traps within `radius`. Nothing for a cat or a dog that does not sniff. Bloodhound
-// (card 42) passes a longer `window`.
-export function sniffed(sim: Sim, window = 30, radius = 10): Sniffed {
+// (card 42) smells the whole trail kept.
+export function sniffed(sim: Sim, window = perkOf(sim) === 'bloodhound' ? KEPT : 30, radius = 10): Sniffed {
   const dog = myCharacter(sim);
   if (!sim.sniffing || !dog) return { trail: [], traps: [] };
   const at = dog.body.translation();

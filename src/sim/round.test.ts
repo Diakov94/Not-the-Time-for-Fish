@@ -9,6 +9,7 @@ import { IDLE, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
 import { interact } from './heist.ts';
 import { hidden } from './hiding.ts';
+import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { receive } from './ownership.ts';
 import { advance, knobs, playerOf, playsAs } from './round.ts';
@@ -687,4 +688,31 @@ test("a cat in the hall box's spot is hidden on both clients; the dog shoves the
   expect(moved).toBeGreaterThanOrEqual(1);
   expect(hiddenOn().join()).toBe('false,false');
   expect(lag).toBeLessThanOrEqual(150);
+});
+
+test('a cat and a dog touch one mystery bag in the same step: one picker, the first delivered, holds a perk; the bag is gone everywhere', () => {
+  const r = relay(countryHouse, true);
+  const [, dog, cat] = r.players(3);
+  toHeist(r);
+  const bag = [...cat!.entities.values()].find((e) => e.kind === 'bag' && flat(e.body.translation(), { x: 13, z: -4 }) < 0.1)!.id;
+  stand(cat!, 12, -4, Math.PI / 2);
+  own(dog!).body.setTranslation({ x: 14, y: halfHeight('dog') + 0.01, z: -4 }, true);
+  r.run(2);
+  // Both step before the relay orders either's pickup.
+  const walk = (s: Sim) => walking(s === cat ? 1 : s === dog ? -1 : 0);
+  const pickups = () => r.history.filter(([m]) => m.type === 'pickup');
+  for (let i = 0; i < 60 && pickups().length === 0; i++) {
+    const outs = r.clients.map((c) => [c.sim, step(c.sim, STEP, walk(c.sim), c.host)] as const);
+    for (const [s, ms] of outs) for (const m of ms) r.send(s, m);
+  }
+  r.run(5);
+  const first = pickups()[0]![0] as { from: ClientId };
+  const pickers = [cat!, dog!].filter((s) => perkOf(s) !== null);
+  console.log(
+    `pickups sent ${pickups().length} (${pickups().map(([m]) => (m as { from: ClientId }).from).join(', ')}); perks: cat ${perkOf(cat!)}, dog ${perkOf(dog!)}; ` +
+      `bag in any table ${r.sims().some((s) => s.entities.has(bag) || s.ownership.rows.has(bag))}`,
+  );
+  expect(pickups().length).toBe(2);
+  expect(pickers.map((s) => s.me)).toEqual([first.from]);
+  expect(r.sims().some((s) => s.entities.has(bag) || s.ownership.rows.has(bag))).toBe(false);
 });

@@ -3,12 +3,14 @@ import type { Capsule, Collider, Vector } from '@dimforge/rapier3d-compat';
 import { entityOf, isCharacter, type Entity, type Kind } from './entities.ts';
 import { locked, stored } from './heist.ts';
 import { stunned } from './mines.ts';
+import { perkOf } from './perks.ts';
 import type { Claim, Hit, Release, SimMessage } from './messages.ts';
 import { myCharacter, speedsOf, yawOf } from './movement.ts';
 import { carried, mayHold, setBodyTypes, simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
-const REACH = 1.5; // the forward shape cast travels at most this far
+const REACH = 1.5; // the forward shape cast travels at most this far; Bulldog's BULLDOG
+const BULLDOG = 2;
 const PROBE_RADIUS = 0.25;
 const FEET = 0.05; // the probe stays this far above the character's feet, clear of the floor
 const HAND = 1; // the anchor is this far ahead of the carrier's centre (a capsule 0.25-0.4 + crate 0.5 + a gap)
@@ -83,7 +85,7 @@ function ahead(sim: Sim, c: Entity): Entity | undefined {
     { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) },
     new RAPIER.Capsule(Math.max(0, body.halfHeight + body.radius - PROBE_RADIUS - FEET / 2), PROBE_RADIUS),
     0,
-    REACH,
+    perkOf(sim) === 'bulldog' ? BULLDOG : REACH,
     true,
     RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
     c.body.collider(0).collisionGroups(), // what the character passes, its reach passes

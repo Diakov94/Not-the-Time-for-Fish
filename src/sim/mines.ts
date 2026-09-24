@@ -5,12 +5,14 @@ import { release } from './grab.ts';
 import type { Blast, SimMessage } from './messages.ts';
 import { myCharacter, type Intent } from './movement.ts';
 import { carried, simulatedHere } from './ownership.ts';
+import { perkOf } from './perks.ts';
 import { inPlay, knobs } from './round.ts';
 import { plantOrSpring } from './traps.ts';
 import type { Sim } from './world.ts';
 
-const PLANT = 1.5; // s a dog stands still to plant a mine
-const DEFUSE = 3; // s a cat holds E at a mine
+const PLANT = 1.5; // s a dog stands still to plant a mine; Sapper halves it
+const DEFUSE = 3; // s a cat holds E at a mine; Safecracker halves it and nothing interrupts it
+const SAPPER = 2; // mines Sapper adds to the dog's count
 const REACH = 1; // m from a mine's centre a cat defuses it
 const TRIGGER = 0.45; // m between centres, feet on the ground: a cat steps on a mine (its 0.25 m half + a 0.2 m radius)
 const WHISKER = 2; // m a sneaking cat feels a mine from
@@ -30,20 +32,22 @@ export function stunned(sim: Sim): boolean {
 }
 
 // Q (card 49), for a cat its trap's. For a dog: a dog with a mine in hand that carries nothing starts
-// planting one at its feet, in play only. The mines are the dog's own count: the knob's (card 27) less
-// those used since its last resupply.
+// planting one at its feet, in play only. The mines are the dog's own count: the knob's (card 27), and
+// Sapper's while it lasts, less those used since its last resupply.
 export function plant(sim: Sim): SimMessage | null {
   const c = myCharacter(sim);
   if (c?.kind === 'cat' && !stunned(sim)) return plantOrSpring(sim, c);
-  if (c?.kind !== 'dog' || !inPlay(sim.round) || sim.planting || carried(sim) || sim.used >= knobs(sim.round).mines) return null;
-  sim.planting = { since: sim.time, until: sim.time + PLANT, from: c.body.translation() };
+  const sapper = perkOf(sim) === 'sapper';
+  if (c?.kind !== 'dog' || !inPlay(sim.round) || sim.planting || carried(sim) || sim.used >= knobs(sim.round).mines + (sapper ? SAPPER : 0)) return null;
+  sim.planting = { since: sim.time, until: sim.time + (sapper ? PLANT / 2 : PLANT), from: c.body.translation() };
   return null;
 }
 
 // Every step after the world's, this client's mine work on the intent its character acted on. A plant
 // that ran PLANT s with the dog still spawns the mine. Its own cat with its feet on a mine is the mine's
 // blast, sent once. A defuse runs while the cat holds E still at a mine and ends it after DEFUSE; moving,
-// letting go or a grab (the cat is then no character of this client's) restarts it. A dog that stays
+// letting go or a grab (the cat is then no character of this client's) restarts it, except under
+// Safecracker, which nothing interrupts. A dog that stays
 // RESUPPLY s in the doghouse gets its used mines back.
 export function mineStep(sim: Sim, intent: Intent): SimMessage[] {
   const out: SimMessage[] = [];
@@ -56,17 +60,19 @@ export function mineStep(sim: Sim, intent: Intent): SimMessage[] {
     sim.used++;
     out.push(spawnOf(sim, { kind: 'mine', p: { x: p.x, y: p.y - halfHeight('dog') + halfHeight('mine'), z: p.z } }));
   }
-  if (c?.kind !== 'cat' || !p) sim.defusing = null;
-  else {
+  const safe = perkOf(sim) === 'safecracker';
+  if (c?.kind !== 'cat' || !p) {
+    if (!safe) sim.defusing = null;
+  } else {
     const on = mines.find((m) => flat(p, m.body.translation()) <= TRIGGER && Math.abs(p.y - halfHeight('cat') - m.body.translation().y) < 0.3);
     if (on) {
       sim.ending.add(on.id);
       out.push({ type: 'blast', from: sim.me, id: on.id });
     }
     const d = sim.defusing;
-    if (d && (!intent.defuse || flat(p, d.from) > STILL || !mines.some((m) => m.id === d.id))) sim.defusing = null;
+    if (d && ((!safe && (!intent.defuse || flat(p, d.from) > STILL)) || !mines.some((m) => m.id === d.id))) sim.defusing = null;
     const at = intent.defuse && !sim.defusing && mines.find((m) => flat(p, m.body.translation()) <= REACH);
-    if (at) sim.defusing = { id: at.id, since: sim.time, until: sim.time + DEFUSE, from: p };
+    if (at) sim.defusing = { id: at.id, since: sim.time, until: sim.time + (safe ? DEFUSE / 2 : DEFUSE), from: p };
   }
   if (sim.defusing && sim.time >= sim.defusing.until - 1e-9) {
     sim.ending.add(sim.defusing.id);

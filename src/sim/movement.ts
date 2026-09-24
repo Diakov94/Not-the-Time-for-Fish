@@ -3,6 +3,7 @@ import type { Capsule, Collider, Rotation } from '@dimforge/rapier3d-compat';
 import { volumeAt } from './build.ts';
 import { isCharacter, type Entity } from './entities.ts';
 import { carried, simulatedHere } from './ownership.ts';
+import { perkOf } from './perks.ts';
 import type { Sim } from './world.ts';
 
 // A player's input for one step; `move` is a world-space direction, length up to 1. `jump` held inside
@@ -78,8 +79,13 @@ export function drive(sim: Sim, c: Entity, intent: Intent): void {
   // A grounded character never presses into the floor: the controller stops on that contact instead of
   // sliding (5 of 120 sprint steps lost, 3.7 % of the distance); snap-to-ground keeps it on the floor.
   const takeoff = grounded && !climbing && intent.jump && s.jump > 0;
-  const vy = climbing ? s.climb : grounded ? (takeoff ? s.jump : 0) : (sim.leap ?? v).y + sim.world.gravity.y * dt;
-  if (takeoff) sim.leap = { x: vx, y: vy, z: vz };
+  // Acrobat: one more jump in the air, on a fresh press, once until the cat stands again.
+  const again = !grounded && !climbing && intent.jump && !sim.jumpHeld && !sim.airJumped && perkOf(sim) === 'acrobat';
+  if (grounded) sim.airJumped = false;
+  if (again) sim.airJumped = true;
+  sim.jumpHeld = intent.jump;
+  const vy = climbing ? s.climb : takeoff || again ? s.jump : grounded ? 0 : (sim.leap ?? v).y + sim.world.gravity.y * dt;
+  if (takeoff || again) sim.leap = { x: vx, y: vy, z: vz };
   const body = c.body.collider(0);
   const flags = RAPIER.QueryFilterFlags.EXCLUDE_SENSORS;
   // A dog barges an open door: its movement never stops at the panel, its body shoves it aside. The
