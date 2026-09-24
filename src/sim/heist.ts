@@ -1,8 +1,11 @@
+import RAPIER from '@dimforge/rapier3d-compat';
 import type { Vector } from '@dimforge/rapier3d-compat';
 import type { Box } from '../content/level.ts';
 import { volumeAt } from './build.ts';
 import { GROUPS, type Entity } from './entities.ts';
 import type { SimMessage } from './messages.ts';
+import { stunned } from './mines.ts';
+import { clear } from './traps.ts';
 import { myCharacter } from './movement.ts';
 import { carried } from './ownership.ts';
 import { playerOf } from './round.ts';
@@ -10,7 +13,8 @@ import type { Sim } from './world.ts';
 
 const TAKE = 0.8; // m from a storage's box: a cat takes a fish from there, and a teammate holds a lid
 const OPENING = 3; // s of a cat's work at a door storage (the fridge) before it opens
-const DOOR_LOUD = 0.6; // the opened door's noise ping
+const DOOR_WORK = 2; // s of a cat's work at a shut house door before it opens
+const DOOR_LOUD = 0.6; // the opened door's noise ping, a storage's or a house door's
 const LATCH = 1; // m from the latch point a free cat opens the kennel
 
 // How far `p` is from the box, 0 inside it.
@@ -18,6 +22,9 @@ function away(p: Vector, b: Box): number {
   const out = (k: 'x' | 'y' | 'z') => Math.max(Math.abs(p[k] - b.p[k]) - b.half[k], 0);
   return Math.hypot(out('x'), out('y'), out('z'));
 }
+
+// Whether house door `i` is open: the round table's word, or this client's own dog barged it ahead of it.
+const open = (sim: Sim, i: number) => sim.round.doors.includes(i) || sim.barged.has(i);
 
 // Whether `cat` may take a fish out of volume `i` now (GAME.md, House: the access costs). An open storage
 // always; a door storage once opened (the round table's word); a lid storage while another cat stands at
@@ -45,19 +52,23 @@ export function stored(sim: Sim, cat: Entity): Entity | undefined {
   return undefined;
 }
 
-// A cat's interact (E tapped, card 49): a free cat at the kennel's latch rescues at once while a cat is
-// captured; at a shut door storage it starts the work that opens it. Returns the message an interact
-// sends at once, if any.
+// The interact (E tapped, card 49). A dog's clears a planted trap nearby. A cat's: a free cat at the
+// kennel's latch rescues at once while a cat is captured; at a shut house door or door storage it starts
+// the work that opens it. Returns the message an interact sends at once, if any.
 export function interact(sim: Sim): SimMessage | null {
   const c = myCharacter(sim);
-  if (c?.kind !== 'cat') return null;
+  if (c?.kind === 'dog') return clear(sim, c);
+  if (c?.kind !== 'cat' || stunned(sim)) return null;
   const p = c.body.translation();
   const latch = sim.level.points.find((pt) => pt.role === 'latch')?.p;
   const free = playerOf(sim.round, sim.me)?.captured === null;
   if (latch && free && away(p, { p: latch, half: { x: 0, y: 0, z: 0 } }) <= LATCH && sim.round.roster.some((q) => q.captured !== null)) {
     return { type: 'rescue', from: sim.me };
   }
-  if (sim.opening) return null;
+  if (sim.opening || sim.doorWork) return null;
+  const door = sim.level.doors.findIndex((d, j) => !open(sim, j) && away(p, d.panel) <= TAKE);
+  if (door >= 0) sim.doorWork = { door, until: sim.time + DOOR_WORK };
+  if (door >= 0) return null;
   const i = sim.level.volumes.findIndex(
     (v, j) => v.role === 'storage' && v.access === 'door' && !sim.round.opened.includes(j) && away(p, v) <= TAKE,
   );
@@ -67,9 +78,12 @@ export function interact(sim: Sim): SimMessage | null {
 
 // Every step after the world's, what this client detects for the round (ADR 0007: born at the fact's
 // owner). Exits carry their cats blockers while the table says prep, and the kennel's gate lets only dogs
-// meet it while a rescue holds it open. A door storage worked on for OPENING by a cat still at it opens,
-// loudly. A fish this client holds inside the hideout is secured, once. This client's own cat, unheld,
-// on the ground inside the kennel with the gate shut, is captured; its dig-out timer ending digs it out.
+// meet it while a rescue holds it open. A door storage worked on for OPENING, or a house door for
+// DOOR_WORK, by a cat still at it opens, loudly. This client's dog that meets a shut house door in play
+// barges it: open here at once, and for everyone at the message. A house door is fixed at its closed pose
+// while shut and a free panel once open. A fish this client holds inside the hideout is secured, once.
+// This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured; its
+// dig-out timer ending digs it out.
 export function roundStep(sim: Sim): SimMessage[] {
   const out: SimMessage[] = [];
   const r = sim.round;
@@ -83,6 +97,14 @@ export function roundStep(sim: Sim): SimMessage[] {
     sim.opening = null;
     if (c && away(c.body.translation(), v) <= TAKE) {
       out.push({ type: 'opened', from: sim.me, storage }, { type: 'noise', from: sim.me, p: v.p, loud: DOOR_LOUD, cause: 'door' });
+    }
+  }
+  if (sim.doorWork && sim.time >= sim.doorWork.until - 1e-9) {
+    const { door } = sim.doorWork;
+    const { panel } = sim.level.doors[door]!;
+    sim.doorWork = null;
+    if (c && !open(sim, door) && away(c.body.translation(), panel) <= TAKE) {
+      out.push({ type: 'door', from: sim.me, door }, { type: 'noise', from: sim.me, p: panel.p, loud: DOOR_LOUD, cause: 'door' });
     }
   }
   const held = carried(sim);
@@ -103,5 +125,22 @@ export function roundStep(sim: Sim): SimMessage[] {
     sim.digOut = null;
     out.push({ type: 'dugOut', from: sim.me });
   }
+  for (let k = 0; c?.kind === 'dog' && inPlay && k < sim.controller.numComputedCollisions(); k++) {
+    const hit = sim.controller.computedCollision(k)?.collider?.parent()?.handle;
+    const door = sim.doors.findIndex((b) => b.handle === hit);
+    if (door < 0 || open(sim, door)) continue;
+    sim.barged.add(door);
+    out.push({ type: 'door', from: sim.me, door });
+  }
+  sim.doors.forEach((b, i) => {
+    if (open(sim, i) === b.isDynamic()) return;
+    if (b.isDynamic()) {
+      b.setTranslation(sim.level.doors[i]!.panel.p, false);
+      b.setRotation({ x: 0, y: 0, z: 0, w: 1 }, false);
+      b.setLinvel({ x: 0, y: 0, z: 0 }, false);
+      b.setAngvel({ x: 0, y: 0, z: 0 }, false);
+    }
+    b.setBodyType(open(sim, i) ? RAPIER.RigidBodyType.Dynamic : RAPIER.RigidBodyType.Fixed, true);
+  });
   return out;
 }

@@ -1,3 +1,4 @@
+import { createAudio, hear } from '../audio/audio.ts';
 import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send, spawn } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
@@ -40,6 +41,7 @@ const input = listen(
   },
 );
 const view = createView(canvas, sim);
+const audio = createAudio();
 
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
 // between the last two of them.
@@ -48,6 +50,7 @@ requestAnimationFrame(function loop(now: number) {
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), intent(input));
   last = now;
   draw(view, sim, input.look, mine); // the camera's target: the own character until the app names another
+  hear(audio, sim, view.camera);
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });
