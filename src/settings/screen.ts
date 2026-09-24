@@ -33,6 +33,7 @@ const WORDS = {
   wait: 'Натисніть…',
   cancel: 'Esc — скасувати',
   saved: 'Збережено',
+  taken: 'Уже зайнято',
   none: '—',
   noTable: 'Клавіші з’являться тут, щойно гра їх передасть',
 };
@@ -237,7 +238,7 @@ function bind(code: string): void {
   const { device, action } = waiting;
   waiting = null;
   const reason = remap.conflict(action, code);
-  if (reason) status = { text: reason, refused: true };
+  if (reason) status = { text: `${WORDS.taken}: ${actionName(reason)}`, refused: true };
   else {
     const b = settings().bindings;
     save({ bindings: { ...b, [device]: { ...b[device], [action]: code } } });
