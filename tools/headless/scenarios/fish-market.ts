@@ -1,7 +1,7 @@
 import type { Level, Volume } from '../../../src/content/level.ts';
 import { fishMarket } from '../../../src/content/maps/fish-market.ts';
 import { IDLE } from '../../../src/sim/movement.ts';
-import { catsTeam, positionOf } from '../../../src/sim/round.ts';
+import { positionOf } from '../../../src/sim/round.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Scenario } from '../run.ts';
 import { captive, capturedMe, fishIn, go, heldNow, hold, inside, mineNear, p, phase, place, plantHere, pounce, rescue, simOf, take, tap, toss, until, type Box, type P } from './bots.ts';
@@ -153,7 +153,7 @@ export function roundOn(plan: Plan): Scenario {
   }
 
   // Whether this runner (the k-th) is the one that opens the kennel: the last runner.
-  const cats = (c: HeadlessClient) => simOf(c).round.roster.filter((q) => q.team === catsTeam(simOf(c).round)).length;
+  const cats = (c: HeadlessClient) => simOf(c).round.roster.filter((q) => q.side === 'cat').length;
   const rescuer = (c: HeadlessClient, k: number) => k === ((cats(c) + 1) >> 1) - 1;
   function* rescueAndHome(c: HeadlessClient, route: P[]): Generator<Press, void> {
     yield* go(c, [...route, S.rescue], RUN);
