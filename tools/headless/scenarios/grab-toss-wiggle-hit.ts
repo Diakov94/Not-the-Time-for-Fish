@@ -63,7 +63,7 @@ function judge({ samples, wires, ids }: Run): Verdict {
   // by a cat that is itself held (its fish should have dropped at the grab's message).
   let signs = 0;
   for (const { dumps } of samples) {
-    for (const { entities } of dumps) {
+    for (const { entities } of dumps.map((d) => d!)) {
       const identities = new Map(entities.map((e) => [e.id, e]));
       const grabbed = new Set(entities.filter((e) => e.held && e.kind === 'cat').map((e) => e.home));
       for (const e of entities) if (e.held && (!mayHold(sideOf(identities, e.owner!), e.kind) || grabbed.has(e.owner))) signs++;
