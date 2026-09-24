@@ -11,6 +11,7 @@ export const MINE: Partial<Record<Variant, string>> = { firecracker: 'петар
 export const EFFECT = { wet: 'Мокрий', slipped: 'Послизнувся' };
 export const WORK = { plant: 'Мінування', defuse: 'Знешкодження' };
 export const OVERTIME = { all: 'Час вийшов: раунд триває, поки несуть рибку', carrier: 'Ти несеш рибку: собаки чують, де ти' };
+export const OWN = { grabbed: 'Тебе схопили', kennel: 'Ти у вольєрі', digOut: 'підкоп через', watching: 'дивишся' };
 export const MATE = { free: 'вільний', grabbed: 'схоплений', captured: 'у вольєрі' };
 export const PERK: Record<Perk, string> = {
   sapper: 'Сапер',

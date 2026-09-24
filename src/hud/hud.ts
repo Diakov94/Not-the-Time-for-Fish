@@ -1,7 +1,7 @@
 import type { Vector } from '@dimforge/rapier3d-compat';
 import { TEAM } from '../art/palette.ts';
 import { livePings } from '../render/senses.ts';
-import { project, type View } from '../render/view.ts';
+import { project, type Target, type View } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
 import { pinging } from '../sim/heist.ts';
 import { minesLeft, nextMine, progress, stunned, wet, whisker } from '../sim/mines.ts';
@@ -14,7 +14,7 @@ import { offerView } from '../settings/screen.ts';
 import { settings } from '../settings/store.ts';
 import { due, see, type Hint } from './hints.ts';
 import { CSS } from './style.ts';
-import { EFFECT, FISH, HIDE, HINT, ITEMS, MATE, MINE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
+import { EFFECT, FISH, HIDE, HINT, ITEMS, MATE, MINE, OVERTIME, OWN, PERK, PHASE, WORK } from './words.ts';
 
 // GAME.md, UI / HUD: the in-round overlay (ADR 0008), a view of the sim as render and audio are. Once per
 // frame it reads the round, entity and ownership tables, this client's own character state and render's
@@ -27,6 +27,8 @@ export type Hud = {
   timer: HTMLElement;
   secured: HTMLElement;
   left: HTMLElement;
+  own: HTMLElement;
+  items: HTMLElement;
   mines: HTMLElement;
   trap: HTMLElement;
   perk: HTMLElement;
@@ -54,6 +56,7 @@ export function createHud(): Hud {
     <div class="top">
       <div class="clock panel"><span class="phase"></span><span class="timer"></span></div>
       <div class="overtime panel"></div>
+      <div class="own panel"></div>
     </div>
     <div class="fish panel">
       <span class="title">${FISH.title}</span>
@@ -80,6 +83,8 @@ export function createHud(): Hud {
     timer: $('.timer'),
     secured: $('.secured'),
     left: $('.left'),
+    own: $('.own'),
+    items: $('.items'),
     mines: $('.mines'),
     trap: $('.trap'),
     perk: $('.perk'),
@@ -95,8 +100,9 @@ export function createHud(): Hud {
   };
 }
 
-// Once per frame, after the sim stepped and before the loop drains the event list.
-export function drawHud(hud: Hud, sim: Sim, view: View): void {
+// Once per frame, after the sim stepped and before the loop drains the event list; `watched` is whom the
+// app's camera follows, the app's decision.
+export function drawHud(hud: Hud, sim: Sim, view: View, watched?: Target): void {
   // The viewer's text scale, on the root so the app's screens follow it too (cards 118-120).
   const { textScale, soundCues } = settings();
   const root = document.documentElement.style;
@@ -113,6 +119,17 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   // Secured is the round table's; a secured fish leaves the entity table, so the rest are still in play.
   write(hud.secured, String(r.secured.length));
   write(hud.left, String([...sim.entities.values()].filter((e) => e.kind === 'fish').length));
+  // The own state under the clock, as the mates' is read: held by the ownership table, captured by the round
+  // table with the dig-out's end on this client's clock (ADR 0007), 0:00 once it dug out until the fold
+  // frees it, and the teammate the camera follows. The items wait while captured.
+  const me = playerOf(r, sim.me);
+  const own = me ? stateOf(sim, me) : 'free';
+  const home = typeof watched === 'string' ? sim.entities.get(watched)?.home : undefined;
+  const mate = home && home !== sim.me ? playerOf(r, home)?.name : undefined;
+  const kennel = `${OWN.kennel} · ${OWN.digOut} ${clock(sim.digOut === null ? 0 : sim.digOut - sim.time)}${mate ? ` · ${OWN.watching}: ${mate}` : ''}`;
+  hud.own.hidden = own === 'free';
+  write(hud.own, own === 'grabbed' ? OWN.grabbed : own === 'captured' ? kennel : '');
+  hud.items.hidden = own === 'captured';
   // The carried items, this client's own facts: a dog's mines and which comes next, a cat's trap in hand,
   // the perk slot; and what a mine or a trap did to the own character: a wet cat's time left, a slipped dog.
   const side = playsAs(r, sim.me);
@@ -140,7 +157,6 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   hud.overtime.hidden = r.phase !== 'overtime';
   write(hud.overtime, pinging(sim) ? OVERTIME.carrier : OVERTIME.all);
   // The teammates, in roster order: the player's own side, the player left out.
-  const me = playerOf(r, sim.me);
   const mates = r.roster.filter((p) => p !== me && me?.side && p.side === me.side);
   pool(hud.team, mates.length, 'mate panel', '<span class="name"></span> <span class="state"></span>');
   mates.forEach((p, i) => {
