@@ -1,10 +1,13 @@
-import type { Ball, Capsule, Cuboid, Shape } from '@dimforge/rapier3d-compat';
+import type { Ball, Capsule, Cuboid, Shape, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 
-// Where the camera orbits the player's character from: the app's mouse input sets it.
+// Where the camera orbits its target from: the app's mouse input sets it.
 export type Look = { yaw: number; pitch: number }; // yaw 0 looks along +z; pitch > 0 looks down
+// What the camera orbits, the app's choice (card 51 spectates): an entity by its net id, EYE above its
+// centre, or a fixed point to free-look around.
+export type Target = NetId | Vector;
 
 // A view of the sim, never a fact (ADR 0003): one Object3D per row of the entity table, keyed by net id,
 // posed from its Rapier body on every frame.
@@ -59,12 +62,13 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
 }
 
 const size = new THREE.Vector2();
+const eye = new THREE.Vector3();
 const axis = new THREE.Vector3();
 const back = new THREE.Quaternion();
 
 // One frame. The sim has stepped up to its current pose and holds `accumulator` seconds not yet stepped,
 // so the moment to show lies STEP - accumulator before the current pose, between it and the previous one.
-export function draw(view: View, sim: Sim, look: Look): void {
+export function draw(view: View, sim: Sim, look: Look, target: Target | undefined): void {
   const { renderer, scene, camera, objects } = view;
   const { clientWidth: w, clientHeight: h } = renderer.domElement;
   if (renderer.getSize(size).x !== w || size.y !== h) {
@@ -79,8 +83,9 @@ export function draw(view: View, sim: Sim, look: Look): void {
     scene.remove(o);
     objects.delete(id);
   }
-  const mine = [...sim.entities.values()].find((e) => isCharacter(e.kind) && e.home === sim.me);
-  if (mine) follow(camera, objects.get(mine.id)!.position, look);
+  const o = typeof target === 'string' ? objects.get(target) : undefined;
+  const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
+  if (at) follow(camera, at, look);
   renderer.render(scene, camera);
 }
 
@@ -110,9 +115,9 @@ function place(o: THREE.Object3D, e: Entity, lag: number): void {
   if (turn > 0) o.quaternion.premultiply(back.setFromAxisAngle(axis.set(w.x / turn, w.y / turn, w.z / turn), -turn * lag));
 }
 
-// The third-person camera: DISTANCE behind the point EYE above the character, orbiting it by `look`.
+// The third-person camera: DISTANCE behind the point it looks at, orbiting it by `look`.
 function follow(camera: THREE.PerspectiveCamera, at: THREE.Vector3, look: Look): void {
   const flat = Math.cos(look.pitch) * DISTANCE;
-  camera.position.set(at.x - Math.sin(look.yaw) * flat, at.y + EYE + Math.sin(look.pitch) * DISTANCE, at.z - Math.cos(look.yaw) * flat);
-  camera.lookAt(at.x, at.y + EYE, at.z);
+  camera.position.set(at.x - Math.sin(look.yaw) * flat, at.y + Math.sin(look.pitch) * DISTANCE, at.z - Math.cos(look.yaw) * flat);
+  camera.lookAt(at);
 }
