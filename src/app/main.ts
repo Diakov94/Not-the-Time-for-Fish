@@ -64,7 +64,7 @@ let tabs = 0;
 function target(): Target | undefined {
   const me = playerOf(sim.round, sim.me);
   if (!me || me.captured === null) return own();
-  const free = sim.round.roster.filter((p) => p.team === me.team && p.client !== sim.me && p.captured === null).flatMap((p) => characterOf(p.client) ?? []);
+  const free = sim.round.roster.filter((p) => p.side === me.side && p.client !== sim.me && p.captured === null).flatMap((p) => characterOf(p.client) ?? []);
   return free.length > 0 ? free[tabs % free.length] : sim.level.volumes.find((v) => v.role === 'kennel')?.p;
 }
 // Play: the canvas is the screen and the own character is not a spectator; only then the keys count.
