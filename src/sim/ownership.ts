@@ -1,11 +1,14 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { isCharacter, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
-import type { Claim, Hit, Left, Release, SimMessage, Spawn } from './messages.ts';
+import { isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
+import type { Blast, Claim, Cleared, Defused, Despawn, Hit, Left, Pickup, Release, SimMessage, Spawn, Sprung } from './messages.ts';
+import { blasted } from './mines.ts';
+import { barked } from './perks.ts';
+import { trapEnded } from './traps.ts';
 import { isRound, receiveRound, settle, turned, type RoundMessage } from './round.ts';
 import type { Sim } from './world.ts';
 
-// ADR 0006's and 0009's messages, in the relay's order.
-export type FoldMessage = Spawn | Claim | Release | Left | Hit;
+// ADR 0006's, 0007's and 0009's messages, in the relay's order.
+export type FoldMessage = Spawn | Claim | Release | Left | Hit | Despawn | Blast | Defused | Sprung | Cleared | Pickup;
 
 export type Ownership = { owner: ClientId; held: boolean };
 
@@ -35,8 +38,9 @@ export function sideOf(entities: Identities, client: ClientId): Kind | undefined
 
 // Folds one message of the relay's order into the table and says whether it was accepted. The table
 // depends on nothing but the messages and the entity table's identities, so every client that folds
-// the same order holds the same table.
-export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities): boolean {
+// the same order holds the same table. `host` is the host the relay names as of the message: only its
+// `despawn` counts.
+export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities, host?: ClientId): boolean {
   const homeOr = (id: NetId, fallback: ClientId): ClientId => {
     const home = entities.get(id)?.home ?? null;
     return home !== null && !t.gone.has(home) ? home : fallback;
@@ -86,6 +90,25 @@ export function fold(t: OwnershipTable, m: FoldMessage, entities: Identities): b
       }
       return freed;
     }
+    case 'despawn':
+      // Only the host removes an entity (ADR 0007): its row goes, and `receive` drops the entity.
+      return m.from === host && t.rows.delete(m.id);
+    case 'blast':
+    case 'defused':
+      // A cat stepped on a mine or defused it: the first delivered ends the mine.
+      return entities.get(m.id)?.kind === 'mine' && sideOf(entities, m.from) === 'cat' && t.rows.delete(m.id);
+    case 'sprung':
+    case 'cleared':
+    case 'pickup': {
+      // A trap is set off by its own cat only and cleared by a dog; a trap no one's yet is picked up by a
+      // cat, and a bag by anyone playing. The first delivered ends it.
+      const e = entities.get(m.id);
+      const side = sideOf(entities, m.from);
+      if (m.type === 'pickup' && e?.kind === 'bag') return side !== undefined && t.rows.delete(m.id);
+      if (e?.kind !== 'trap') return false;
+      const ok = m.type === 'sprung' ? e.home === m.from : m.type === 'cleared' ? e.home !== null && side === 'dog' : e.home === null && side === 'cat';
+      return ok && t.rows.delete(m.id);
+    }
   }
 }
 
@@ -107,9 +130,10 @@ export function carried(sim: Sim): Entity | undefined {
   return undefined;
 }
 
-// Body types follow the table's decision, on every client at the same message.
+// Body types follow the table's decision, on every client at the same message; a fixture stays fixed.
 export function setBodyTypes(sim: Sim): void {
   for (const e of sim.entities.values()) {
+    if (isFixture(e.kind)) continue;
     const type = !simulatedHere(sim, e)
       ? RAPIER.RigidBodyType.KinematicPositionBased // a follower of its carrier or a copy of its owner
       : isCharacter(e.kind)
@@ -134,12 +158,8 @@ export function adopt(sim: Sim, entities: Spawn[], table: OwnershipTable): void 
 export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   const { phase, round } = sim.round;
   const accepted = (m.type === 'left' || isRound(m)) && receiveRound(sim, m, host);
-  if (m.type === 'secured' && accepted) {
-    sim.world.removeRigidBody(sim.entities.get(m.fish)!.body);
-    sim.entities.delete(m.fish);
-    sim.ownership.rows.delete(m.fish);
-  }
-  if (!isRound(m)) apply(sim, m);
+  if (m.type === 'secured' && accepted) remove(sim, m.fish);
+  if (!isRound(m)) apply(sim, m, host);
   settle(sim.round, sim.ownership, sim.entities);
   if (sim.round.phase === phase && sim.round.round === round) return;
   if (sim.round.phase === 'prep') {
@@ -153,16 +173,37 @@ export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   turned(sim, host, m.type === 'left' ? m.id : m.from);
 }
 
-// ADR 0006's and 0010's messages. A noise is an event for everyone; a mark only for the marker's side.
-function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left): void {
-  if (m.type === 'noise' || m.type === 'mark') {
-    if (m.type === 'noise' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
+// An entity leaves play at the message that ends it, on every client: its body, its identity, its row.
+function remove(sim: Sim, id: NetId): void {
+  sim.world.removeRigidBody(sim.entities.get(id)!.body);
+  sim.entities.delete(id);
+  sim.ownership.rows.delete(id);
+  sim.inFlight.delete(id);
+}
+
+// ADR 0006's and 0010's messages. A noise and a bark are events for everyone; a mark only for the marker's
+// side. Every cat's client answers a bark for its own cat.
+function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: ClientId): void {
+  if (m.type === 'noise' || m.type === 'mark' || m.type === 'bark') {
+    if (m.type !== 'mark' || sideOf(sim.entities, m.from) === sideOf(sim.entities, sim.me)) sim.events.push({ ...m });
+    if (m.type === 'bark') barked(sim, m);
     return;
   }
   if (m.type === 'spawn') spawnEntity(sim, m);
   // This client's own claim is back: the fold decides now, whether it accepts the claim or not.
   const settled = m.type === 'claim' && m.from === sim.me && sim.inFlight.delete(m.id);
-  const accepted = fold(sim.ownership, m, sim.entities);
+  const accepted = fold(sim.ownership, m, sim.entities, host);
+  // A message that ends an entity takes it out of play; the end of a mine, a trap or a pickup is an event
+  // where it lay; a blast acts on the bodies this client simulates, a pickup fills its picker's hand.
+  const trapEnd = m.type === 'sprung' || m.type === 'cleared' || m.type === 'pickup';
+  if (accepted && (m.type === 'despawn' || m.type === 'blast' || m.type === 'defused' || trapEnd)) {
+    const { kind, body } = sim.entities.get(m.id)!;
+    const p = body.translation();
+    remove(sim, m.id);
+    if (m.type !== 'despawn') sim.events.push({ type: m.type, id: m.id, p, from: m.from });
+    if (m.type === 'blast') blasted(sim, m, p);
+    if (trapEnd) trapEnded(sim, m, p, kind);
+  }
   if (!accepted && !settled) return;
   setBodyTypes(sim);
   if (!accepted) return;

@@ -2,12 +2,15 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Capsule, Collider, Vector } from '@dimforge/rapier3d-compat';
 import { entityOf, isCharacter, type Entity, type Kind } from './entities.ts';
 import { locked, stored } from './heist.ts';
+import { stunned } from './mines.ts';
+import { perkOf } from './perks.ts';
 import type { Claim, Hit, Release, SimMessage } from './messages.ts';
 import { myCharacter, speedsOf, yawOf } from './movement.ts';
 import { carried, mayHold, setBodyTypes, simulatedHere } from './ownership.ts';
 import type { Sim } from './world.ts';
 
-const REACH = 1.5; // the forward shape cast travels at most this far
+const REACH = 1.5; // the forward shape cast travels at most this far; Bulldog's BULLDOG
+const BULLDOG = 2;
 const PROBE_RADIUS = 0.25;
 const FEET = 0.05; // the probe stays this far above the character's feet, clear of the floor
 const HAND = 1; // the anchor is this far ahead of the carrier's centre (a capsule 0.25-0.4 + crate 0.5 + a gap)
@@ -43,7 +46,7 @@ export function anchor(p: Vector, yaw: number, hand = HAND): Vector {
 // dash of its own body, at most once per cooldown, whose end makes the claim (`grabStep`).
 export function grab(sim: Sim): Claim | null {
   const c = myCharacter(sim);
-  if (!c || carried(sim)) return null;
+  if (!c || carried(sim) || stunned(sim)) return null;
   if (speedsOf(c).lunge === 0) return reach(sim, c);
   if (sim.lunge === null && sim.time >= sim.lungeReady) {
     sim.lunge = sim.time + LUNGE_TIME;
@@ -82,7 +85,7 @@ function ahead(sim: Sim, c: Entity): Entity | undefined {
     { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) },
     new RAPIER.Capsule(Math.max(0, body.halfHeight + body.radius - PROBE_RADIUS - FEET / 2), PROBE_RADIUS),
     0,
-    REACH,
+    perkOf(sim) === 'bulldog' ? BULLDOG : REACH,
     true,
     RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
     c.body.collider(0).collisionGroups(), // what the character passes, its reach passes
@@ -120,7 +123,7 @@ export function throwCarried(sim: Sim): Release | null {
   return release(sim, held, { x: Math.sin(yaw) * ahead, y: Math.sin(pitch) * speed, z: Math.cos(yaw) * ahead });
 }
 
-function release(sim: Sim, held: Entity, v: Release['v']): Release {
+export function release(sim: Sim, held: Entity, v: Release['v']): Release {
   return { type: 'release', from: sim.me, id: held.id, p: held.body.translation(), q: held.body.rotation(), v };
 }
 
