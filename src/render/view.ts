@@ -5,6 +5,7 @@ import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
 import { buildLook, debrisLook, lookOf } from './looks.ts';
+import { createSenses, drawSenses, type Senses } from './senses.ts';
 
 // Where the camera orbits its target from: the app's mouse input sets it.
 export type Look = { yaw: number; pitch: number }; // yaw 0 looks along +z; pitch > 0 looks down
@@ -21,6 +22,7 @@ export type View = {
   objects: Map<NetId, THREE.Object3D>;
   doors: THREE.Object3D[]; // the level's door panels, index for index with the sim's door bodies
   debris: THREE.Object3D[]; // the level's debris, index for index with the sim's local debris bodies
+  senses: Senses;
 };
 
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
@@ -47,7 +49,7 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
     scene.add(o);
     return o;
   });
-  return { renderer, scene, camera, objects: new Map(), doors, debris };
+  return { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene) };
 }
 
 const size = new THREE.Vector2();
@@ -83,6 +85,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
   if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined);
+  drawSenses(view.senses, sim, scene, camera);
   renderer.render(scene, camera);
 }
 
