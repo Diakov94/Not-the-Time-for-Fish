@@ -1,11 +1,12 @@
-import { countryHouse } from '../../../src/content/country-house.ts';
+import { countryHouse } from '../../../src/content/maps/country-house.ts';
 import type { SimEvent } from '../../../src/sim/events.ts';
 import type { Side } from '../../../src/sim/messages.ts';
 import { IDLE, SPEED } from '../../../src/sim/movement.ts';
 import { sniffed } from '../../../src/sim/scent.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
-import { go, hold, mineNear, phase, place, plantHere, ROUTE, simOf, tap, throughGate, until, type P } from './house.ts';
+import { go, hold, mineNear, phase, place, plantHere, simOf, tap, until, type P } from './bots.ts';
+import { ROUTE, throughGate } from './house.ts';
 
 type Script = Generator<Press, void>;
 const p = (x: number, z: number): P => ({ x, z });
@@ -31,7 +32,7 @@ function* trapper(c: HeadlessClient): Script {
   yield* go(c, [...ROUTE.east.slice(0, 2), TRAP]);
   yield* tap('plant');
   yield* go(c, [p(PICKUP.x, PICKUP.z)]);
-  yield* until(c, () => simOf(c).trap);
+  yield* until(c, () => simOf(c).trap !== null);
   yield* tap('plant');
   yield* go(c, [p(PICKUP.x + 5, PICKUP.z - 1)]);
   yield* tap('plant');
@@ -113,7 +114,7 @@ function judge(r: Run): Verdict {
 
 // Card 64 at four clients, two dogs by the host's hand: mines armed, felt, defused and set off; a trap
 // planted, sniffed out and cleared; a second one sprung across the yard.
-export const minesAndTraps: Scenario = {
+const minesAndTraps: Scenario = {
   about: 'a mine defused after the whisker cue, one stepped on; a trap cleared, one sprung',
   level: countryHouse,
   player: (i) => ({ side: SIDES[i] ?? 'cat', script }),
@@ -121,3 +122,4 @@ export const minesAndTraps: Scenario = {
   round: true,
   seconds: 80,
 };
+export default minesAndTraps;

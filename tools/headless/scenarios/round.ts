@@ -1,30 +1,11 @@
-import { countryHouse } from '../../../src/content/country-house.ts';
+import { countryHouse } from '../../../src/content/maps/country-house.ts';
 import type { Side } from '../../../src/sim/messages.ts';
 import { IDLE } from '../../../src/sim/movement.ts';
 import { autoTeam, catsTeam, newRound, type Round } from '../../../src/sim/round.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
-import {
-  captive,
-  capturedMe,
-  fishIn,
-  fridgeTrip,
-  go,
-  heldNow,
-  hold,
-  phase,
-  place,
-  plantHere,
-  pounce,
-  rescue,
-  ROUTE,
-  TABLE,
-  tableTrip,
-  throughGate,
-  toss,
-  until,
-  type P,
-} from './house.ts';
+import { captive, capturedMe, fishIn, go, heldNow, hold, phase, place, plantHere, pounce, rescue, toss, until, type P } from './bots.ts';
+import { fridgeTrip, ROUTE, TABLE, tableTrip, throughGate } from './house.ts';
 
 type Script = Generator<Press, void>;
 const sniffing = { ...IDLE, sniff: true };
@@ -89,7 +70,7 @@ function* hunter(c: HeadlessClient): Script {
   yield* plantHere(c);
   yield* go(c, ROUTE.westGapToAmbush, { sniff: true });
   yield* until(c, () => phase(c) === 'heist', sniffing);
-  if (yield* pounce(c, 8, 90)) yield* toss(c);
+  if (yield* pounce(c, 8, 90)) yield* toss(c, ROUTE.carryToCage);
   yield* go(c, ROUTE.cageToKennel);
   yield* until(c, () => false, sniffing);
 }
@@ -117,7 +98,7 @@ const script = (c: HeadlessClient): Script => {
 // The i-th player's side by GAME.md's auto-balance, asked of the round's own rule.
 function balanced(i: number): Side {
   const r = newRound();
-  r.roster = Array.from({ length: i + 1 }, (_, j) => ({ name: `p${j}`, team: null, client: null, looks: {}, captured: null }));
+  r.roster = Array.from({ length: i + 1 }, (_, j) => ({ name: `p${j}`, team: null, client: null, looks: {}, worn: {}, captured: null }));
   return autoTeam(r, `p${i}`) === catsTeam(r) ? 'cat' : 'dog';
 }
 
@@ -154,7 +135,7 @@ function judge(r: Run): Verdict {
 }
 
 // Card 63: a round to the end at any roster size, the players sided by the auto-balance, the same scripts.
-export const aRound: Scenario = {
+const aRound: Scenario = {
   about: 'a round to the end: mines at the exits, a defuse, fish out, a grab, the kennel, a rescue',
   level: countryHouse,
   player: (i) => ({ side: balanced(i), script }),
@@ -162,3 +143,4 @@ export const aRound: Scenario = {
   round: true,
   seconds: 420,
 };
+export default aRound;
