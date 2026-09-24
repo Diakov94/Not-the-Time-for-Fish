@@ -1,6 +1,7 @@
-import type { Ball, Capsule, Cuboid, Shape, Vector } from '@dimforge/rapier3d-compat';
+import RAPIER from '@dimforge/rapier3d-compat';
+import type { Ball, Capsule, Collider, Cuboid, RigidBody, Shape, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { isCharacter, type Entity, type NetId } from '../sim/entities.ts';
+import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEP, type Sim } from '../sim/world.ts';
 
 // Where the camera orbits its target from: the app's mouse input sets it.
@@ -34,6 +35,8 @@ const THEIRS = new THREE.MeshStandardMaterial({ color: 0x3f7fd0 });
 const LEVEL = new THREE.MeshStandardMaterial({ color: 0x9aa59a });
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
 const EYE = 1; // m: that point's height above the character's centre
+const LENS = new RAPIER.Ball(0.2); // what the camera keeps clear of a wall: twice its near plane
+const NO_TURN = { x: 0, y: 0, z: 0, w: 1 };
 
 export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -63,6 +66,7 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
 
 const size = new THREE.Vector2();
 const eye = new THREE.Vector3();
+const ray = new THREE.Vector3();
 const axis = new THREE.Vector3();
 const back = new THREE.Quaternion();
 
@@ -85,7 +89,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   }
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
-  if (at) follow(camera, at, look);
+  if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined);
   renderer.render(scene, camera);
 }
 
@@ -115,9 +119,21 @@ function place(o: THREE.Object3D, e: Entity, lag: number): void {
   if (turn > 0) o.quaternion.premultiply(back.setFromAxisAngle(axis.set(w.x / turn, w.y / turn, w.z / turn), -turn * lag));
 }
 
-// The third-person camera: DISTANCE behind the point it looks at, orbiting it by `look`.
-function follow(camera: THREE.PerspectiveCamera, at: THREE.Vector3, look: Look): void {
-  const flat = Math.cos(look.pitch) * DISTANCE;
-  camera.position.set(at.x - Math.sin(look.yaw) * flat, at.y + Math.sin(look.pitch) * DISTANCE, at.z - Math.cos(look.yaw) * flat);
-  camera.lookAt(at);
+// The third-person camera: DISTANCE behind the point `at`, orbiting it by `look`, and pulled in along that
+// line to where a LENS swept out from the point first meets any collider but a character passing by, so
+// a wall or a prop is never between it and the point. That includes a blocker the followed body passes:
+// a cat route is drawn as a hole with the wall over it, and a camera through it would face that wall.
+// The closer it is pulled, the further it looks down from `at` toward the character `lift` below, which
+// a camera backed into a wall would otherwise have under its lens and out of view.
+function follow(camera: THREE.PerspectiveCamera, sim: Sim, at: THREE.Vector3, lift: number, look: Look, body: RigidBody | undefined): void {
+  ray.set(-Math.sin(look.yaw) * Math.cos(look.pitch), Math.sin(look.pitch), -Math.cos(look.yaw) * Math.cos(look.pitch));
+  const notCharacter = (c: Collider) => {
+    const e = entityOf(sim.entities, c);
+    return !e || !isCharacter(e.kind);
+  };
+  const flags = RAPIER.QueryFilterFlags.EXCLUDE_SENSORS;
+  const hit = sim.world.castShape(at, NO_TURN, ray, LENS, 0, DISTANCE, false, flags, undefined, undefined, body, notCharacter);
+  const d = hit?.time_of_impact ?? DISTANCE;
+  camera.position.copy(ray).multiplyScalar(d).add(at);
+  camera.lookAt(at.x, at.y - lift * (1 - d / DISTANCE), at.z);
 }
