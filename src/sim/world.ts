@@ -29,6 +29,7 @@ export type Sim = {
   touchedAt: Map<NetId, number>; // when this client last produced a touch claim for a prop
   volumes: Collider[]; // the level's volumes as sensors, index for index
   exits: Collider[]; // the exits' cats blockers, on during prep
+  gates: Collider[]; // the kennel's gate, open to all but dogs until `gateUntil`
   debris: { prop: number; body: RigidBody }[]; // the level's unsynced props, local bodies with their content prop
   doors: RigidBody[]; // the level's door panels, index for index
   spawned: number; // this client's net id counter: ids are `<client>:<n>`
@@ -51,6 +52,9 @@ export type Sim = {
   called: boolean; // this client, as the host, sent the current phase's successor
   opening: { storage: number; until: number } | null; // the own cat's work at a door storage
   securing: Set<NetId>; // fish this client sent `secured` for
+  capturing: boolean; // this client's cat sent `captured` and the table has not answered
+  digOut: number | null; // when this client's captured cat digs out, by its own clock
+  gateUntil: number; // this client's time the kennel's gate shuts again after a rescue
 };
 
 export async function init(): Promise<void> {
@@ -60,7 +64,7 @@ export async function init(): Promise<void> {
 export function createWorld(level: Level, me: ClientId): Sim {
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = STEP;
-  const { volumes, exits, debris, doors } = build(world, level);
+  const { volumes, exits, gates, debris, doors } = build(world, level);
   const controller = world.createCharacterController(0.01);
   controller.setApplyImpulsesToDynamicBodies(true);
   controller.enableSnapToGround(0.1); // keeps a grounded character on the floor (see drive)
@@ -77,6 +81,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     touchedAt: new Map(),
     volumes,
     exits,
+    gates,
     debris,
     doors,
     spawned: 0,
@@ -99,6 +104,9 @@ export function createWorld(level: Level, me: ClientId): Sim {
     called: false,
     opening: null,
     securing: new Set(),
+    capturing: false,
+    digOut: null,
+    gateUntil: 0,
   };
 }
 

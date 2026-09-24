@@ -7,8 +7,9 @@ import type { Left, SimMessage } from './messages.ts';
 import { drainEvents } from './events.ts';
 import { IDLE, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
+import { interact } from './heist.ts';
 import { receive } from './ownership.ts';
-import { advance, knobs, playsAs } from './round.ts';
+import { advance, knobs, playerOf, playsAs } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -383,4 +384,81 @@ test('in prep a cat pressing into the gate from the hideout moves 0 m through it
   expect(through.cat[0]).toBeLessThanOrEqual(0);
   expect(through.cat[1]).toBeGreaterThan(3);
   for (const d of through.dog) expect(d).toBeLessThanOrEqual(0);
+});
+
+const inKennel = (p: { x: number; y: number; z: number }) => Math.abs(p.x) < 1.1 && p.z > 8.9 && p.z < 11.1 && p.y < 2.5;
+const capturedOn = (r: Relay, cat: Sim) => r.sims().map((s) => playerOf(s.round, cat.me)!.captured !== null);
+const own = (sim: Sim) => [...sim.entities.values()].find((e) => e.home === sim.me)!;
+
+test('a cat a dog tosses through the hatch is captured on every client when its body rests inside; it cannot press its way out', () => {
+  const r = relay(countryHouse, true);
+  const [, dog, cat] = r.players(3); // P1 plays the dog, P2 a cat
+  toHeist(r);
+  stand(dog!, -2.2, 10, Math.PI / 2); // 1 m west of the cage, facing it
+  stand(cat!, -1.45, 10, 0);
+  r.run(2);
+  r.send(dog!, { type: 'claim', from: dog!.me, id: own(cat!).id, hold: true });
+  r.run(10);
+  const before = capturedOn(r, cat!).join();
+  r.send(dog!, throwCarried(dog!)!);
+  // Each client's own clock when the cat's body comes to rest inside, and when that client folds its capture.
+  const rest = new Map<Sim, number>();
+  const at = new Map<Sim, number>();
+  for (let i = 0; i < 3 * 60 && (at.size < 3 || rest.size < 3); i++) {
+    r.run(1);
+    const b = own(cat!).body;
+    const still = Math.hypot(b.linvel().x, b.linvel().y, b.linvel().z) < 0.05;
+    if (rest.size === 0 && inKennel(b.translation()) && still) for (const s of r.sims()) rest.set(s, s.time);
+    for (const s of r.sims()) if (!at.has(s) && playerOf(s.round, cat!.me)!.captured !== null) at.set(s, s.time);
+  }
+  const lag = r.sims().map((s) => (at.get(s)! - rest.get(s)!) * 1000);
+  r.run(5 * 60, (s) => ({ move: { x: 0, z: s === cat ? -1 : 0 }, sprint: true, jump: s === cat }));
+  const after = own(cat!).body.translation();
+  console.log(`captured before the toss: ${before}; at rest inside, then captured ${lag.map((t) => t.toFixed(0)).join(' / ')} ms from it; after 5 s pressing at the gate: z = ${after.z.toFixed(2)}, inside ${inKennel(after)}`);
+  expect(before).toBe('false,false,false');
+  for (const t of lag) expect(Math.abs(t)).toBeLessThanOrEqual(150);
+  expect(inKennel(after)).toBe(true);
+  expect(agree(r)).toBe(true);
+});
+
+test("a free cat's interact at the latch frees both captured cats on every client at once; the gate lets them out and shuts 5 s later; the rescue ends their dig-out", { timeout: 30000 }, () => {
+  const r = relay(countryHouse, true);
+  const [free, , a, b] = r.players(4); // one dog, three cats
+  toHeist(r);
+  stand(a!, -0.6, 10, Math.PI);
+  stand(b!, 0, 10, Math.PI);
+  r.run(2);
+  const caught = [a!, b!].map((s) => capturedOn(r, s).join());
+  r.run(30 * 60);
+  stand(free!, 0.7, 8.2, 0);
+  r.run(1);
+  const rescue = interact(free!)!;
+  const gate = (s: Sim) => s.gates[0]!.collisionGroups();
+  const shut = gate(free!);
+  r.send(free!, rescue);
+  const t0 = new Map(r.sims().map((s) => [s, s.time])); // each client's own clock at the rescue's fold
+  const freed = [a!, b!].map((s) => capturedOn(r, s).join());
+  const out = new Map<Sim, number>();
+  const closed = new Map<Sim, number>();
+  let opened = false;
+  const outward = (s: Sim): Intent => ({ move: { x: 0, z: s === a || s === b ? -1 : 0 }, sprint: false, jump: false });
+  for (let i = 0; i < 6 * 60; i++) {
+    r.run(1, outward);
+    if (i === 0) opened = r.sims().map(gate).every((g) => g !== shut);
+    for (const s of [a!, b!]) if (!out.has(s) && own(s).body.translation().z < 8.7) out.set(s, s.time - t0.get(s)!);
+    for (const s of r.sims()) if (!closed.has(s) && gate(s) === shut) closed.set(s, s.time - t0.get(s)!);
+  }
+  r.run(35 * 60); // past the 60 s dig-out the capture started
+  const dug = r.history.filter(([m]) => m.type === 'dugOut').length;
+  console.log(
+    `captured on every client: ${caught.join(' | ')}; one interact at the latch: ${freed.join(' | ')}; gate open on all ${opened}; ` +
+      `the freed cats out after ${[...out.values()].map((t) => t.toFixed(2)).join(' / ')} s; gate shut after ${[...closed.values()].map((t) => t.toFixed(3)).join(' / ')} s; dugOut sent ${dug}`,
+  );
+  expect(caught).toEqual(['true,true,true,true', 'true,true,true,true']);
+  expect(freed).toEqual(['false,false,false,false', 'false,false,false,false']);
+  expect(opened).toBe(true);
+  expect(out.size).toBe(2);
+  for (const t of closed.values()) expect(Math.abs(t - 5)).toBeLessThanOrEqual(STEP);
+  expect(dug).toBe(0);
+  expect(agree(r)).toBe(true);
 });

@@ -1,5 +1,5 @@
-import { levelBodies, spawnPoint } from './build.ts';
-import { spawnOf, type ClientId, type NetId } from './entities.ts';
+import { levelBodies, pointFor, spawnPoint } from './build.ts';
+import { isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
 import type { Captured, DugOut, Hello, Left, Look, Opened, Phase, PhaseMessage, Rescue, Roster, Secured, Side, Team } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
 import type { Sim } from './world.ts';
@@ -33,6 +33,7 @@ const LOOKS = 3; // per side (GAME.md, Characters)
 const TO_WIN = 3; // fish secured
 const PREP = 45; // s
 const OVERTIME = 60; // s at most
+const GATE_OPEN = 5; // s the kennel's gate stays open after a rescue, for the freed cats to walk out
 
 // The balance knobs by player count (GAME.md, Multiplayer): the heist timer, mines per dog, the dig-out
 // time, one row per 3-4, 5-6 and 7-8 players (names in the roster).
@@ -216,9 +217,20 @@ export function foldRound(r: Round, m: RoundMessage | Left, host: ClientId, t: O
 }
 
 // `receive`'s part for the round. The host's decision is a message like any other: it answers a name
-// with no team by the auto-balance, when the hello arrives or when a `left` makes it the host.
+// with no team by the auto-balance, when the hello arrives or when a `left` makes it the host. A rescue
+// opens the kennel's gate for GATE_OPEN by this client's clock. This client's own cat, once captured,
+// starts its dig-out timer, drops it when freed, and after its own `dugOut` stands at the tunnel exit.
 export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): boolean {
   if (!foldRound(sim.round, m, host, sim.ownership, sim.entities)) return false;
+  if (m.type === 'rescue') sim.gateUntil = sim.time + GATE_OPEN;
+  if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;
+  if (playerOf(sim.round, sim.me)?.captured === null) sim.digOut = null;
+  if (m.type === 'dugOut' && m.from === sim.me) {
+    const me = [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind));
+    const exit = pointFor(sim.level, 'tunnelExit', 'cat');
+    if (me && exit) me.body.setTranslation(exit, true);
+    sim.leap = null;
+  }
   if (host === sim.me && (m.type === 'hello' || m.type === 'left')) {
     for (const p of sim.round.roster) {
       if (p.team !== null || (m.type === 'hello' && p.name !== m.name)) continue;
@@ -238,6 +250,8 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
   sim.called = false;
   sim.events.push({ type: 'phase', to: r.phase, round: r.round, from });
   if (r.phase !== 'prep') return;
+  [sim.opening, sim.capturing, sim.gateUntil] = [null, false, 0];
+  sim.securing.clear();
   if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
   const p = playerOf(r, sim.me);
   const side = playsAs(r, sim.me);

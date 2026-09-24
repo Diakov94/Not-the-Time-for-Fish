@@ -5,8 +5,9 @@ export type Vec3 = { x: number; y: number; z: number };
 export type Box = { p: Vec3; half: Vec3 };
 
 // A fixed collider. A `dogs` blocker is met by dog bodies only, so a cat route or an exit is a gap in the
-// `all` boxes filled by a `dogs` one.
-export type Static = Box & { label: string; blocks: 'all' | 'dogs' };
+// `all` boxes filled by a `dogs` one. A `latch` box is the kennel's gate: it blocks everyone while its latch
+// is shut and dogs only while a rescue holds it open.
+export type Static = Box & { label: string; blocks: 'all' | 'dogs' | 'latch' };
 
 export type Access = 'open' | 'door' | 'lid';
 // A sensor tagged by role; a storage names what taking its fish costs.

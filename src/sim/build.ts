@@ -12,13 +12,16 @@ const DOOR_CLEARANCE = 0.02; // m the panel keeps off the floor and off the jamb
 // met by dog bodies only. Volumes are sensors on one fixed body, in the level's order, so a volume's
 // index names it. Debris is a local dynamic body on every client, never an entity. A door is its panel
 // on a vertical hinge, swung by whoever pushes it, local until card 41 gives doors their rules. Every exit
-// also gets a cats blocker, a solid of its box that only cats meet, off until the round says prep.
-export type Built = { volumes: Collider[]; exits: Collider[]; debris: { prop: number; body: RigidBody }[]; doors: RigidBody[] };
+// also gets a cats blocker, a solid of its box that only cats meet, off until the round says prep. The
+// kennel's gate (`latch`) is a static whose groups the round sets: all while shut, dogs only while open.
+export type Built = { volumes: Collider[]; exits: Collider[]; gates: Collider[]; debris: { prop: number; body: RigidBody }[]; doors: RigidBody[] };
 
 export function build(world: World, level: Level): Built {
+  const gates: Collider[] = [];
   for (const { p, half, blocks } of level.statics) {
     const c = world.createCollider(RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z).setTranslation(p.x, p.y, p.z));
     if (blocks === 'dogs') c.setCollisionGroups(GROUPS.dogsBlocker);
+    if (blocks === 'latch') gates.push(c);
   }
   const fixed = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
   const volumes = level.volumes.map(({ p, half }) =>
@@ -44,7 +47,7 @@ export function build(world: World, level: Level): Built {
     world.createImpulseJoint(RAPIER.JointData.revolute(hinge, local, { x: 0, y: 1, z: 0 }), fixed, body, true);
     return body;
   });
-  return { volumes, exits, debris, doors };
+  return { volumes, exits, gates, debris, doors };
 }
 
 // A point's body: lifted by the kind's own half height, facing the point's yaw.
@@ -60,11 +63,16 @@ export function levelBodies(level: Level): Body[] {
   ];
 }
 
-// The `n`-th spawn point of a side, round the list: where that side's character stands at the start.
-export function spawnPoint(level: Level, side: Side, n: number): Vector | undefined {
-  const points = level.points.filter((pt) => pt.role === (side === 'cat' ? 'catSpawn' : 'dogSpawn'));
+// Where a body of `kind` stands on the `n`-th point of `role`, round the list.
+export function pointFor(level: Level, role: Point['role'], kind: Kind, n = 0): Vector | undefined {
+  const points = level.points.filter((pt) => pt.role === role);
   const pt = points[n % points.length];
-  return pt && onPoint(pt, side).p;
+  return pt && onPoint(pt, kind).p;
+}
+
+// The `n`-th spawn point of a side: where that side's character stands at the start.
+export function spawnPoint(level: Level, side: Side, n: number): Vector | undefined {
+  return pointFor(level, side === 'cat' ? 'catSpawn' : 'dogSpawn', side, n);
 }
 
 // The index of the first volume of `role` that holds `p`, or -1.

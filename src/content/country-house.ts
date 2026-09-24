@@ -102,7 +102,7 @@ export const countryHouse: Level = {
     solid('bed', [-5.5, 0, -2.1], [-3.5, 0.6, -0.1]),
     // Behind the back door: the kennel, a cage open on top whose 2.5 m walls a cat inside cannot climb, so
     // the hatch's bottom edge is 2.5 m up; the latch is on the gate, outside. The doghouse beside it.
-    solid('kennel gate', [-1.2, 0, 8.8], [1.2, 2.5, 8.9]),
+    solid('kennel gate', [-1.2, 0, 8.8], [1.2, 2.5, 8.9], 'latch'),
     solid('kennel', [-1.2, 0, 11.1], [1.2, 2.5, 11.2]),
     solid('kennel', [-1.2, 0, 8.9], [-1.1, 2.5, 11.1]),
     solid('kennel', [1.1, 0, 8.9], [1.2, 2.5, 11.1]),

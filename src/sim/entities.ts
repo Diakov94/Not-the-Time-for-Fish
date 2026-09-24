@@ -34,6 +34,7 @@ const DOGS_BLOCKER = 0x1;
 const CATS_BLOCKER = 0x2;
 const groups = (memberships: number, filter: number) => ((memberships << 16) | filter) >>> 0;
 export const GROUPS = {
+  all: groups(ALL, ALL), // Rapier's default: a static meets everyone
   dogsBlocker: groups(DOGS_BLOCKER, ALL),
   catsBlocker: groups(CATS_BLOCKER, ALL),
   dog: groups(ALL, ALL & ~CATS_BLOCKER),
