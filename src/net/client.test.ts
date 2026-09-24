@@ -46,17 +46,18 @@ async function room(n: number, level: Level = walls): Promise<Session[]> {
   return [...sessions];
 }
 
-// Every session's frame in real time, about 60 Hz, until `done` holds or `ms` pass.
+// Every session's frame in real time, about 60 Hz (or every `every` ms), until `done` holds or `ms` pass.
 async function play(
   ms: number,
   done: () => boolean = () => false,
   each: (now: number) => void = () => {},
   intent: (s: Session) => Intent = () => IDLE,
+  every = 16,
 ) {
   const end = performance.now() + ms;
   let last = performance.now();
   while (performance.now() < end && !done()) {
-    await new Promise((r) => setTimeout(r, 16));
+    await new Promise((r) => setTimeout(r, every));
     const now = performance.now();
     for (const s of sessions) frame(s, (now - last) / 1000, intent(s));
     last = now;
@@ -415,15 +416,18 @@ test('a crate thrown at the carrying dog frees the cat on all three clients with
   expect(ms).toBeLessThanOrEqual(150);
 });
 
-test("two clients' crates shoved into each other: one noise for the impact, heard on both from the echo", async () => {
+// A frame every 100 ms is a loaded machine's loop (or a throttled tab's): six steps a frame, a copy moving
+// on the first and still on the other five. It measured 2 noises in 10 of 10 runs before the rule read the
+// owner's speed.
+test.each([16, 100])("two clients' crates shoved into each other: one noise for the impact, heard on both from the echo (a frame every %i ms)", async (every) => {
   const [a, b] = await room(2);
   const x = spawn(a!, 'prop', { x: -1.5, y: 0.5, z: 0 });
   const y = spawn(b!, 'prop', { x: 1.5, y: 0.5, z: 0 });
-  await play(3000, () => a!.rested.has(x) && b!.rested.has(y) && sessions.every((s) => s.sim.entities.size === 2));
+  await play(3000, () => a!.rested.has(x) && b!.rested.has(y) && sessions.every((s) => s.sim.entities.size === 2), undefined, undefined, every);
   for (const s of sessions) drainEvents(s.sim);
   a!.sim.entities.get(x)!.body.setLinvel({ x: 4, y: 0, z: 0 }, true);
   b!.sim.entities.get(y)!.body.setLinvel({ x: -4, y: 0, z: 0 }, true);
-  await play(1000);
+  await play(1000, undefined, undefined, undefined, every);
   // Each list holds every noise of the relay's stream: noise reaches a list only from the echo.
   const heard = (s: Session) => s.sim.events.filter((e) => e.type === 'noise' && Math.abs(e.p.x) < 3);
   console.log(`noise for the impact: ${heard(a!).map((e) => e.from).join(', ')} on A; ${heard(b!).length} on B`);
