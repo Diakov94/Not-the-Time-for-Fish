@@ -77,3 +77,10 @@
 - 69 overtime carrier ping: roundStep emits it for every fish carrier in overtime; red without the rule. Batch F1, 2026-09-24.
 - 70 results name the tiebreak: the round table's matchOutcome owns the deciding rule; the screen shows it in Ukrainian. Batch F1, 2026-09-24.
 - bug-chase-kennel-rescue-rejoin-movement-sync (QA hunt): merged into bug-net-copy-freezes-at-an-ownership-change as the same defect; its numbers (3 of 8 runs at 4 clients, 0.261-0.380 m moving) were sent to that worker. Producer, 2026-09-24.
+- 100 character roster: the twelve characters' one owner is src/content/characters.ts. Wave 0 SIM-SEAMS, 2026-09-24.
+- 104 emote event: born in src/sim/emotes.ts, lives only on the event list. Wave 0 SIM-SEAMS, 2026-09-24.
+- 105 worn in the roster: Player.worn per side, folded from look messages. Wave 0 SIM-SEAMS, 2026-09-24.
+- 106 zone grep for the new zones: art, settings, input and meta join the rule. Wave 0 SIM-SEAMS, 2026-09-24.
+- 140 the yacht map: exits 4 > dogs 3, carry 11.3 m, rails 4 m; no schema change. Wave 0 MAP-yacht, 2026-09-24.
+- 138 the farm map: every anatomy number holds; the schema lacks a fence role (reported). Wave 0 MAP-farm, 2026-09-24.
+- 136 the market map: every anatomy number holds (exits 4 > dogs 3, farthest storage 12.8 m from the hatch). Wave 0 MAP-market, 2026-09-24.

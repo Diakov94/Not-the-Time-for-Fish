@@ -76,6 +76,7 @@ export type Sim = {
   jumpHeld: boolean; // the own character's jump was held last step
   airJumped: boolean; // the own cat used its Acrobat jump since it last stood
   carrierPing: number | null; // when this client, the pinging carrier, last pinged; null while it is not
+  emoteUntil: number; // when this client's last emote ends, by its own clock
 };
 
 // A timed action of the own character: when it started and ends, and where the character stood then.
@@ -149,6 +150,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     jumpHeld: false,
     airJumped: false,
     carrierPing: null,
+    emoteUntil: 0,
   };
 }
 
