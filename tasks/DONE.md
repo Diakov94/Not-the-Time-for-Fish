@@ -88,3 +88,4 @@
 - 126 progress save: src/meta/progress.ts owns it. 127 unlock rules: twelve, one per cosmetic id. Wave 1 META, 2026-09-24.
 - 128 map in the round table; 129 water bomb (soaks: a wet cat pings for 20 s); 130 slip trap (a banana peel slips a dog 1.5 s). Wave 1 SIM1, 2026-09-24.
 - 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.
+- 114 the dogs 1-3: concept, skeleton, detail and emotes. Wave 1 DOGS-A, 2026-09-24.
