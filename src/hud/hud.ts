@@ -65,11 +65,12 @@ export function createHud(): Hud {
     <div class="team"></div>
     <div class="arrows"></div>`;
   document.body.append(root);
-  // H hides the first-round hint on screen and every one after it, for this browser.
+  // H hides the first-round hint on screen and every one after it on that hint's side, for this browser.
   addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyH' || e.repeat || e.target instanceof HTMLInputElement) return;
-    see(...(Object.keys(HINT) as Hint[]));
-    root.querySelector('.tip')?.remove();
+    const tip = root.querySelector<HTMLElement>('.tip');
+    if (e.code !== 'KeyH' || e.repeat || e.target instanceof HTMLInputElement || !tip) return;
+    see(tip.dataset.side as Side, ...(Object.keys(HINT) as Hint[]));
+    tip.remove();
   });
   const $ = (selector: string) => root.querySelector<HTMLElement>(selector)!;
   return {
@@ -160,10 +161,11 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
     arrow.style.opacity = String(1 - age);
   });
   // One first-round hint at a time, from the fact that calls for it; it leaves at its animation's end.
-  const hint = side && !hud.root.querySelector('.tip') ? due(sim) : null;
+  const hint = side && !hud.root.querySelector('.tip') ? due(sim, side) : null;
   if (!side || !hint) return;
-  see(hint);
+  see(side, hint);
   const tip = Object.assign(document.createElement('div'), { className: 'tip panel', innerHTML: '<span></span><small></small>' });
+  tip.dataset.side = side;
   tip.firstElementChild!.textContent = HINT[hint][side];
   tip.lastElementChild!.textContent = HIDE;
   tip.onanimationend = () => tip.remove();
