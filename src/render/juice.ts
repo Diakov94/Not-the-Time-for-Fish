@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OVERLAY } from '../art/palette.ts';
 import type { Sim } from '../sim/world.ts';
 
 // GAME.md, Game Feel (card 33): cartoon impact stars and camera shake on a loud impact, both read from
@@ -40,7 +41,7 @@ const WAVE = new THREE.RingGeometry(0.85, 1, 32).rotateX(-Math.PI / 2);
 function burst(p: { x: number; y: number; z: number }): THREE.Group {
   const g = new THREE.Group();
   g.position.set(p.x, p.y + 0.4, p.z);
-  const m = new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, side: THREE.DoubleSide });
+  const m = new THREE.MeshBasicMaterial({ color: OVERLAY.star, transparent: true, side: THREE.DoubleSide });
   for (let i = 0; i < STARS; i++) {
     const star = new THREE.Mesh(STAR, m);
     star.userData.dir = new THREE.Vector3(Math.sin((i * 2 * Math.PI) / STARS), 0.8, Math.cos((i * 2 * Math.PI) / STARS));
@@ -53,14 +54,14 @@ function burst(p: { x: number; y: number; z: number }): THREE.Group {
 function puff(p: { x: number; y: number; z: number }): THREE.Group {
   const g = new THREE.Group();
   g.position.set(p.x, p.y, p.z);
-  const smoke = new THREE.MeshLambertMaterial({ color: 0xf4f1ea, flatShading: true, transparent: true });
+  const smoke = new THREE.MeshLambertMaterial({ color: OVERLAY.smoke, flatShading: true, transparent: true });
   for (let i = 0; i < PUFFS; i++) {
     const ball = new THREE.Mesh(SMOKE, smoke);
     const a = (i * 2 * Math.PI) / (PUFFS - 1);
     ball.userData.dir = i === 0 ? new THREE.Vector3(0, 0.5, 0) : new THREE.Vector3(0.45 * Math.sin(a), 0.25 + 0.15 * (i % 2), 0.45 * Math.cos(a));
     g.add(ball);
   }
-  return g.add(new THREE.Mesh(WAVE, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide })));
+  return g.add(new THREE.Mesh(WAVE, new THREE.MeshBasicMaterial({ color: OVERLAY.white, transparent: true, side: THREE.DoubleSide })));
 }
 
 // One of each effect, for the view to compile their shaders before its first frame.

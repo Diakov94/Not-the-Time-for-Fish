@@ -1,3 +1,4 @@
+import { keyOf } from '../input/bindings.ts';
 import type { Phase } from '../sim/messages.ts';
 import type { Perk } from '../sim/perks.ts';
 
@@ -19,14 +20,30 @@ export const PERK: Record<Perk, string> = {
   safecracker: 'Ведмежатник',
 };
 // First-round hints (card 62), per side: at most 10 words each, and HIDE's 2 under every one. A no-break
-// space (\u00a0) keeps a key with its action when a line wraps.
+// space (\u00a0) keeps a key with its action when a line wraps. A key is named by the input zone when the
+// hint is shown (a getter), so the hint names the key the action has.
+const k = keyOf;
 export const HINT = {
   controls: {
-    cat: 'Ctrl\u00a0—\u00a0крастися, Пробіл\u00a0—\u00a0стрибок, ЛКМ\u00a0—\u00a0схопити, E\u00a0—\u00a0знешкодити, Q\u00a0—\u00a0пастка',
-    dog: 'ЛКМ\u00a0—\u00a0схопити кота, Q\u00a0—\u00a0міна, E\u00a0—\u00a0нюхати слід, F\u00a0—\u00a0перк',
+    get cat() {
+      return `${k('sneak')}\u00a0—\u00a0крастися, ${k('jump')}\u00a0—\u00a0стрибок, ${k('grab')}\u00a0—\u00a0схопити, ${k('interact')}\u00a0—\u00a0знешкодити, ${k('plant')}\u00a0—\u00a0пастка`;
+    },
+    get dog() {
+      return `${k('grab')}\u00a0—\u00a0схопити кота, ${k('plant')}\u00a0—\u00a0міна, ${k('interact')}\u00a0—\u00a0нюхати слід, ${k('perk')}\u00a0—\u00a0перк`;
+    },
   },
   objective: { cat: 'Винеси рибу з дому в схованку за парканом', dog: 'Не дай котам винести рибу: хапай і неси у вольєр' },
-  mines: { cat: 'Крадучись, вусами відчуєш міну. Затисни\u00a0E, щоб знешкодити', dog: 'Міни оглушують котів. Постій у будці, щоб поповнити запас' },
-  kennel: { cat: 'Спійманих звільняє засув вольєра (E) ззовні, або підкоп з часом', dog: 'Кидай схоплених котів у вольєр і стережи засув' },
+  mines: {
+    get cat() {
+      return `Крадучись, вусами відчуєш міну. Затисни\u00a0${k('interact')}, щоб знешкодити`;
+    },
+    dog: 'Міни оглушують котів. Постій у будці, щоб поповнити запас',
+  },
+  kennel: {
+    get cat() {
+      return `Спійманих звільняє засув вольєра (${k('interact')}) ззовні, або підкоп з часом`;
+    },
+    dog: 'Кидай схоплених котів у вольєр і стережи засув',
+  },
 };
 export const HIDE = 'H\u00a0—\u00a0сховати';
