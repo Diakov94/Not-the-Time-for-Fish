@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Level } from '../content/level.ts';
-import { isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
+import { characterOf, isCharacter, isFixture, spawnEntity, type ClientId, type Entity, type Kind, type NetId } from './entities.ts';
 import type { Blast, Claim, Cleared, Defused, Despawn, Hit, Left, Pickup, Release, SimMessage, Spawn, Sprung } from './messages.ts';
 import { blasted } from './mines.ts';
 import { barked } from './perks.ts';
@@ -41,8 +41,7 @@ export const massOf = (e: Pick<Entity, 'prop'>, level?: Pick<Level, 'props'>): n
 
 // A client's side: the kind of its character (ADR 0009).
 export function sideOf(entities: Identities, client: ClientId): Kind | undefined {
-  for (const e of entities.values()) if (e.home === client && isCharacter(e.kind)) return e.kind;
-  return undefined;
+  return characterOf(entities, client)?.kind;
 }
 
 // Folds one message of the relay's order into the table and says whether it was accepted. The table
@@ -172,7 +171,7 @@ export function receive(sim: Sim, m: SimMessage | Left, host: ClientId): void {
   const { phase, round } = sim.round;
   const accepted = (m.type === 'left' || isRound(m)) && receiveRound(sim, m, host);
   if (accepted && (m.type === 'secured' || m.type === 'captured' || m.type === 'rescue' || m.type === 'dugOut')) {
-    const at = m.type === 'secured' ? sim.entities.get(m.fish) : [...sim.entities.values()].find((e) => e.home === m.from && isCharacter(e.kind));
+    const at = m.type === 'secured' ? sim.entities.get(m.fish) : characterOf(sim.entities, m.from);
     if (at) sim.events.push({ type: m.type, p: at.body.translation(), from: m.from });
   }
   if (m.type === 'secured' && accepted) remove(sim, m.fish);
@@ -235,7 +234,7 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   // The carrier's clock of the wiggle-free starts when its hold on a cat is accepted.
   if (m.type === 'claim' && m.hold && m.from === sim.me && e?.kind === 'cat') sim.grabbedAt = sim.time;
   // A hold on this client's own character names its holder: a capture's `by` (ADR 0014).
-  if (m.type === 'claim' && m.hold && e?.home === sim.me && isCharacter(e.kind)) sim.holder = m.from;
+  if (m.type === 'claim' && m.hold && e && e === characterOf(sim.entities, sim.me)) sim.holder = m.from;
   if (m.type !== 'release' || !e) return;
   // The release carries the handoff state, so the new owner continues the throw or the drop without a gap:
   // a tossed character flies as a leap from the carrier's hands.

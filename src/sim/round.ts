@@ -1,7 +1,7 @@
 import { ofSide } from '../content/characters.ts';
 import type { Level } from '../content/level.ts';
 import { levelBodies, pointFor, spawnPoint } from './build.ts';
-import { halfHeight, isCharacter, spawnOf, type ClientId, type NetId } from './entities.ts';
+import { characterOf, halfHeight, spawnOf, type ClientId, type NetId } from './entities.ts';
 import type { Captured, Despawn, DugOut, Hello, Left, Look, MapPick, OpenDoor, Opened, Phase, PhaseMessage, Rescue, Secured, Side, Worn } from './messages.ts';
 import type { Identities, OwnershipTable } from './ownership.ts';
 import { follow, type Sim } from './world.ts';
@@ -297,7 +297,7 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
   if (m.type === 'captured' && m.from === sim.me) sim.digOut = sim.time + knobs(sim.round).digOut;
   if (playerOf(sim.round, sim.me)?.captured === null) sim.digOut = null;
   if (m.type === 'dugOut' && m.from === sim.me) {
-    const me = [...sim.entities.values()].find((e) => e.home === sim.me && isCharacter(e.kind));
+    const me = characterOf(sim.entities, sim.me);
     const exit = pointFor(sim.level, 'tunnelExit', 'cat');
     if (me && exit) me.body.setTranslation(exit, true);
     sim.leap = null;
@@ -358,7 +358,8 @@ export function removals(sim: Sim, host: ClientId | undefined): Despawn[] {
     const back = sim.round.roster.some((p) => p.name === name && p.client !== null);
     if (!back && sim.time - at < AWAY - 1e-9) continue;
     sim.away.delete(client);
-    for (const e of sim.entities.values()) if (e.home === client && isCharacter(e.kind)) out.push({ type: 'despawn', from: sim.me, id: e.id });
+    const gone = characterOf(sim.entities, client);
+    if (gone) out.push({ type: 'despawn', from: sim.me, id: gone.id });
   }
   return out;
 }
