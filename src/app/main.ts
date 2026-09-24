@@ -30,8 +30,7 @@ const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
 await init();
 // The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
 const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
-const name = `Гравець ${1000 + Math.floor(Math.random() * 9000)}`; // until the room screen asks for one (card 50)
-const { session, room } = await roomScreen(async (room) => ({ session: await connect(`${relay}/${room}`, countryHouse, name), room }));
+const { session, room } = await roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, countryHouse, name), room }));
 const { sim } = session;
 // The host's button, in the lobby and the results: the round table's successor phase.
 const next = () => {

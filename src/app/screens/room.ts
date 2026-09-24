@@ -7,14 +7,22 @@ const REFUSAL: Record<Refusal, string> = {
   named: 'Ви вже в цій кімнаті під іншим ім’ям.',
 };
 
-// The room screen: create a room or join one by its code. `enter` connects to the room; while it fails
-// the screen stays and says why: the fold's reason for a refused name, or no relay. Once in, the screen leaves a one-line hint that shows the room's code,
+// What the room screen keeps in localStorage (card 50), the only save GAME.md allows: the player's
+// name and the last room it entered, so a reload rejoins in one click.
+const NAME = 'name';
+const ROOM = 'room';
+
+// The room screen: a name, then create a room or join one by its code. `enter` connects to the room
+// with the name; while it fails the screen stays and says why: the fold's reason for a refused name, or
+// no relay, and the name can be changed. The name lives in its input and localStorage only; once in,
+// the round's roster is the fact. Once in, the screen leaves a one-line hint that shows the room's code,
 // so the other players can join it, and the controls. The app's player-facing text lives in its screens.
-export function roomScreen<T>(enter: (code: string) => Promise<T>): Promise<T> {
+export function roomScreen<T>(enter: (code: string, name: string) => Promise<T>): Promise<T> {
   const screen = document.createElement('form');
   screen.className = 'room';
   screen.innerHTML = `
     <h1>Не час для рибки</h1>
+    <input name="player" placeholder="Ваше ім’я" maxlength="20" autocomplete="off" />
     <button type="button" name="create">Створити кімнату</button>
     <p>або</p>
     <input name="code" placeholder="Код кімнати" inputmode="numeric" maxlength="4" autocomplete="off" />
@@ -22,13 +30,23 @@ export function roomScreen<T>(enter: (code: string) => Promise<T>): Promise<T> {
     <p class="status"></p>`;
   document.body.append(screen);
   const status = screen.querySelector('.status')!;
-  const code = screen.querySelector('input')!;
+  const player = screen.querySelector<HTMLInputElement>('[name=player]')!;
+  const code = screen.querySelector<HTMLInputElement>('[name=code]')!;
+  player.value = localStorage.getItem(NAME) ?? '';
+  code.value = localStorage.getItem(ROOM) ?? '';
   return new Promise((resolve) => {
     const tryRoom = async (room: string) => {
+      const name = player.value.trim();
+      if (!name) {
+        status.textContent = 'Введіть своє ім’я.';
+        return;
+      }
       status.textContent = 'З’єднання…';
       screen.inert = true;
       try {
-        const value = await enter(room);
+        const value = await enter(room, name);
+        localStorage.setItem(NAME, name);
+        localStorage.setItem(ROOM, room);
         screen.replaceWith(hint(room));
         resolve(value);
       } catch (e) {
