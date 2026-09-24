@@ -24,3 +24,8 @@
 - 22 movement asymmetry, sneak, climb, carry: one speed table; cat 0.5 m wide and 0.9 m tall, dog 0.8 m and 1.4 m; dog walk 4 m/s, carrying 2 m/s. Batch S1, 2026-09-24.
 - 23 noise pings, markers, the event list: one ping per impact (ADR 0010 amended). Batch S1, 2026-09-24.
 - 24 scent trails and sniff: each client's own pose history. Batch S1, 2026-09-24.
+- 25 roster: the round table's, written only by foldRound on every client. Batch S2, 2026-09-24.
+- 26 the sim runs a content level: src/sim/level.ts retired; the spawn-point half of the debt card closed. Batch S2, 2026-09-24.
+- 27 round and match: one fold; prep 45.000 s; host migration 0–17 ms, no phase folded twice. Producer: dropping "only the host" turns the migration test red. Batch S2, 2026-09-24.
+- 28 secured fish, storages, prep exits: the fridge takes 3.017 s with 1 ping; the aquarium holds 0 alone and 0.517 s with a teammate. Batch S2, 2026-09-24.
+- 29 kennel, capture, rescue, dig-out: dig-out 60.000–60.017 s. Batch S2, 2026-09-24.
