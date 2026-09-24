@@ -1,7 +1,6 @@
 import { countryHouse } from '../../../src/content/maps/country-house.ts';
-import type { Side } from '../../../src/sim/messages.ts';
 import { IDLE } from '../../../src/sim/movement.ts';
-import { autoTeam, catsTeam, newRound, type Round } from '../../../src/sim/round.ts';
+import type { Round } from '../../../src/sim/round.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
 import { captive, capturedMe, fishIn, go, heldNow, hold, phase, place, plantHere, pounce, rescue, toss, until, type P } from './bots.ts';
@@ -74,13 +73,10 @@ function* hunter(c: HeadlessClient): Script {
 }
 
 // A guard (every other dog): after the others have left the spawn, a mine at the east hole (the second
-// dog) or the west fence's exit (the third), then it sniffs a step back from it. A dog past the third
-// enters on another's spawn point (the level has three), so it steps out of their way at once, to the
-// yard east of the doghouse, 2 m south of the dogs' lane.
+// dog) or the west fence's exit (the third), then it sniffs a step back from it.
 function* guard(c: HeadlessClient): Script {
   const { n } = place(c);
   const route = [undefined, ROUTE.dogToEastHole, ROUTE.dogToWestFence][n];
-  if (n > 2) yield* go(c, [{ x: 6 + 1.5 * (n - 3), z: 10.5 }]);
   yield* hold(c, 1.2 * n);
   if (route) {
     yield* go(c, route, { sprint: true });
@@ -96,13 +92,6 @@ const script = (c: HeadlessClient): Script => {
   return side === 'cat' ? (n % 2 === 0 ? runner(c) : kitchen(c)) : n === 0 ? hunter(c) : guard(c);
 };
 
-// The i-th player's side by GAME.md's auto-balance, asked of the round's own rule.
-function balanced(i: number): Side {
-  const r = newRound();
-  r.roster = Array.from({ length: i + 1 }, (_, j) => ({ name: `p${j}`, team: null, client: null, looks: {}, worn: {}, captured: null }));
-  return autoTeam(r, `p${i}`) === catsTeam(r) ? 'cat' : 'dog';
-}
-
 const LIMIT = (players: number) => (players <= 3 ? 240 : 360); // s of sim time a round ends in: 4 min at 3, 6 min above
 const s = (x: number) => x.toFixed(1);
 
@@ -117,7 +106,7 @@ function judge(r: Run): Verdict {
   const oneMessage = overs.every((t) => t && t.seq === overs[0]!.seq && JSON.stringify(t.round.results) === JSON.stringify(overs[0]!.round.results));
   const h = here[0]!;
   const result = r.ends[h]!.results[0];
-  const scripted = result && (r.heist === undefined ? result.why === 'fish' && result.winner === result.cats : result.why !== 'fish' && result.winner !== result.cats);
+  const scripted = result && (r.heist === undefined ? result.why === 'fish' && result.winner === 'cat' : result.why !== 'fish' && result.winner === 'dog');
   const prep = turnTo(h, 'prep');
   const heist = turnTo(h, 'heist');
   const took = overs[0] && prep ? overs[0].time - prep.time : Infinity;
@@ -136,22 +125,24 @@ function judge(r: Run): Verdict {
     blasts: String(count('blast')),
     captured: String(by('captured')),
     rescues: String(by('rescue')),
-    winner: result ? `${result.winner} (cats ${result.cats})` : 'none',
+    winner: result ? `${result.winner}s` : 'none',
     why: result?.why ?? 'none',
   };
   const lines = [
-    `the end: ${result ? `${result.why}, ${result.secured} fish, winner team ${result.winner} (cats ${result.cats})` : 'none'} on ${here.length} clients at ${oneMessage ? `one message, seq ${overs[0]!.seq}` : 'DIFFERENT messages'}; as scripted: ${scripted ?? false}`,
+    `the end: ${result ? `${result.why}, ${result.secured} fish, winner ${result.winner}s` : 'none'} on ${here.length} clients at ${oneMessage ? `one message, seq ${overs[0]!.seq}` : 'DIFFERENT messages'}; as scripted: ${scripted ?? false}`,
     `round: ${row.round} of sim time from prep to the end (limit ${LIMIT(players)})${r.heist === undefined ? '' : `, heist ${r.heist} s`}`,
     `fish delivered ${row.fish}; first grab ${row.grab === 'none' ? 'none' : `${row.grab} into the heist`}; mines armed ${row.mines}, defused ${row.defused}, blasts ${row.blasts}; captured ${row.captured}, rescues ${row.rescues}`,
   ];
   return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players), row };
 }
 
-// Card 63: a round to the end at any roster size, the players sided by the auto-balance, the same scripts.
+// Card 63: a round to the end at any roster size, the same scripts. The fold sides the players at prep
+// (ADR 0014) and the scripts read their side there: `side` is only the runner's label for a seat with no
+// character, the first seat being a dog at every roster size of two or more.
 const aRound: Scenario = {
   about: 'a round to the end: mines at the exits, a defuse, fish out, a grab, the kennel, a rescue',
   level: countryHouse,
-  player: (i) => ({ side: balanced(i), script }),
+  player: (i) => ({ side: i === 0 ? 'dog' : 'cat', script }),
   judge,
   round: true,
   seconds: 420,

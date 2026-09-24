@@ -1,4 +1,3 @@
-import type { Team } from '../../sim/messages.ts';
 import type { Round } from '../../sim/round.ts';
 
 // A DOM element with its properties and children. The screens build what they show with it, never as
@@ -9,8 +8,5 @@ export function tag<K extends keyof HTMLElementTagNameMap>(name: K, props: Parti
   return e;
 }
 
-// A team as the screens name it.
-export const TEAM: Record<Team, string> = { A: 'команда А', B: 'команда Б' };
-
-// The session's matches won per team, the round table's count.
-export const score = (r: Round) => `Рахунок сесії: ${TEAM.A} ${r.score.A} : ${r.score.B} ${TEAM.B}`;
+// The session's matches won per name, the round table's count.
+export const score = (r: Round) => `Рахунок сесії: ${Object.entries(r.score).map(([name, n]) => `${name} ${n}`).join(', ') || 'перемог ще немає'}`;

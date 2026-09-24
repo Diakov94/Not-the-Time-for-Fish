@@ -6,7 +6,7 @@ files: src/app/screens/results.ts, src/app/screens/room.ts, index.html
 Card 48's results are a list of sentences; the hint bar of card 50 spells every key by hand (card 103 made it ask the input zone). GAME.md, Menus: results → back to the lobby; a player also needs to leave a room without closing the tab.
 
 ## DoD
-- The results screen in the menu's style: the round's outcome, the match's, the session score, the tiebreak rule card 70 named.
+- The results screen in the menu's style: the round's outcome, every player's points and the match's winner by name (card 162), the session score per player, ADR 0014's tiebreak named.
 - The hint bar shows the bound keys through the input zone (card 103) and hides after the first round for a browser that has seen the hints.
 - "Вийти з кімнати" on the lobby and the results: the socket closes and the room screen returns.
 

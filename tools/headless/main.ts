@@ -61,7 +61,7 @@ const scenario = { ...own, level };
 const clients = Number(values.clients);
 const seconds = Number(values.seconds ?? scenario.seconds ?? 20);
 const heist = values.heist === undefined ? scenario.heist : Number(values.heist);
-const knobs = { ticks: Number(values['tick-rate']), delay: Number(values.delay), rounds: Number(values.rounds ?? scenario.rounds ?? 1), ...(heist !== undefined && { heist }) };
+const knobsAt = (n: number) => ({ ticks: Number(values['tick-rate']), delay: Number(values.delay), rounds: Number(values.rounds ?? scenario.rounds?.(n) ?? 1), ...(heist !== undefined && { heist }) });
 const worst = (r: Result, k: 'moving' | 'resting') => Math.max(...r.divergence.map((d) => d[k]));
 // `--counts 3,4,5,6,7,8`: the scenario once per player count, one run after another, and one table: a line
 // per count of its sides, the shared judges' worst moving copy and visible desyncs, the scenario judge's
@@ -72,7 +72,7 @@ if (values.counts) {
   let code = 0;
   for (const n of values.counts.split(',').map(Number)) {
     const t = performance.now();
-    const r = await run(scenario, n, seconds, knobs);
+    const r = await run(scenario, n, seconds, knobsAt(n));
     const dogs = r.clients.filter((c) => c.side === 'dog').length;
     const verdict = r.code === 0 ? 'PASS' : 'FAIL';
     const wall = `${((performance.now() - t) / 1000).toFixed(1)} s`;
@@ -87,6 +87,7 @@ if (values.counts) {
   process.exit(code);
 }
 const t0 = performance.now();
+const knobs = knobsAt(clients);
 const r = await run(scenario, clients, seconds, knobs);
 const m = (x: number) => x.toFixed(3).padStart(8);
 const f = (x: number, w = 8) => x.toFixed(1).padStart(w);

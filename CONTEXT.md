@@ -5,12 +5,12 @@ The shared language of the game: a physics-based team hide-and-seek heist in whi
 ## Players and sides
 
 **Side**:
-One of the two roles a team plays in a round: Cats or Dogs.
+One of the two roles a player plays in a round: Cats or Dogs; the rotation changes a player's side between rounds.
 _Avoid_: faction, role, class
 
 **Team**:
-A fixed group of players for a match; it plays Cats in one round and Dogs in the other.
-_Avoid_: squad, party, side
+The players on one side in one round, teammates to each other. There is no fixed team: the rotation picks the dogs anew every round, and the cats are everyone else.
+_Avoid_: squad, party, side, team A/B
 
 **Cat**:
 A player on the thieving side; enters the property to steal fish.
@@ -29,7 +29,7 @@ The abilities every character on a side has.
 _Avoid_: loadout, class kit
 
 **Host**:
-The player who created the room; picks the map and can reassign teams.
+The player who created the room; picks the map and starts the rounds.
 _Avoid_: owner, admin, leader
 
 **Room**:
@@ -37,18 +37,26 @@ The private group of players behind a short room code, from its creation until t
 _Avoid_: server, session, game, lobby (the lobby is the room's screen)
 
 **Lobby**:
-The screen a room shows between matches: team assignment, map pick, voice-channel reminder.
+The screen a room shows between matches: the roster with the next round's dogs, map pick, voice-channel reminder.
 _Avoid_: menu, waiting room, room
 
 ## Structure of play
 
 **Session**:
-One sitting of the friend group; a series of matches with a running score.
+One sitting of the friend group; a series of matches, match wins counted per player.
 _Avoid_: game night, evening
 
 **Match**:
-Two rounds on the same map with sides swapped; decided by secured fish.
+As many rounds on the same map as the rotation needs for every player to play dog at least once with dog counts at most one apart (3 players → 3 rounds, 4 → 4, 5 → 3, 6 → 3, 7 → 4, 8 → 3); decided by the top player score.
 _Avoid_: game, set
+
+**Rotation**:
+The rule that picks each round's dogs at the 1:2 ratio: the players with the fewest dog rounds this match first, in join order.
+_Avoid_: auto-balance (the ratio alone), swap, shuffle, reassignment
+
+**Score**:
+A player's points in a match: one per fish secured as a cat, one per catch as a dog.
+_Avoid_: points, kills, team score
 
 **Round**:
 One heist on one map: prep, heist and, if needed, overtime.
@@ -201,3 +209,7 @@ _Avoid_: respawn, escape, timeout
 **Secured**:
 A fish that a cat has carried into the hideout; only secured fish count.
 _Avoid_: stolen, scored, delivered, extracted
+
+**Catch**:
+A capture credited to the dog that last held the cat; a dog's point.
+_Avoid_: kill, capture (the cat's state), grab

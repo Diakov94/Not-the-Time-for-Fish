@@ -139,9 +139,10 @@ test("a joiner during heist holds the host's round within 500 ms, its timer a ho
   await play(500, () => b!.sim.round.phase === 'heist');
   spawn(b!, 'cat', { x: 0, y: 1, z: 0 });
   const fish = spawn(a!, 'fish', { x: 0, y: 0.1, z: 2 });
+  await play(500, () => b!.sim.entities.has(fish)); // the claim after the fish's spawn in the relay's order
   send(b!, { type: 'claim', from: b!.sim.me, id: fish, hold: true });
   send(b!, { type: 'secured', from: b!.sim.me, fish, at: 1.5 });
-  await play(1000, () => a!.sim.round.secured.length === 1 && a!.sim.round.roster.every((p) => p.team !== null));
+  await play(1000, () => a!.sim.round.secured.length === 1 && a!.sim.round.roster.every((p) => p.side !== null));
   // A holds its state until 20 of B's pings are in the relay's order after the join.
   const send0 = a!.ws.send.bind(a!.ws);
   let state: string | undefined;
