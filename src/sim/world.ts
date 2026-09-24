@@ -179,11 +179,14 @@ export function follow(sim: Sim): void {
 // `intent` is this client's player input, held for every step of the call. Returns the messages the
 // steps produced (a lunge's grab, a wiggle-free, a hit, noise, touch claims, the host's clock and
 // removals) and the fold's outbox, for the caller to send. `host` is the host the relay names now.
-export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientId): SimMessage[] {
+// `before` runs ahead of each fixed step with the seconds of passed-in time still unstepped after it, so a
+// caller sets what a step moves to at that step's own moment (net: every copy's target).
+export function step(sim: Sim, dt: number, intent: Intent = IDLE, host?: ClientId, before?: (left: number) => void): SimMessage[] {
   const out: SimMessage[] = sim.outbox.splice(0);
   sim.accumulator += dt;
   while (sim.accumulator >= STEP) {
     sim.accumulator -= STEP;
+    before?.(sim.accumulator);
     sim.time += STEP;
     const c = myCharacter(sim);
     const act = stunned(sim) ? IDLE : intent; // a stunned cat's or a slipped dog's intent is not its own

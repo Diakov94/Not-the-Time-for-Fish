@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import * as THREE from 'three';
 import type { Character } from '../content/characters.ts';
-import { COAT, DEFAULT, INK, material, TEAM, type Vision } from './palette.ts';
+import { COAT, DEFAULT, GLASS, INK, material, TEAM, type Vision } from './palette.ts';
 
 // ADR 0011's rig: one skeleton per side, named parts a character file dresses and the poses every
 // character shares. A character stands upright in its side's frame (a cat 0.5 x 0.9 m, a dog 0.8 x 1.4 m,
@@ -42,6 +42,7 @@ export type Facts = {
   held: boolean; // another player holds it
   stunned: boolean;
   hidden: boolean;
+  wet: boolean; // a water bomb splashed it (card 129)
 };
 export type Pose = 'idle' | 'walk' | 'run' | 'sneak' | 'carry' | 'stunned' | 'tumble' | 'emote';
 
@@ -183,6 +184,7 @@ export function rigFor(c: Character, look: Look, radius: number, halfHeight: num
   const w = 2 * radius;
   rig.root.scale.set(w / f.w, (w + 2 * halfHeight) / f.h, w / f.w);
   rig.root.userData.rig = rig;
+  rig.root.userData.fur = coats(c).fur;
   return rig;
 }
 
@@ -303,7 +305,40 @@ export function pose(rig: Rig, f: Facts, t: number): Pose {
       rig.emotes[rig.emote!.n]!.pose(rig, (t - rig.emote!.at) / rig.emotes[rig.emote!.n]!.length);
       break;
   }
+  soak(rig, f.wet, t);
   return which;
+}
+
+// A wet character (card 129): every part in its fur slot turns to that slot darkened to WET of itself,
+// and DRIPS drops fall from under its body, each in its own DRIP s cycle; dry, the fur is its slot again
+// and the drops are gone. The fur is swapped only when the fact changes.
+const WET = 0.6;
+const DRIPS = 4;
+const DRIP = 0.7; // s
+const DROP = new THREE.IcosahedronGeometry(0.025, 0).scale(1, 1.6, 1);
+function soak(rig: Rig, wet: boolean, t: number): void {
+  const { root } = rig;
+  if (root.userData.wet !== wet) {
+    root.userData.wet = wet;
+    const fur = material(root.userData.fur as number);
+    const dark = material(new THREE.Color(root.userData.fur as number).multiplyScalar(WET).getHex());
+    root.traverse((o) => {
+      if (o instanceof THREE.Mesh && o.material === (wet ? fur : dark)) o.material = wet ? dark : fur;
+    });
+    if (!root.userData.drips) {
+      const drips = new THREE.Group();
+      for (let i = 0; i < DRIPS; i++) drips.add(new THREE.Mesh(DROP, material(GLASS.pane)));
+      root.userData.drips = drips;
+      root.add(drips);
+    }
+    (root.userData.drips as THREE.Group).visible = wet;
+  }
+  if (!wet) return;
+  const { w, h } = FRAME[rig.side];
+  (root.userData.drips as THREE.Group).children.forEach((d, i) => {
+    const k = (t / DRIP + i / DRIPS) % 1;
+    d.position.set(0.3 * w * Math.sin(2.4 * i), (0.05 - 0.55 * k * k) * h, 0.25 * w * Math.cos(2.4 * i));
+  });
 }
 
 // Every character file, found by its path and keyed by the roster's id (ADR 0011: no index lists them).
