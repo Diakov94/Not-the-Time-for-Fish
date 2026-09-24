@@ -100,3 +100,4 @@
 - 115 the dogs 4-6: concept, skeleton, detail and emotes. Wave 1 DOGS-B, 2026-09-24.
 - bug-net-copy-freezes-at-an-ownership-change: the fold decides once, at a tick's arrival; the 8-client round meets the card's acceptance 5/5 (a grabbed cat on the other clients 0.150-0.203 → 0.055-0.094 m). Stall divergence is filed separately. The last MVP bug, 2026-09-24.
 - 160 the rotation picks the dogs at every prep; 161 per-player score, a catch names its dog; 164 meta progress by side. ROTATION (owner decision, ADR 0014), 2026-09-24.
+- SIM-FIX: bug-sim-grab-reaches-through-props, bug-sim-cat-carries-any-mass, bug-sim-claim-on-a-held-entity, bug-sim-round-ends-on-a-cats-disconnect, review-sim-debris-stays-fallen-across-rounds, review-sim-stun-and-slip-seen-by-every-client (with wetness), review-sim-one-query-for-a-clients-character, review-sim-securing-never-forgets-a-refused-fish, review-content-fish-market-anatomy-unchecked. 2026-09-24.
