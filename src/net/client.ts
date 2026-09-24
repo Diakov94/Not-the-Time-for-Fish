@@ -150,12 +150,15 @@ export function spawn(s: Session, kind: Kind, p: { x: number; y: number; z: numb
 // One frame of the caller's loop, in real time: copies move toward their owners' poses, the sim
 // steps and its touch claims go out, and every TICK_MS a tick goes out. The next tick is due TICK_MS
 // after the last one was due, not after the frame that sent it, so the mean interval is TICK_MS at any
-// frame rate; after a stall of more than a tick the schedule starts again from now.
+// frame rate; after a stall of more than a tick the schedule starts again from now. A tick waits for a
+// frame the sim stepped in: before its first step, a body the fold just gave this client (a grabbed
+// cat) still stands at its copy's pose, which is not this client's.
 export function frame(s: Session, dt: number, intent: Intent): void {
   const now = performance.now();
   interpolate(s.sim, s.receiver, now);
+  const time = s.sim.time;
   for (const claim of step(s.sim, dt, intent, s.host)) send(s, claim);
-  if (now - s.lastTick < TICK_MS) return;
+  if (s.sim.time === time || now - s.lastTick < TICK_MS) return;
   s.lastTick = now - s.lastTick < 2 * TICK_MS ? s.lastTick + TICK_MS : now;
   const t = tick(s.sim, s.rested);
   if (!t) return;

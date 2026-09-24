@@ -95,3 +95,4 @@
 - 114 the dogs 1-3: concept, skeleton, detail and emotes. Wave 1 DOGS-A, 2026-09-24.
 - 113 the cats 4-6: concept, skeleton, detail and emotes. Wave 1 CATS-B, 2026-09-24.
 - 115 the dogs 4-6: concept, skeleton, detail and emotes. Wave 1 DOGS-B, 2026-09-24.
+- bug-net-copy-freezes-at-an-ownership-change: the fold decides once, at a tick's arrival; the 8-client round meets the card's acceptance 5/5 (a grabbed cat on the other clients 0.150-0.203 → 0.055-0.094 m). Stall divergence is filed separately. The last MVP bug, 2026-09-24.
