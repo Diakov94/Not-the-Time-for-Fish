@@ -4,7 +4,7 @@ import { livePings } from '../render/senses.ts';
 import { project, type View } from '../render/view.ts';
 import { isCharacter } from '../sim/entities.ts';
 import { pinging } from '../sim/heist.ts';
-import { minesLeft, progress, whisker } from '../sim/mines.ts';
+import { minesLeft, nextMine, progress, stunned, wet, whisker } from '../sim/mines.ts';
 import type { Side } from '../sim/messages.ts';
 import { sideOf } from '../sim/ownership.ts';
 import { perkOf } from '../sim/perks.ts';
@@ -14,7 +14,7 @@ import { offerView } from '../settings/screen.ts';
 import { settings } from '../settings/store.ts';
 import { due, see, type Hint } from './hints.ts';
 import { CSS } from './style.ts';
-import { FISH, HIDE, HINT, ITEMS, MATE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
+import { EFFECT, FISH, HIDE, HINT, ITEMS, MATE, MINE, OVERTIME, PERK, PHASE, WORK } from './words.ts';
 
 // GAME.md, UI / HUD: the in-round overlay (ADR 0008), a view of the sim as render and audio are. Once per
 // frame it reads the round, entity and ownership tables, this client's own character state and render's
@@ -30,6 +30,7 @@ export type Hud = {
   mines: HTMLElement;
   trap: HTMLElement;
   perk: HTMLElement;
+  effect: HTMLElement;
   overtime: HTMLElement;
   work: HTMLElement;
   what: HTMLElement;
@@ -59,7 +60,7 @@ export function createHud(): Hud {
       <b class="secured"></b><span class="of">/</span><b class="left"></b>
       <small>${FISH.secured}</small><span></span><small>${FISH.left}</small>
     </div>
-    <div class="items"><span class="mines panel"></span><span class="trap panel"></span><span class="perk panel"></span></div>
+    <div class="items"><span class="mines panel"></span><span class="trap panel"></span><span class="perk panel"></span><span class="effect panel"></span></div>
     <div class="work panel"><span class="what"></span><div class="bar"><div class="fill"></div></div></div>
     <div class="whisker"><i><b></b><b></b><b></b></i><i><b></b><b></b><b></b></i></div>
     <div class="team"></div>
@@ -82,6 +83,7 @@ export function createHud(): Hud {
     mines: $('.mines'),
     trap: $('.trap'),
     perk: $('.perk'),
+    effect: $('.effect'),
     overtime: $('.overtime'),
     work: $('.work'),
     what: $('.what'),
@@ -111,18 +113,23 @@ export function drawHud(hud: Hud, sim: Sim, view: View): void {
   // Secured is the round table's; a secured fish leaves the entity table, so the rest are still in play.
   write(hud.secured, String(r.secured.length));
   write(hud.left, String([...sim.entities.values()].filter((e) => e.kind === 'fish').length));
-  // The carried items, this client's own facts: a dog's mines, a cat's trap in hand, the perk slot.
+  // The carried items, this client's own facts: a dog's mines and which comes next, a cat's trap in hand,
+  // the perk slot; and what a mine or a trap did to the own character: a wet cat's time left, a slipped dog.
   const side = playsAs(r, sim.me);
   hud.mines.hidden = side !== 'dog';
   hud.trap.hidden = side !== 'cat';
   hud.perk.hidden = side === undefined;
-  write(hud.mines, `${ITEMS.mines}: ${minesLeft(sim)}`);
+  const mines = minesLeft(sim);
+  write(hud.mines, `${ITEMS.mines}: ${mines}${mines > 0 ? ` · ${ITEMS.next} ${MINE[nextMine(sim)]}` : ''}`);
   write(hud.trap, `${ITEMS.trap}: ${sim.trap ? ITEMS.inHand : ITEMS.none}`);
   hud.trap.classList.toggle('off', !sim.trap);
   const perk = perkOf(sim);
   const until = sim.perk?.until ?? null;
   write(hud.perk, `${ITEMS.perk}: ${perk ? PERK[perk] + (until === null ? '' : ` ${clock(until - sim.time)}`) : ITEMS.none}`);
   hud.perk.classList.toggle('off', !perk);
+  const effect = side === 'cat' && wet(sim) > 0 ? `${EFFECT.wet} ${clock(wet(sim))}` : side === 'dog' && stunned(sim) ? EFFECT.slipped : '';
+  hud.effect.hidden = !effect;
+  write(hud.effect, effect);
   // The contextual ones, each with the sim's fact it shows: the whisker cue (card 39's query), the plant or
   // defuse in progress, overtime and, for the cat that carries a fish then, that it is heard.
   hud.whisker.hidden = !whisker(sim);

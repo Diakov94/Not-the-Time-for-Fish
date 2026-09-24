@@ -1,11 +1,14 @@
 import { keyOf } from '../input/bindings.ts';
+import type { Variant } from '../sim/entities.ts';
 import type { Phase } from '../sim/messages.ts';
 import type { Perk } from '../sim/perks.ts';
 
 // Every player-facing word of the HUD, in Ukrainian (GAME.md, Localization): the HUD's text lives here.
 export const PHASE: Partial<Record<Phase, string>> = { prep: 'Підготовка', heist: 'Пограбування', overtime: 'Овертайм' };
 export const FISH = { title: 'Рибка', secured: 'вкрадено', left: 'лишилось' };
-export const ITEMS = { mines: 'Міни', trap: 'Пастка', perk: 'Перк', none: 'немає', inHand: 'є' };
+export const ITEMS = { mines: 'Міни', trap: 'Пастка', perk: 'Перк', none: 'немає', inHand: 'є', next: 'далі' };
+export const MINE: Partial<Record<Variant, string>> = { firecracker: 'петарда', water: 'водяна' };
+export const EFFECT = { wet: 'Мокрий', slipped: 'Послизнувся' };
 export const WORK = { plant: 'Мінування', defuse: 'Знешкодження' };
 export const OVERTIME = { all: 'Час вийшов: раунд триває, поки несуть рибку', carrier: 'Ти несеш рибку: собаки чують, де ти' };
 export const MATE = { free: 'вільний', grabbed: 'схоплений', captured: 'у вольєрі' };
