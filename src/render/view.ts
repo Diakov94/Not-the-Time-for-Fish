@@ -195,3 +195,14 @@ function follow(
   camera.lookAt(at.x, at.y - lift * (1 - d / DISTANCE), at.z);
   camera.position.add(shake);
 }
+
+const projected = new THREE.Vector3();
+
+// Where a world point falls on the canvas, in CSS pixels from its top left, through the camera of the
+// frame render drew last (the HUD's ping arrows, card 61). A point behind the camera comes out mirrored
+// through the centre, and says so.
+export function project(view: View, p: Vector): { x: number; y: number; behind: boolean } {
+  const v = projected.set(p.x, p.y, p.z).project(view.camera);
+  const { clientWidth: w, clientHeight: h } = view.renderer.domElement;
+  return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, behind: v.z > 1 };
+}
