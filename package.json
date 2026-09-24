@@ -10,7 +10,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "zones": "! grep -rslE \"(from|import)[ (]*['\\\"]three|document\\.|window\\.|navigator\\.\" src/sim src/net src/relay | grep . && ! grep -rslE \"(src/|\\.\\./|@)(render|app)/\" src/sim src/net src/relay | grep .",
+    "zones": "! grep -rslE \"(from|import)[ (]*['\\\"]three|document\\.|window\\.|navigator\\.\" src/sim src/net src/relay src/content | grep . && ! grep -rslE \"(src/|\\.\\./|@)(render|app|hud|audio)/\" src/sim src/net src/relay src/content | grep . && ! grep -rslE \"(from|import)[ (]*['\\\"](\\.\\./|@dimforge)\" src/content | grep .",
     "test": "vitest run --passWithNoTests",
     "gates": "npm run typecheck && npm run lint && npm run zones && npm run test && npm run headless -- --clients 2 --seconds 10",
     "relay": "node src/relay/serve.ts",

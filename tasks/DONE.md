@@ -14,3 +14,8 @@
 - bug-net-joiner-host-left: a joiner whose host leaves before answering holds the next host's table 34–36 ms after the `left` (500 allowed). Producer: the test goes red without the fix. Batch C, 2026-09-24.
 - 09 render scene: 120 FPS in both tabs at once (60 required), p99 frame 10.4 ms; a remote carried crate is drawn moving in 298 of 298 frames. Batch C, 2026-09-24.
 - 10 room screen, input, desync dump: two tabs join room 4754 and each sees the other walk (6.0 m and 3.7 m); the F9 dumps of both tabs match at 0.0 m. Batch C, 2026-09-24.
+- 16 level schema: src/content/level.ts owns it; the Prototype room written in it matches src/sim/level.ts crate for crate. Batch C1, 2026-09-24.
+- 17 country house statics: 4 exits, a 4 m fence, 4 rooms, 5 doors. Batch C1, 2026-09-24.
+- 18 anatomy: 3 storages holding 5 fish, hideout, tunnel, doghouse, kennel with its hatch at 2.5 m, spawns, bags, pickups. Batch C1, 2026-09-24.
+- 19 hiding spots, routes, props, doors: 6 spots 0.65 m wide, 4 cat routes, 26 synced props, 26 debris. Batch C1, 2026-09-24.
+- bug-net-stateless-host: a stateless host spawns the level 17 ms after the `left`; an owed joiner matches in 16 ms. Producer: both tests red without the fix. Batch C1, 2026-09-24.

@@ -41,7 +41,15 @@ export function connect(url: string, level: Level): Promise<Session> {
         for (const p of level.crates) spawn(s, 'crate', p);
         resolve(s);
       } else if (!held) handle(s, m, at);
-      else if (m.type !== 'state' || m.to !== s.sim.me) held.push([m, at]);
+      else if (m.type === 'left' && m.host === s.sim.me) {
+        // Named host while still owed a state: anyone holding one joined earlier and would have been named
+        // first, so nobody holds the world. It starts empty as of this `left`: the held messages replay as
+        // after a state at its `seq`, which answers every joiner still owed, and then the level spawns.
+        for (const [h, hAt] of [...held, [m, at] as const]) handle(s, h, hAt, m.seq);
+        held = null;
+        for (const p of level.crates) spawn(s, 'crate', p);
+        resolve(s);
+      } else if (m.type !== 'state' || m.to !== s.sim.me) held.push([m, at]);
       else {
         const entities = m.entities.map((e) => ({ type: 'spawn' as const, from: m.from, ...e, p: NOWHERE }));
         adopt(s.sim, entities, { rows: new Map(m.table.rows), gone: new Set(m.table.gone) });
