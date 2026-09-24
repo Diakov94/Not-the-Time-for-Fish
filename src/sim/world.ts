@@ -75,6 +75,7 @@ export type Sim = {
   outside: Vector | null; // where the own character last stood outside a hiding spot
   jumpHeld: boolean; // the own character's jump was held last step
   airJumped: boolean; // the own cat used its Acrobat jump since it last stood
+  carrierPing: number | null; // when this client, the pinging carrier, last pinged; null while it is not
 };
 
 // A timed action of the own character: when it started and ends, and where the character stood then.
@@ -147,6 +148,7 @@ export function createWorld(level: Level, me: ClientId): Sim {
     outside: null,
     jumpHeld: false,
     airJumped: false,
+    carrierPing: null,
   };
 }
 
