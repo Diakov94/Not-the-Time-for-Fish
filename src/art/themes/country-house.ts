@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import type { Box } from '../../content/level.ts';
+import { decal, hex } from '../decals.ts';
 import { CLAY, GLASS, INK, LABEL, material, METAL, OVERLAY, PAINT, WOOD } from '../palette.ts';
+import { covered, pattern, type Pattern } from '../patterns.ts';
 import { block, frameOf, type Frame, type Theme } from '../themes.ts';
 
 // The country house's theme (ADR 0011): its labels' shapes, each built inside its box and in the label's
-// palette colour; any other label is a plain box (GAME.md, Art Direction: low-poly, flat shading).
+// palette colour; any other label is a plain box (GAME.md, Art Direction: low-poly, flat shading). The
+// Ukrainian domestic details are patterns (card 108): embroidered cloth on the sofa, a kilim over the
+// bed, a tiled kitchen worktop, the grain of the living room's table, and a bone over the doghouse door.
 const ROUTE = OVERLAY.route; // the frame of an opening only cats pass: an exit or a cat route
 const HOLE = 0.6; // m: the height of a cat route's hole in its wall
 const GLASS_MATERIAL = new THREE.MeshLambertMaterial({ color: GLASS.pane, transparent: true, opacity: 0.35, depthWrite: false });
@@ -37,20 +41,27 @@ function flap(f: Frame, panel: THREE.Object3D, open: number): THREE.Group {
   return f.group;
 }
 
-// A top on four legs, a seat with a back (and arms), a crate's slatted edges.
-function table(b: Box, colour: number): THREE.Group {
+// The doghouse's sign: a bone, white on a black outline.
+const bone = (attrs: string) =>
+  `<g ${attrs}><rect x="24" y="23" width="80" height="18"/><circle cx="24" cy="20" r="12"/><circle cx="24" cy="44" r="12"/><circle cx="104" cy="20" r="12"/><circle cx="104" cy="44" r="12"/></g>`;
+const BONE = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="64" viewBox="0 0 128 64">${bone(`fill="${hex(INK.black)}" stroke="${hex(INK.black)}" stroke-width="8"`)}${bone(`fill="${hex(PAINT.porcelain)}"`)}</svg>`;
+
+// A top on four legs (the top in a pattern if asked), a seat with a back (and arms) in its colour or all
+// in a cloth, a crate's slatted edges.
+function table(b: Box, colour: number, top?: Pattern): THREE.Group {
   const { l, t, h, group } = frameOf(b);
   const m = material(colour);
-  group.add(block(2 * l, 0.06, 2 * t, m, 0, h - 0.03));
+  group.add(top ? covered(2 * l, 0.06, 2 * t, top, 0, h - 0.03) : block(2 * l, 0.06, 2 * t, m, 0, h - 0.03));
   for (const x of [-l + 0.06, l - 0.06]) for (const z of [-t + 0.06, t - 0.06]) group.add(block(0.07, 2 * h - 0.06, 0.07, m, x, -0.03, z));
   return group;
 }
-function seat(b: Box, colour: number, arms: boolean): THREE.Group {
+function seat(b: Box, colour: number, arms: boolean, cloth?: Pattern): THREE.Group {
   const { l, t, h, group } = frameOf(b);
   const m = material(colour);
+  const part = (w: number, hh: number, d: number, x: number, y: number, z = 0) => (cloth ? covered(w, hh, d, cloth, x, y, z) : block(w, hh, d, m, x, y, z));
   const back = Math.min(0.2, t);
-  group.add(block(2 * l, h, 2 * t, m, 0, -h / 2), block(2 * l, 2 * h, back, m, 0, 0, -t + back / 2));
-  if (arms) for (const x of [-l + 0.06, l - 0.06]) group.add(block(0.12, 1.3 * h, 2 * t, m, x, -0.35 * h));
+  group.add(part(2 * l, h, 2 * t, 0, -h / 2), part(2 * l, 2 * h, back, 0, 0, -t + back / 2));
+  if (arms) for (const x of [-l + 0.06, l - 0.06]) group.add(part(0.12, 1.3 * h, 2 * t, x, -0.35 * h));
   return group;
 }
 function crate(b: Box): THREE.Group {
@@ -62,10 +73,10 @@ function crate(b: Box): THREE.Group {
 }
 
 const theme: Theme = {
-  table: (s) => table(s, LABEL.table!),
+  table: (s) => table(s, LABEL.table!, 'wood'),
   'coffee table': (s) => table(s, LABEL['coffee table']!),
   'bedside table': (s) => table(s, LABEL['bedside table']!),
-  sofa: (s) => seat(s, LABEL.sofa!, true),
+  sofa: (s) => seat(s, LABEL.sofa!, true, 'embroidery'),
   armchair: (s) => seat(s, LABEL.armchair!, true),
   chair: (s) => seat(s, LABEL.chair!, false),
   'garden chair': (s) => seat(s, LABEL['garden chair']!, false),
@@ -88,7 +99,18 @@ const theme: Theme = {
     roof.position.set(-l - 0.08, -h + wall, 0);
     group.add(roof);
     group.add(block(0.02, 0.6 * wall, 0.9 * t, material(INK.shadow), l + 0.01, -h + 0.3 * wall));
+    group.add(block(0.01, 0.25, 0.5, decal(BONE), l + 0.01, -h + 0.8 * wall));
     return group;
+  },
+  // A worktop of kitchen tiles on its cupboard.
+  counter: (s) => {
+    const { l, t, h, group } = frameOf(s);
+    return group.add(block(2 * l, 2 * h - 0.04, 2 * t, material(LABEL.counter!), 0, -0.02), covered(2 * l, 0.04, 2 * t, 'tiles', 0, h - 0.02));
+  },
+  // The bed, and a kilim on the wall its head stands against: in the house that is the wall on its +z side.
+  bed: (s) => {
+    const { l, t, h, group } = frameOf(s);
+    return group.add(block(2 * l, 2 * h, 2 * t, material(LABEL.bed!)), block(1.6, 1.1, 0.02, pattern('rug'), 0, h + 0.75, t - 0.011));
   },
   gate: (s) => posts(frameOf(s), 0.14, LABEL.fence!, true),
   gap: (s) => posts(frameOf(s), 0.06, ROUTE, false),
