@@ -2,7 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, RigidBody, Vector } from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { wear } from '../art/cosmetics.ts';
-import { emote, pose, type Facts, type Rig } from '../art/rig.ts';
+import { band, emote, pose, type Facts, type Rig } from '../art/rig.ts';
+import { settings } from '../settings/store.ts';
 import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.ts';
 import { STEPS } from '../sim/events.ts';
 import { hidden } from '../sim/hiding.ts';
@@ -97,6 +98,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     camera.updateProjectionMatrix();
   }
   const lag = STEP - sim.accumulator;
+  const { palette, reducedMotion } = settings(); // this viewer's choices (ADR 0012), read once a frame
   for (const e of sim.entities.values()) {
     const o = objects.get(e.id);
     // A character whose look the roster changed is built anew.
@@ -106,6 +108,8 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
     const rig = drawn.userData.rig as Rig | undefined;
     if (rig) {
       wear(rig, wornOf(sim, e));
+      // The band shows the side (card 117 after ADR 0014: A the cats, B the dogs); the side is the kind.
+      band(rig, e.kind === 'cat' ? 'A' : e.kind === 'dog' ? 'B' : undefined, palette);
       pose(rig, facts(sim, e), sim.time);
     }
   }
@@ -133,7 +137,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   if (o && e?.kind === 'cat' && e.home === sim.me && hidden(sim, e)) peek(view, sim, o, e);
   else if (at) {
     follow(camera, sim, at, o ? EYE : 0, look, e?.body, shake);
-    const k = Math.max(0, (view.peek.until - sim.time) / BLEND);
+    const k = reducedMotion ? 0 : Math.max(0, (view.peek.until - sim.time) / BLEND); // instant under reduced motion
     camera.position.lerp(view.peek.from, k * k * (3 - 2 * k));
     camera.quaternion.slerp(view.peek.turn, k * k * (3 - 2 * k));
   }
@@ -190,7 +194,7 @@ export function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
 // camera leaves the orbit for a fixed view from the cat's head, inside the spot, looking level toward
 // where the cat last stood outside one (the sim's `outside`): out of the way it came in, never through
 // the spot's walls. The cat's own look is out of sight meanwhile. Leaving, the camera blends back to the
-// orbit over BLEND.
+// orbit over BLEND, or at once under reduced motion.
 function peek(view: View, sim: Sim, o: THREE.Object3D, cat: Entity): void {
   const { camera, peek } = view;
   camera.position.set(o.position.x, o.position.y + PEEK_EYE, o.position.z);

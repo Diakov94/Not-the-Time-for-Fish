@@ -90,6 +90,7 @@
 - 128 map in the round table; 129 water bomb (soaks: a wet cat pings for 20 s); 130 slip trap (a banana peel slips a dog 1.5 s). Wave 1 SIM1, 2026-09-24.
 - 101 maps by file name, the headless --map; 102 the settings store (one owner of per-viewer settings); 103 the input zone and bindings. Wave 0 APP-SEAMS, 2026-09-24.
 - 110 rig and poses; 111 cosmetics catalogue (12 items). Wave 0 ART0-B, 2026-09-24.
+- w1-props: delivered cards closed (see the batch report). 2026-09-24.
 - fix-audio: delivered cards closed (see the batch report). 2026-09-24.
 - 123 gamepad (Gamepad API, stub-tested); 124 remap applied (the offerBindings wiring line lands after SETTINGS-UI); 125 final bindings, feel and emote keys. Wave 1 INPUT, 2026-09-24.
 - 112 the cats 1-3: concept, skeleton, detail and emotes. Wave 1 CATS-A, 2026-09-24.
