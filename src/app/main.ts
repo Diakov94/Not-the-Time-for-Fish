@@ -1,3 +1,4 @@
+import { createAudio, hear } from '../audio/audio.ts';
 import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send, spawn } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
@@ -16,11 +17,12 @@ const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is
 // The Vite entry: it wires the zones and holds no game fact. The sim owns every pose, the entity table
 // and the fold; net carries them; render draws them; this file only moves input in and frames along.
 await init();
-const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, countryHouse));
+const name = `Гравець ${1000 + Math.floor(Math.random() * 9000)}`; // until the room screen asks for one (card 50)
+const session = await roomScreen((code) => connect(`ws://${location.hostname}:${RELAY_PORT}/${code}`, countryHouse, name));
 const { sim } = session;
 // The level's cat spawn after those the characters already in the room hold, so two players stand apart.
 const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;
-spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
+const mine = spawn(session, 'cat', spawnPoint(countryHouse, 'cat', cats)!);
 
 const canvas = document.querySelector('canvas')!;
 const input = listen(
@@ -39,6 +41,7 @@ const input = listen(
   },
 );
 const view = createView(canvas, sim);
+const audio = createAudio();
 
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
 // between the last two of them.
@@ -46,7 +49,8 @@ let last = performance.now();
 requestAnimationFrame(function loop(now: number) {
   frame(session, Math.min((now - last) / 1000, MAX_FRAME), intent(input));
   last = now;
-  draw(view, sim, input.look);
+  draw(view, sim, input.look, mine); // the camera's target: the own character until the app names another
+  hear(audio, sim, view.camera);
   drainEvents(sim); // every view has read this frame's events
   requestAnimationFrame(loop);
 });
