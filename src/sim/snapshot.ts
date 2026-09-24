@@ -13,9 +13,11 @@ export function readSnapshot(e: Entity): Snapshot {
 // Moves a kinematic copy to its owner's pose; a snapshot from anyone but the fold's owner is dropped,
 // and so is one for a prop this client's claim is in flight for.
 // A resting pose is final, so it is placed at once and the copy sleeps; a moving one is the next pose.
+// The owner's speed is kept with it: the noise rule's "at rest" (ADR 0010).
 export function applySnapshot(sim: Sim, from: ClientId, s: Snapshot): boolean {
   const e = sim.entities.get(s.id);
   if (!e || from === sim.me || sim.inFlight.has(s.id) || sim.ownership.rows.get(s.id)?.owner !== from) return false;
+  sim.ownerSpeed.set(s.id, Math.hypot(s.v.x, s.v.y, s.v.z));
   if (s.rest) {
     e.body.setTranslation(s.p, false);
     e.body.setRotation(s.q, false);

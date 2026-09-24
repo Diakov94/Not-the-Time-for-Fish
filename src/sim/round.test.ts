@@ -159,6 +159,10 @@ test('a known name whose client left rejoins on its team from a new client; a na
     expect(s.round.roster.some((p) => p.client === late.me)).toBe(false);
   }
   expect(r.sims().map(teams)).toEqual(before);
+  // The fold names why (card 68): the name is taken; a named client's second hello is refused as named.
+  r.send(back, hello(back, 'P9'));
+  r.run(1);
+  expect([late.refused, back.refused]).toEqual(['taken', 'named']);
 });
 
 type Relay = ReturnType<typeof relay>;
