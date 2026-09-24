@@ -1,7 +1,7 @@
 import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send, spawn } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
-import { DEV_PORT } from '../relay/address.ts';
+import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw } from '../render/view.ts';
 import { spawnPoint } from '../sim/build.ts';
 import { drainEvents } from '../sim/events.ts';
@@ -16,7 +16,9 @@ const MAX_FRAME = 0.25; // s: a longer frame (a tab back from the background) is
 // The Vite entry: it wires the zones and holds no game fact. The sim owns every pose, the entity table
 // and the fold; net carries them; render draws them; this file only moves input in and frames along.
 await init();
-const session = await roomScreen((code) => connect(`ws://${location.hostname}:${DEV_PORT}/${code}`, countryHouse));
+// The relay on the page's own origin, `wss` on an https page (a tunnel's), `ws` on http.
+const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${RELAY_PATH}`;
+const session = await roomScreen((code) => connect(`${relay}/${code}`, countryHouse));
 const { sim } = session;
 // The level's cat spawn after those the characters already in the room hold, so two players stand apart.
 const cats = [...sim.entities.values()].filter((e) => e.kind === 'cat').length;
