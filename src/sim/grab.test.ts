@@ -104,6 +104,24 @@ test("a cat's grab at the 20 kg barricade makes no claim and puts nothing in fli
   expect(a.inFlight.size).toBe(0);
 });
 
+test("a cat walking into the fish another client's cat holds sends no claim, and the fish stays kinematic on its client", () => {
+  const { sims: [a, b], relay, spawn, run } = room(prototypeRoom, 'A', 'B');
+  spawn('A', 'cat', { x: 0, y: halfHeight('cat'), z: -1.2 }); // faces +z, toward the fish
+  const fish = spawn('A', 'fish', { x: 0, y: halfHeight('fish'), z: 0 });
+  const toucher = spawn('B', 'cat', { x: -2, y: halfHeight('cat'), z: 0 });
+  run(IDLE, 30);
+  relay(grab(a));
+  let [claims, dynamic] = [0, 0];
+  for (let i = 0; i < 90; i++) {
+    claims += step(b, STEP, east).filter((m) => m.type === 'claim' && m.id === fish).length;
+    if (b.entities.get(fish)!.body.isDynamic()) dynamic++;
+  }
+  const x = (id: string) => b.entities.get(id)!.body.translation().x.toFixed(2);
+  console.log(`A holds the fish: ${a.ownership.rows.get(fish)?.held}; B's cat walked to x = ${x(toucher)} into its copy at x = ${x(fish)}; claims ${claims}, frames dynamic on B ${dynamic}`);
+  expect(a.ownership.rows.get(fish)).toEqual({ owner: 'A', held: true });
+  expect([claims, dynamic]).toEqual([0, 0]);
+});
+
 test("a grabbed character's body follows its carrier", () => {
   const { sims: [a, b], relay, spawn, run } = room(prototypeRoom, 'A', 'B');
   const cat = spawn('A', 'cat', { x: 0, y: 1, z: 1.5 });

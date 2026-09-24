@@ -57,11 +57,11 @@ export function grab(sim: Sim): Claim | null {
 
 // Card 05's grab. A grabbed prop is simulated here until the claim comes back, as a touched one is. The
 // side rule applies to what the cast meets first (ADR 0009), so a claim the fold would refuse is never
-// made; nor is one on a fish in a storage still shut to this cat. A cat at a storage takes its fish out
-// rather than casting at it.
+// made; nor is one on a fish in a storage still shut to this cat, or on a row the table holds for another
+// client (the fold's first rule). A cat at a storage takes its fish out rather than casting at it.
 function reach(sim: Sim, c: Entity): Claim | null {
   const e = (c.kind === 'cat' && stored(sim, c)) || ahead(sim, c);
-  if (!e) return null;
+  if (!e || sim.ownership.rows.get(e.id)?.held) return null;
   if (!isCharacter(e.kind) && !simulatedHere(sim, e)) {
     sim.inFlight.add(e.id);
     setBodyTypes(sim);
