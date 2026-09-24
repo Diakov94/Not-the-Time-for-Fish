@@ -1,27 +1,26 @@
+import { readdirSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import type { Level } from '../../src/content/level.ts';
 import { MOVING_MAX, RESTING_MAX, run, VISIBLE, type Scenario } from './run.ts';
-import { chaseKennelRescueRejoin } from './scenarios/chase-kennel-rescue-rejoin.ts';
-import { defaultGame } from './scenarios/default.ts';
-import { eightClients } from './scenarios/eight-clients.ts';
-import { grabTossWiggleHit } from './scenarios/grab-toss-wiggle-hit.ts';
-import { minesAndTraps } from './scenarios/mines-and-traps.ts';
-import { aRound } from './scenarios/round.ts';
 
-const scenarios: Record<string, Scenario> = {
-  default: defaultGame,
-  'grab-toss-wiggle-hit': grabTossWiggleHit,
-  'eight-clients': eightClients,
-  round: aRound,
-  'mines-and-traps': minesAndTraps,
-  'chase-kennel-rescue-rejoin': chaseKennelRescueRejoin,
-};
+// Found by file name, no record lists them (ADR 0011): a scenario is `scenarios/<name>.ts` with its
+// Scenario as the default export (the bots' helpers there have none); a map is
+// `src/content/maps/<name>.ts` exporting its Level as <name> in camelCase.
+const SCENARIOS = new URL('./scenarios/', import.meta.url);
+const MAPS = new URL('../../src/content/maps/', import.meta.url);
+const files = (dir: URL) => readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')).map((f) => f.slice(0, -'.ts'.length));
+const load = async (dir: URL, name: string) => (files(dir).includes(name) ? await import(new URL(`${name}.ts`, dir).href) : {});
+const scenarioOf = async (name: string): Promise<Scenario | undefined> => (await load(SCENARIOS, name)).default;
+const mapOf = async (name: string): Promise<Level | undefined> => (await load(MAPS, name))[name.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())];
 
 // `npm run headless -- --scenario <name> --clients N --seconds S`: no browser, no jsdom; exit 1 when a
-// judge fails, 2 for a scenario it does not know. A round scenario takes `--heist S` (the heist's length)
-// and `--rounds N`; `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay.
+// judge fails, 2 for a scenario or a map it does not know. `--map <name>` plays the scenario on that map
+// instead of its own. A round scenario takes `--heist S` (the heist's length) and `--rounds N`;
+// `--tick-rate` and `--delay` scale the tick sender's rate and the interpolation delay.
 const { values } = parseArgs({
   options: {
     scenario: { type: 'string', default: 'default' },
+    map: { type: 'string' },
     clients: { type: 'string', default: '2' },
     seconds: { type: 'string' },
     heist: { type: 'string' },
@@ -30,11 +29,19 @@ const { values } = parseArgs({
     delay: { type: 'string', default: '1' },
   },
 });
-const scenario = scenarios[values.scenario];
-if (!scenario) {
-  console.log(`headless: no scenario "${values.scenario}"; the scenarios: ${Object.keys(scenarios).join(', ')}`);
+const own = await scenarioOf(values.scenario);
+if (!own) {
+  const scenarios = [];
+  for (const name of files(SCENARIOS)) if (await scenarioOf(name)) scenarios.push(name);
+  console.log(`headless: no scenario "${values.scenario}"; the scenarios: ${scenarios.join(', ')}`);
   process.exit(2);
 }
+const level = values.map === undefined ? own.level : await mapOf(values.map);
+if (!level) {
+  console.log(`headless: no map "${values.map}"; the maps: ${files(MAPS).join(', ')}`);
+  process.exit(2);
+}
+const scenario = { ...own, level };
 const clients = Number(values.clients);
 const seconds = Number(values.seconds ?? scenario.seconds ?? 20);
 const heist = values.heist === undefined ? scenario.heist : Number(values.heist);
@@ -44,7 +51,7 @@ const r = await run(scenario, clients, seconds, knobs);
 const m = (x: number) => x.toFixed(3).padStart(8);
 const f = (x: number, w = 8) => x.toFixed(1).padStart(w);
 const turned = Object.entries(knobs).filter(([k, v]) => v !== (k === 'heist' ? undefined : 1));
-console.log(`headless: ${values.scenario}, ${clients} clients, ${seconds} s (${scenario.about})${turned.map(([k, v]) => `, ${k} ${v}`).join('')}`);
+console.log(`headless: ${values.scenario}${values.map ? ` on ${values.map}` : ''}, ${clients} clients, ${seconds} s (${scenario.about})${turned.map(([k, v]) => `, ${k} ${v}`).join('')}`);
 console.log(`sides: ${r.clients.map((c) => `${c.id} ${c.side}`).join(', ')}; ${r.sidesAgree ? 'the same' : 'NOT the same'} on every client`);
 console.log('entity    kind       moving m  resting m  exact -100 ms m (not judged)');
 for (const d of r.divergence) console.log(`${d.id.padEnd(9)} ${d.kind.padEnd(9)} ${m(d.moving)}  ${m(d.resting)}  ${m(d.exact)}`);

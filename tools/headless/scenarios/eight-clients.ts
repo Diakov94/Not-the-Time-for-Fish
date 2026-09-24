@@ -27,9 +27,10 @@ function judge({ samples, start }: Run): Verdict {
 }
 
 // ADR 0005's arithmetic at GAME.md's largest room: eight cats and 40 synced crates, all shoving for the run.
-export const eightClients: Scenario = {
+const eightClients: Scenario = {
   about: 'eight cats ram 40 crates to the north wall, again and again',
   level: { ...prototypeRoom, props: LANES.flatMap((x) => COLUMN.map((z) => ({ ...CRATE, p: { x, y: CRATE.p.y, z } }))) },
   player: (i) => ({ side: 'cat', at: { x: LANES[i % LANES.length]!, y: 1, z: -8 }, script: SCRIPT }),
   judge,
 };
+export default eightClients;
