@@ -30,6 +30,7 @@ export type View = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  orbit: THREE.Vector3; // the point the camera orbited on the last frame drawn: where the player is (the ear)
   objects: Map<NetId, THREE.Object3D>;
   doors: THREE.Object3D[]; // the level's door panels, index for index with the sim's door bodies
   debris: THREE.Object3D[]; // the level's debris, index for index with the sim's local debris bodies
@@ -69,7 +70,7 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
     scene.add(o);
     return o;
   });
-  const view = { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers(), peek: { from: new THREE.Vector3(), turn: new THREE.Quaternion(), until: -Infinity, unseen: null } };
+  const view = { renderer, scene, camera, orbit: new THREE.Vector3(), objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice(), work: createWork(scene), markers: createMarkers(), peek: { from: new THREE.Vector3(), turn: new THREE.Quaternion(), until: -Infinity, unseen: null } };
   // Every effect's shader compiles now, not on the frame that first shows it (card 57: the first blast's
   // frame took 96 ms): one of each is added and the hidden overlays shown while the scene compiles.
   const effects = samples();
@@ -128,6 +129,7 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   }
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
+  if (at) view.orbit.copy(at);
   const shake = drawJuice(view.juice, sim, scene, camera, at);
   const e = typeof target === 'string' ? sim.entities.get(target) : undefined;
   if (view.peek.unseen) view.peek.unseen.visible = true;

@@ -89,8 +89,8 @@ export const pinging = (sim: Sim): boolean => sim.round.phase === 'overtime' && 
 // barges it: open here at once, and for everyone at the message. A house door is fixed at its closed pose
 // while shut and a free panel once open. A fish this client holds inside the hideout is secured, once.
 // While this client is the pinging carrier, its character pings every CARRIER_EVERY, the first at once.
-// This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured; its
-// dig-out timer ending digs it out.
+// This client's own cat, unheld, on the ground inside the kennel with the gate shut, is captured, naming its
+// last holder; its dig-out timer ending digs it out.
 export function roundStep(sim: Sim): SimMessage[] {
   const out: SimMessage[] = [];
   const r = sim.round;
@@ -131,7 +131,7 @@ export function roundStep(sim: Sim): SimMessage[] {
   const caught = c?.kind === 'cat' && shut && sim.controller.computedGrounded() && volumeAt(sim, 'kennel', c.body.translation()) >= 0;
   if (inPlay && me?.captured === null && !sim.capturing && caught) {
     sim.capturing = true;
-    out.push({ type: 'captured', from: sim.me, at: sim.time - sim.heistAt });
+    out.push({ type: 'captured', from: sim.me, at: sim.time - sim.heistAt, by: sim.holder });
   }
   if (sim.digOut !== null && sim.time >= sim.digOut - 1e-9) {
     sim.digOut = null;

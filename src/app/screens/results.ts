@@ -1,7 +1,7 @@
 import type { ClientId } from '../../sim/entities.ts';
 import { successor, type Decider, type Result, type Why } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { score, tag, TEAM } from './parts.ts';
+import { score, tag } from './parts.ts';
 
 // Why a round ended, as the fold's `Result.why` says it.
 const WHY: Record<Why, string> = {
@@ -24,7 +24,7 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60))
 // An ended round of the match, the table's `results` in order: who won and why, and what the cats secured.
 function ended(x: Result, i: number): HTMLElement {
   const last = x.last === null ? '' : `, остання на ${clock(x.last)} пограбування`;
-  const text = `Раунд ${i + 1}: перемогли ${x.winner === x.cats ? 'коти' : 'пси'} (${TEAM[x.winner]}) — ${WHY[x.why]}. Коти (${TEAM[x.cats]}) винесли риби: ${x.secured}${last}.`;
+  const text = `Раунд ${i + 1}: перемогли ${x.winner === 'cat' ? 'коти' : 'пси'} — ${WHY[x.why]}. Коти винесли риби: ${x.secured}${last}.`;
   return tag('p', { textContent: text });
 }
 
@@ -46,7 +46,7 @@ export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => v
       r.match === null
         ? []
         : [
-            tag('h2', { textContent: r.match === 'draw' ? 'Матч: нічия' : `Матч виграла ${TEAM[r.match]}` }),
+            tag('h2', { textContent: r.match === 'draw' ? 'Матч: нічия' : `Матч виграв гравець ${r.match}` }),
             tag('p', { textContent: DECIDED[r.decided!] }),
             tag('p', { textContent: score(r) }),
           ];

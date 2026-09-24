@@ -11,7 +11,7 @@
 
 | Status | Last Updated | Owner(s) |
 | ------ | ------------ | -------- |
-| Idea   | 2026-09-23   | TBD      |
+| Idea   | 2026-09-24   | TBD      |
 
 ---
 
@@ -72,7 +72,7 @@ Party / Physics-based Team Hide-and-Seek (Heist vs. Defense)
 - Not a public release: no store page, no marketing, no IP clearance.
 - No monetization, no accounts, no matchmaking with strangers.
 - No gameplay bots / single-player mode in MVP. (Headless test clients are dev tooling, not a feature.)
-- No in-game voice chat: the group uses its own voice app, one channel per team.
+- No in-game voice chat: the group uses its own voice app, one channel per side; a player moves channel when the rotation moves it to the other side.
 - No anti-cheat: players are trusted friends, which is what makes client-side physics authority acceptable.
 - No realistic violence or blood. Mines are cartoon props, not a war theme.
 - No class-based heavy asymmetry: characters differ in looks, not in abilities.
@@ -88,11 +88,11 @@ Party / Physics-based Team Hide-and-Seek (Heist vs. Defense)
 2. **Infiltrate**: cats sneak in through an exit, defuse mines and avoid making noise.
 3. **Steal / Hunt**: cats grab fish and carry them out through the exits; dogs track noise and scent, grab cats and carry them to the kennel.
 4. **Rescue / Counter**: cats free captured teammates; dogs guard the kennel and re-mine the approaches cats have defused.
-5. **Resolve**: the round ends on a win condition. Swap sides and start the next round.
+5. **Resolve**: the round ends on a win condition. The rotation picks the next round's dogs and the next round starts.
 
 ### Meta Loop
 
-- **MVP:** none. Friends swap sides between rounds; the score is kept per session.
+- **MVP:** none. The dogs rotate between rounds; each player's match wins are kept per session.
 - **Release:** cosmetic unlocks earned by playing (hats, emotes, meme accessories). Progress is stored locally (`localStorage`); there are no accounts.
 
 ### Key Mechanics
@@ -137,7 +137,7 @@ Party / Physics-based Team Hide-and-Seek (Heist vs. Defense)
 Every map has the same five zones, so the rules stay readable across maps:
 
 1. **Hideout** (outside the fence): cat spawn, drop-off and the far end of the dig-out tunnel. Dogs can't leave the property (they are on duty). A fish counts only when a cat carries it into the hideout.
-2. **Fence with 3–4 exits** (gate, gaps, drainpipe): the only way in or out of the property for a cat, with or without a fish, which makes them the prime mine spots. Nobody climbs the fence, and it is opaque: the property can't be watched from the hideout except through the exits. Every map has more exits than the largest dog team it hosts, so one exit is always unguarded.
+2. **Fence with 3–4 exits** (gate, gaps, drainpipe): the only way in or out of the property for a cat, with or without a fish, which makes them the prime mine spots. Nobody climbs the fence, and it is opaque: the property can't be watched from the hideout except through the exits. Every map has more exits than the most dogs it hosts (3), so one exit is always unguarded.
 3. **Yard** (dog territory): the doghouse for mine resupply, open ground, few hiding spots.
 4. **House** (contested): 5 fish in 3+ storages with different access costs, e.g. on the table (easy, in the open), in the fridge (slow and loud), in the aquarium (needs a teammate). Cluttered rooms, hiding spots, cat routes.
 5. **Kennel** (next to the doghouse): a cage where captured cats go. Dogs drop cats in through the hatch; a free cat opens the latch from outside. Placed so a dog can carry a cat there from any fish storage within the wiggle-free time; tuned per map.
@@ -150,7 +150,7 @@ Each map maps these zones onto its theme. In the high-rise: hideout = the neighb
 - **Dogs win:** the heist timer (10 min, TBD) runs out, or all cats are in the kennel at the same time.
 - **Overtime:** if the timer runs out while cats are holding fish, the round continues until each held fish is secured or dropped, for at most 60 s. Every carrier emits a continuous noise ping.
 - **Capture:** a grabbed cat dropped into the kennel is captured: locked in until a teammate rescues it or it digs out (~60 s). Nobody is eliminated.
-- **Match:** 2 rounds with sides swapped. The team that secured more fish wins. On equal counts, the team whose last fish was secured sooner in its round wins; 0–0 is a draw. The session score counts matches.
+- **Match:** as many rounds on one map as the dog rotation needs for every player to play dog at least once with dog counts at most one apart: 3 players → 3 rounds, 4 → 4, 5 → 3, 6 → 3, 7 → 4, 8 → 3. A player scores one point per fish it secures as a cat and one per catch (a cat it dropped into the kennel) as a dog. The top score wins the match; on equal scores, the player whose last point came sooner into its round; still equal, a draw. The session score counts match wins per player.
 
 ### Progression
 
@@ -249,13 +249,13 @@ Bindings are a draft; finalize them during the Prototype milestone.
 - **Always on screen:** phase and its timer, fish counter (secured / remaining), carried items (mines / traps / perk), teammate status (free / grabbed / captured).
 - **Contextual:** noise pings and scent overlay (dogs), whisker cue and defuse progress (cats), team markers, overtime warning.
 - **Kennel:** captured cats spectate a teammate or free-look around the kennel.
-- **Menus:** main menu → create or join a room by code → lobby (team assignment, map pick, voice-channel reminder) → match (two rounds, sides swapped between them) → results → back to the lobby.
+- **Menus:** main menu → create or join a room by code → lobby (the roster with the next round's dogs, map pick, voice-channel reminder) → match (its rounds, the dogs rotating between them) → results → back to the lobby.
 
 ### Accessibility
 
 - [x] Remappable controls
 - [ ] Subtitles / captions (no voice-over planned)
-- [x] Colorblind-friendly team colors and noise/scent overlays
+- [x] Colorblind-friendly side colors and noise/scent overlays
 - [ ] Difficulty / assist options (N/A, PvP)
 - [x] Text size / UI scaling
 - [x] Reduced motion / screen-shake toggle
@@ -313,18 +313,18 @@ None. This is a private hobby project.
 ### Multiplayer / Online
 
 - Online team PvP, 3–8 players, in private rooms joined by room code.
-- Auto-balance of about 1 dog per 2 cats: 3 → 1 vs 2 · 4 → 1 vs 3 (or 2 vs 2) · 5 → 2 vs 3 · 6 → 2 vs 4 · 7 → 2 vs 5 · 8 → 3 vs 5. The host can reassign players manually.
+- Auto-balance of about 1 dog per 2 cats, picked anew every round: 3 → 1 vs 2 · 4 → 1 vs 3 · 5 → 2 vs 3 · 6 → 2 vs 4 · 7 → 2 vs 5 · 8 → 3 vs 5. There are no fixed teams: the dogs rotate so that every player plays dog as equally as possible across the match (the players with the fewest dog rounds this match first, in join order). The host does not reassign by hand.
 - Balance knobs that scale with player count: mines per dog, heist timer, kennel dig-out time.
 - Disconnects: the character freezes in place for 60 s (a carried fish drops, a carried cat is released); the player can rejoin by room code into the same round; after that the character is removed. No mid-round rebalancing.
 - Host migration: the relay keeps the room alive; if the host leaves, the next player becomes host.
-- No matchmaking, no leaderboards, no bots. Voice is external, one channel per team.
+- No matchmaking, no leaderboards, no bots. Voice is external, one channel per side.
 
 ### MVP ★
 
 - 1 playable map (country house) with the full round structure (prep → heist → overtime).
 - Both sides with their full base kit: mines, demining, traps, sniff, sneak, grab, kennel, rescue and dig-out.
 - Map anatomy in place: hideout, fixed exits, 3+ fish storages, hiding spots, cat routes.
-- 5 physical fish, all win conditions and the 2-round match.
+- 5 physical fish, all win conditions and the match over the dog rotation with its per-player score.
 - Noise and scent systems.
 - 4 perk pickups per side.
 - Private rooms by code over the WebSocket relay, 3–8 players, with a lobby and rejoin.
@@ -373,7 +373,7 @@ Dates are TBD. Progress is measured by readiness, not by calendar. From Vertical
 | Procedural audio sounds cheap or repetitive. | M | Prototype the key SFX (impacts, mines) early; keep a fallback to CC0 samples. |
 | Third-person camera lets players peek through walls and over fences. | L | Tight camera collision; peek view in hiding spots; accept the rest as party-game slack. |
 | Fish thrown over the fence bypass the exits. | L | Toss range is ~3 m; keep every fence taller than the toss arc. |
-| Both teams share one voice channel and leak information. | L | Lobby reminder to split channels. |
+| Both sides share one voice channel and leak information. | L | Lobby reminder to split channels and to move when the rotation moves you. |
 | WebGPU support or stability varies between browsers. | L | WebGL2 fallback path; test on Chrome, Firefox and Edge. |
 | Final perk list, mine/trap types, dog name spellings. | L | Decide during Vertical Slice playtests. |
 | ECS library and relay provider choice. | L | Decided for the Prototype: no ECS (ADR 0004); room module on Node, Durable Object proposed for the friend group (ADR 0005). |
@@ -412,3 +412,4 @@ Dates are TBD. Progress is measured by readiness, not by calendar. From Vertical
 | 2026-09-23 | Nobody climbs the fence: exits are the only way in or out for cats, with or without a fish. A trap is set off by hand by the cat that planted it, one trap in play per cat, same button as planting. Only cats carry and throw props; dogs push, barge and carry grabbed cats. | Mines matter on the way in as well as out, the trap is a real distraction rather than an alarm, and the sides stay distinct in how they touch the world. |
 | 2026-09-24 | Art pipeline without an image model: concept (text and SVG) → procedural skeleton → detail by code (palette shaders, procedural patterns, SVG decals, Blender renders). | The studio runs on Claude models only, which generate no raster; flat-shaded low-poly needs none. |
 | 2026-09-24 | Prototype architecture: six code zones with the simulation runnable in Node, no ECS library, one relay room module hosted on Node for development, ownership as one fold over the relay's order (ADRs 0003–0006). | Retires the ECS and relay TBDs the Prototype was to decide; a browser-free simulation keeps headless test clients and playtests cheap. |
+| 2026-09-24 | No fixed teams: the dogs are picked anew every round at the 1:2 ratio and rotate so every player plays dog as equally as possible; a match lasts as many rounds as that needs (3 → 3, 4 → 4, 5 → 3, 6 → 3, 7 → 4, 8 → 3); the score is per player, fish secured as a cat plus catches as a dog; the session counts match wins per player. | Fixed teams swapping sides broke the ratio in round 2 (8 players: 5 dogs vs 3 cats) and the rule that exits outnumber the dogs; a rotation keeps every round at the ratio. |
