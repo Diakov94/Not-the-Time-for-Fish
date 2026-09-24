@@ -1,6 +1,7 @@
 import type { Level } from '../content/level.ts';
 import { levelBodies } from '../sim/build.ts';
 import { spawnOf, type ClientId, type Kind, type NetId } from '../sim/entities.ts';
+import { drainEvents } from '../sim/events.ts';
 import type { Intent } from '../sim/movement.ts';
 import { adopt, receive } from '../sim/ownership.ts';
 import { createWorld, step, type Sim } from '../sim/world.ts';
@@ -53,8 +54,11 @@ export function connect(url: string, level: Level): Promise<Session> {
       else {
         const entities = m.entities.map((e) => ({ type: 'spawn' as const, from: m.from, ...e, p: NOWHERE }));
         adopt(s.sim, entities, { rows: new Map(m.table.rows), gone: new Set(m.table.gone) });
+        // The round table whole, and the phase's and the heist's start by this client's clock, a hop late.
+        Object.assign(s.sim, { round: m.round, phaseAt: s.sim.time - m.elapsed.phase, heistAt: s.sim.time - m.elapsed.heist });
         for (const [h, hAt] of held) handle(s, h, hAt, m.seq);
         held = null;
+        drainEvents(s.sim); // ADR 0010: the facts the held messages carried are folded, their events are stale
         resolve(s);
       }
     };
@@ -93,9 +97,9 @@ function handle(s: Session, m: Incoming, at: number, after = 0): void {
   if (m.seq > after) receive(s.sim, m, s.host);
 }
 
-// The host's duty on `joined`: the entities and the table as they stand after that message.
+// The host's duty on `joined`: the entities, the table and the round as they stand after that message.
 function answer(s: Session, to: ClientId, seq: number): void {
-  const { entities, ownership } = s.sim;
+  const { entities, ownership, round, time, phaseAt, heistAt } = s.sim;
   send(s, {
     type: 'state',
     from: s.sim.me,
@@ -103,6 +107,8 @@ function answer(s: Session, to: ClientId, seq: number): void {
     seq,
     entities: [...entities.values()].map(({ id, kind, home, prop }) => ({ id, kind, home, prop })),
     table: { rows: [...ownership.rows], gone: [...ownership.gone] },
+    round,
+    elapsed: { phase: time - phaseAt, heist: time - heistAt },
   });
 }
 

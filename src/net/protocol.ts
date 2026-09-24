@@ -1,13 +1,15 @@
 import type { ClientId, Kind, NetId } from '../sim/entities.ts';
 import type { Left, SimMessage } from '../sim/messages.ts';
 import type { Ownership } from '../sim/ownership.ts';
+import type { Round } from '../sim/round.ts';
 import type { Snapshot } from '../sim/snapshot.ts';
 
 // ADR 0006's messages from clients. `from` never travels in the payload: the relay stamps the sender
 // on its envelope and `decode` puts it back, so no client can speak for another.
 export type Tick = { type: 'tick'; from: ClientId; s: Snapshot[] };
-// The host's answer to a joiner: identity and the fold's table as of `seq`, the last message the host
-// folded; never a pose.
+// The host's answer to a joiner: identity, the fold's table and the round table as of `seq`, the last
+// message the host folded, and how long the current phase and the heist have run by the host's clock, s
+// (ADR 0007); never a pose.
 export type State = {
   type: 'state';
   from: ClientId;
@@ -15,6 +17,8 @@ export type State = {
   seq: number;
   entities: { id: NetId; kind: Kind; home: ClientId | null; prop?: number }[];
   table: { rows: [NetId, Ownership][]; gone: ClientId[] };
+  round: Round;
+  elapsed: { phase: number; heist: number };
 };
 export type GameMessage = SimMessage | Tick | State;
 
