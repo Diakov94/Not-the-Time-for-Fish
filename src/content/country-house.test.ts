@@ -2,7 +2,10 @@ import { expect, test } from 'vitest';
 import { countryHouse } from './country-house.ts';
 import type { Box, Vec3 } from './level.ts';
 
-const { statics, volumes, points } = countryHouse;
+const { statics, volumes, points, props, doors } = countryHouse;
+// The sim's bodies the house is sized to (card 22, the C1/S1 contract): a cat's and a dog's capsule diameter.
+const CAT = 0.5;
+const DOG = 0.8;
 const AXES = ['x', 'y', 'z'] as const;
 const lo = (b: Box, k: keyof Vec3) => b.p[k] - b.half[k];
 const hi = (b: Box, k: keyof Vec3) => b.p[k] + b.half[k];
@@ -31,7 +34,8 @@ function crosses(a: Vec3, b: Vec3, box: Box): boolean {
 // stops a dog: a visibility graph over the corners of those boxes, 5 cm out.
 function walks(from: Vec3, to: Vec3[]): number[] {
   const blockers = statics.filter((s) => s.label === 'wall' || s.blocks === 'dogs');
-  const corners = blockers.flatMap((b) => [-1, 1].flatMap((i) => [-1, 1].map((j) => ({ x: b.p.x + i * (b.half.x + 0.05), y: 0, z: b.p.z + j * (b.half.z + 0.05) }))));
+  const corner = (b: Box, i: number, j: number) => ({ x: b.p.x + i * (b.half.x + 0.05), y: 0, z: b.p.z + j * (b.half.z + 0.05) });
+  const corners = blockers.flatMap((b) => [corner(b, -1, -1), corner(b, -1, 1), corner(b, 1, -1), corner(b, 1, 1)]);
   const nodes = [from, ...to, ...corners];
   const dist = nodes.map((_, i) => (i === 0 ? 0 : Infinity));
   const open = new Set(nodes.keys());
@@ -72,7 +76,8 @@ test('the country house keeps the promises of its anatomy', () => {
       else if (!statics.some((s) => s.blocks === 'dogs' && inside(p, s))) open++;
     }
     if (exit && gap) gaps.set(exit, gaps.get(exit)! + 0.05);
-    if (!exit) height = Math.min(height, Math.max(0, ...fence.filter((f) => inside({ ...c, y: 0.05 }, f)).map((f) => hi(f, 'y'))));
+    const tops = fence.filter((f) => inside({ ...c, y: 0.05 }, f)).map((f) => hi(f, 'y'));
+    if (!exit) height = Math.min(height, Math.max(0, ...tops));
   }
   // Nothing a cat stands on or climbs within 3 m of the fence's inside, but in an exit.
   const [ix0, ix1, iz0, iz1] = [x0 + t / 2, x1 - t / 2, z0 + t / 2, z1 - t / 2];
@@ -84,10 +89,11 @@ test('the country house keeps the promises of its anatomy', () => {
   const hideout = role('hideout')[0]!;
   const dropOff = Math.min(...exits.map((e) => Math.hypot(e.p.x - hideout.p.x, e.p.z - hideout.p.z)));
   const widths = [...gaps.values()].map((w) => w.toFixed(2)).join(' / ');
-  console.log(`exits ${exits.length} (>= 4), gaps ${widths} m; fence height ${height} m (>= 3); nearest mantle ledge ${ledge.toFixed(1)} m from it (>= 3)`);
-  console.log(`openings outside the exits ${stray}, exit gap points open to dogs ${open}; rooms ${rooms}; drop-off to the nearest exit ${dropOff.toFixed(1)} m (<= 15)`);
+  console.log(`exits ${exits.length} (>= 4), gaps ${widths} m; fence height ${height} m (>= 3); mantle ledge ${ledge.toFixed(1)} m from it (>= 3)`);
+  console.log(`openings outside the exits ${stray}, exit gap points open to dogs ${open}; rooms ${rooms}`);
+  console.log(`drop-off to the nearest exit ${dropOff.toFixed(1)} m (<= 15)`);
   expect(exits.length).toBeGreaterThanOrEqual(4);
-  expect(Math.min(...gaps.values())).toBeGreaterThanOrEqual(0.5); // a cat passes each (card 22's 0.5 m capsule)
+  expect(Math.min(...gaps.values())).toBeGreaterThanOrEqual(CAT);
   expect(height).toBeGreaterThanOrEqual(3);
   expect(ledge).toBeGreaterThanOrEqual(3);
   expect(stray).toBe(0);
@@ -107,8 +113,11 @@ test('the country house keeps the promises of its anatomy', () => {
   const fenceHolds = [...at('dogSpawn').map((p) => ({ p, half: { x: 0, y: 0, z: 0 } })), ...role('doghouse')].every(inFence);
   const cage = Math.min(...statics.filter((s) => s.label.startsWith('kennel')).map((s) => hi(s, 'y')));
   const latchOut = at('latch').every((p) => !role('kennel').some((k) => inside(p, k)));
-  console.log(`fish ${fish.length} (${loose} outside a storage) in storages ${holding.length} with costs {${costs.join(', ')}}; walk from the farthest storage to the hatch ${carry.toFixed(1)} m (<= 20; <= 16 at a carrying dog's 2.0 m/s over 8 s)`);
-  console.log(`tunnel exit and ${at('catSpawn').length} cat spawns in the hideout: ${hideoutHolds}; ${at('dogSpawn').length} dog spawns and the doghouse inside the fence: ${fenceHolds}; bags ${at('bag').length} (>= 6), trap pickups ${at('trapPickup').length} (>= 3)`);
+  console.log(`fish ${fish.length} (${loose} outside a storage) in storages ${holding.length} with costs {${costs.join(', ')}}`);
+  console.log(`walk from the farthest storage to the hatch ${carry.toFixed(1)} m (<= 20; <= 16 at a carrying dog's 2.0 m/s for 8 s)`);
+  console.log(`tunnel exit and ${at('catSpawn').length} cat spawns in the hideout: ${hideoutHolds}`);
+  console.log(`${at('dogSpawn').length} dog spawns and the doghouse inside the fence: ${fenceHolds}`);
+  console.log(`bags ${at('bag').length} (>= 6), trap pickups ${at('trapPickup').length} (>= 3)`);
   console.log(`kennel walls ${cage} m (>= 2.5), hatch at ${hatch.y} m, latch outside the cage: ${latchOut}`);
   expect(fish.length).toBe(5);
   expect(loose).toBe(0);
@@ -120,4 +129,39 @@ test('the country house keeps the promises of its anatomy', () => {
   expect(at('bag').length).toBeGreaterThanOrEqual(6);
   expect(at('trapPickup').length).toBeGreaterThanOrEqual(3);
   expect(cage).toBeGreaterThanOrEqual(2.5);
+
+  // Card 19. Every hiding spot is a slot between two solids that stand flush with its long sides from the
+  // ground: its entrance is the slot's width, or none if a side is open.
+  const boxes = props.flatMap((p) => ('box' in p.shape ? [{ p: p.p, half: p.shape.box }] : []));
+  const solids = [...statics.filter((s) => s.blocks === 'all'), ...boxes];
+  const carried = props.flatMap(({ p, hidingSpot: h }) => (h ? [{ p: { x: p.x + h.p.x, y: p.y + h.p.y, z: p.z + h.p.z }, half: h.half }] : []));
+  const spots = [...role('hidingSpot'), ...carried];
+  const entrance = (s: Box) => {
+    const [k, l] = s.half.x < s.half.z ? (['x', 'z'] as const) : (['z', 'x'] as const);
+    const flush = (face: number, b: Box) =>
+      Math.abs(face - (face === lo(s, k) ? hi(b, k) : lo(b, k))) < 0.01 &&
+      lo(b, 'y') <= lo(s, 'y') + 0.01 &&
+      Math.min(hi(b, l), hi(s, l)) > Math.max(lo(b, l), lo(s, l));
+    return solids.some((b) => flush(lo(s, k), b)) && solids.some((b) => flush(hi(s, k), b)) ? 2 * s.half[k] : Infinity;
+  };
+  const entrances = spots.map(entrance);
+  const fits = entrances.every((w) => w > CAT && w < DOG);
+  const walled = (h: Box) => ({ p: h.p, half: { x: h.half.x + 0.2, y: h.half.y, z: h.half.z + 0.2 } });
+  const nearHouse = (b: Box) => role('house').some((h) => overlaps(b, walled(h)));
+  const routes = statics.filter((s) => s.blocks === 'dogs' && !exits.some((e) => overlaps(s, e)) && nearHouse(s));
+  const synced = props.filter((p) => p.synced).length;
+  const debris = props.length - synced;
+  console.log(`hiding spots ${spots.length} (>= 6), ${carried.length} carried by props (>= 4)`);
+  console.log(`entrances ${entrances.map((w) => w.toFixed(2)).join(' / ')} m, each wider than a cat's ${CAT} and narrower than a dog's ${DOG}: ${fits}`);
+  console.log(`cat routes into or inside the house ${routes.length} (>= 3); doors ${doors.length} (>= 2)`);
+  console.log(`synced props ${synced} (>= 20, <= 60); debris ${debris} (>= 20)`);
+  expect(spots.length).toBeGreaterThanOrEqual(6);
+  expect(carried.length).toBeGreaterThanOrEqual(4);
+  expect(fits).toBe(true);
+  expect(routes.length).toBeGreaterThanOrEqual(3);
+  expect(Math.min(...routes.map((r) => 2 * Math.max(r.half.x, r.half.z)))).toBeGreaterThanOrEqual(CAT);
+  expect(doors.length).toBeGreaterThanOrEqual(2);
+  expect(synced).toBeGreaterThanOrEqual(20);
+  expect(synced).toBeLessThanOrEqual(60);
+  expect(debris).toBeGreaterThanOrEqual(20);
 });
