@@ -29,6 +29,13 @@ export function isCharacter(kind: Kind): boolean {
   return kind === 'cat' || kind === 'dog';
 }
 
+// The character of client `client`: the row whose home it is and whose kind is a side (ADR 0003, 0004).
+// Every "this client's character" asks here.
+export function characterOf<E extends Pick<Entity, 'kind' | 'home'>>(entities: ReadonlyMap<NetId, E>, client: ClientId | null): E | undefined {
+  for (const e of entities.values()) if (e.home === client && isCharacter(e.kind)) return e;
+  return undefined;
+}
+
 // ADR 0009: mines, traps and bags are never held or pushed. Each is a fixed sensor where it was put:
 // characters walk over it, and the client that simulates a character finds it with a query of its own.
 export function isFixture(kind: Kind): boolean {

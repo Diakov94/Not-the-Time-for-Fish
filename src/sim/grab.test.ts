@@ -1,8 +1,12 @@
 import { beforeAll, expect, test } from 'vitest';
 import type { RigidBody, Vector } from '@dimforge/rapier3d-compat';
+import type { Level } from '../content/level.ts';
+import { countryHouse } from '../content/maps/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
-import { CRATE_HALF, isCharacter, type ClientId, type Kind } from './entities.ts';
+import { CRATE_HALF, halfHeight, isCharacter, type ClientId, type Kind } from './entities.ts';
 import { anchor, grab, handOf, throwCarried } from './grab.ts';
+import { hidden } from './hiding.ts';
+import type { Claim, Spawn } from './messages.ts';
 import { IDLE, yawOf, type Intent } from './movement.ts';
 import { receive, type FoldMessage } from './ownership.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
@@ -26,16 +30,16 @@ const offAnchor = (held: Vector, carrier: Sim, id: string, kind: Kind = 'prop') 
 };
 
 // Clients behind a loopback relay: every message reaches every client at once, in one order.
-function room<T extends ClientId[]>(...clients: T) {
-  const sims = clients.map((me) => createWorld(prototypeRoom, me)) as { [K in keyof T]: Sim };
+function room<T extends ClientId[]>(level: Level, ...clients: T) {
+  const sims = clients.map((me) => createWorld(level, me)) as { [K in keyof T]: Sim };
   const relay = (m: FoldMessage | null) => {
     expect(m).not.toBeNull();
     for (const sim of sims) receive(sim, m!, clients[0]!);
   };
   let n = 0;
-  const spawn = (from: ClientId, kind: Kind, p: Vector) => {
+  const spawn = (from: ClientId, kind: Kind, p: Vector, more: Pick<Spawn, 'q' | 'prop'> = {}) => {
     const id = `${from}:${n++}`;
-    relay({ type: 'spawn', from, id, kind, home: isCharacter(kind) ? from : null, p });
+    relay({ type: 'spawn', from, id, kind, home: isCharacter(kind) ? from : null, p, ...more });
     return id;
   };
   const run = (intent: Intent, steps: number) => {
@@ -45,7 +49,7 @@ function room<T extends ClientId[]>(...clients: T) {
 }
 
 test('a crate carried 3 m stays within 0.05 m of the anchor on every step', () => {
-  const { sims: [a], relay, spawn, run } = room('A');
+  const { sims: [a], relay, spawn, run } = room(prototypeRoom, 'A');
   const me = spawn('A', 'cat', { x: -5, y: 1, z: 0 });
   const box = spawn('A', 'prop', { x: -5, y: CRATE_HALF, z: 1.5 }); // ahead: the character faces +z
   run(IDLE, 30);
@@ -63,7 +67,7 @@ test('a crate carried 3 m stays within 0.05 m of the anchor on every step', () =
 });
 
 test('a 6 m/s throw lands 2–4 m away', () => {
-  const { sims: [a], relay, spawn, run } = room('A');
+  const { sims: [a], relay, spawn, run } = room(prototypeRoom, 'A');
   const me = spawn('A', 'cat', { x: 0, y: 1, z: -5 });
   const box = spawn('A', 'prop', { x: 0, y: CRATE_HALF, z: -3.5 });
   run(IDLE, 30);
@@ -83,7 +87,7 @@ test('a 6 m/s throw lands 2–4 m away', () => {
 });
 
 test("a dog's grab at a fish makes no claim and puts nothing in flight", () => {
-  const { sims: [, b], spawn, run } = room('A', 'B');
+  const { sims: [, b], spawn, run } = room(prototypeRoom, 'A', 'B');
   spawn('B', 'dog', { x: 0, y: 1, z: 0 }); // faces +z, toward the fish
   spawn('A', 'fish', { x: 0, y: 0.1, z: 1 });
   run(IDLE, 30);
@@ -91,8 +95,35 @@ test("a dog's grab at a fish makes no claim and puts nothing in flight", () => {
   expect(b.inFlight.size).toBe(0);
 });
 
+test("a cat's grab at the 20 kg barricade makes no claim and puts nothing in flight", () => {
+  const { sims: [a], spawn, run } = room(countryHouse, 'A');
+  spawn('A', 'prop', { x: -8, y: 0.5, z: 13 }, { prop: countryHouse.props.findIndex((p) => p.label === 'barricade') });
+  spawn('A', 'cat', { x: -8, y: halfHeight('cat'), z: 11.8 }); // faces +z, toward it
+  run(IDLE, 30);
+  expect(grab(a)).toBeNull();
+  expect(a.inFlight.size).toBe(0);
+});
+
+test("a cat walking into the fish another client's cat holds sends no claim, and the fish stays kinematic on its client", () => {
+  const { sims: [a, b], relay, spawn, run } = room(prototypeRoom, 'A', 'B');
+  spawn('A', 'cat', { x: 0, y: halfHeight('cat'), z: -1.2 }); // faces +z, toward the fish
+  const fish = spawn('A', 'fish', { x: 0, y: halfHeight('fish'), z: 0 });
+  const toucher = spawn('B', 'cat', { x: -2, y: halfHeight('cat'), z: 0 });
+  run(IDLE, 30);
+  relay(grab(a));
+  let [claims, dynamic] = [0, 0];
+  for (let i = 0; i < 90; i++) {
+    claims += step(b, STEP, east).filter((m) => m.type === 'claim' && m.id === fish).length;
+    if (b.entities.get(fish)!.body.isDynamic()) dynamic++;
+  }
+  const x = (id: string) => b.entities.get(id)!.body.translation().x.toFixed(2);
+  console.log(`A holds the fish: ${a.ownership.rows.get(fish)?.held}; B's cat walked to x = ${x(toucher)} into its copy at x = ${x(fish)}; claims ${claims}, frames dynamic on B ${dynamic}`);
+  expect(a.ownership.rows.get(fish)).toEqual({ owner: 'A', held: true });
+  expect([claims, dynamic]).toEqual([0, 0]);
+});
+
 test("a grabbed character's body follows its carrier", () => {
-  const { sims: [a, b], relay, spawn, run } = room('A', 'B');
+  const { sims: [a, b], relay, spawn, run } = room(prototypeRoom, 'A', 'B');
   const cat = spawn('A', 'cat', { x: 0, y: 1, z: 1.5 });
   const dog = spawn('B', 'dog', { x: 0, y: 1, z: 0 }); // faces +z, toward the cat
   run(IDLE, 30);
@@ -113,4 +144,38 @@ test("a grabbed character's body follows its carrier", () => {
   }
   expect(onA.translation().x - x0).toBeGreaterThan(3);
   expect(worst).toBeLessThanOrEqual(0.05);
+});
+
+// Facing +x or -x, and the hold claims a dog's lunge sends from `sim`, by the step that ends its dash.
+const EAST = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 };
+const WEST = { x: 0, y: -Math.SQRT1_2, z: 0, w: Math.SQRT1_2 };
+function lunge(sim: Sim): Claim[] {
+  grab(sim);
+  const claims: Claim[] = [];
+  for (let i = 0; i < 30; i++) claims.push(...step(sim, STEP).filter((m): m is Claim => m.type === 'claim' && m.hold));
+  return claims;
+}
+
+test("a dog's lunge stops at what it meets first: no claim on a cat hidden behind the yard box, the cat with the box 1 m aside, a cat past the fish it carries", () => {
+  const behindBox = (aside: number) => {
+    const { sims: [a, b], spawn, run } = room(countryHouse, 'A', 'B');
+    spawn('A', 'prop', { x: 9.95, y: 0.4, z: 10 + aside }, { prop: 3 }); // the cardboard box by the shed
+    const cat = spawn('A', 'cat', { x: 10.62, y: halfHeight('cat'), z: 10 }); // in the slot between it and the shed
+    spawn('B', 'dog', { x: 8.5, y: halfHeight('dog'), z: 10 }, { q: EAST });
+    run(IDLE, 30);
+    return { hidden: hidden(b, b.entities.get(cat)!) && hidden(a, a.entities.get(cat)!), claims: lunge(b).map((m) => (m.id === cat ? 'cat' : m.id)) };
+  };
+  const [behind, aside] = [behindBox(0), behindBox(-1)];
+  // Head-on in the open: the fish the cat carries lies between them on the dog's client.
+  const { sims: [a, b], relay, spawn, run } = room(countryHouse, 'A', 'B');
+  const cat = spawn('A', 'cat', { x: 10.3, y: halfHeight('cat'), z: 14 }, { q: WEST });
+  spawn('A', 'fish', { x: 9.6, y: halfHeight('fish'), z: 14 });
+  spawn('B', 'dog', { x: 8.5, y: halfHeight('dog'), z: 14 }, { q: EAST });
+  run(IDLE, 30);
+  relay(grab(a));
+  const carrier = lunge(b).map((m) => (m.id === cat ? 'cat' : m.id));
+  console.log(`hidden behind the box: ${behind.hidden}, hold claims ${JSON.stringify(behind.claims)}; the box 1 m aside: hidden ${aside.hidden}, ${JSON.stringify(aside.claims)}; a fish carrier head-on: ${JSON.stringify(carrier)}`);
+  expect(behind).toEqual({ hidden: true, claims: [] });
+  expect(aside).toEqual({ hidden: false, claims: ['cat'] });
+  expect(carrier).toEqual(['cat']);
 });

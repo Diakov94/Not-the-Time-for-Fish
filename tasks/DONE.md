@@ -106,3 +106,4 @@
 - 150 farm theme; 151 yacht theme. THEMES-B, 2026-09-24.
 - HUD-INPUT: 146, 163, 166, bug-hud-hints-once-per-browser-not-per-side, review-hud-own-state-grabbed-captured-watching, review-input-sneak-on-ctrl-closes-the-tab. 2026-09-24.
 - NET-FIX: bug-net-socket-close-unnoticed, bug-app-silent-disconnect, review-net-gates-wall-time-is-one-test-file, review-net-state-type-omits-variant (the runner's leave lines follow HEADLESS). 2026-09-24.
+- SIM-FIX: bug-sim-grab-reaches-through-props, bug-sim-cat-carries-any-mass, bug-sim-claim-on-a-held-entity, bug-sim-round-ends-on-a-cats-disconnect, review-sim-debris-stays-fallen-across-rounds, review-sim-stun-and-slip-seen-by-every-client (with wetness), review-sim-one-query-for-a-clients-character, review-sim-securing-never-forgets-a-refused-fish, review-content-fish-market-anatomy-unchecked. 2026-09-24.

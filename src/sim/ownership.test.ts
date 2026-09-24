@@ -99,3 +99,13 @@ test('the same message list folded twice gives deep-equal tables', () => {
     ]),
   );
 });
+
+test("a cat's hold claim on a prop heavier than a cat carries is refused: 20 kg no, 5 kg yes; a touch on it still takes it", () => {
+  const level = { props: [20, 5].map((mass) => ({ label: 'box', p: at, shape: { box: at }, mass, synced: true })) };
+  const order: FoldMessage[] = [{ ...crate('H', 'H:0'), prop: 0 }, { ...crate('H', 'H:1'), prop: 1 }, character('A', 'A:0'), grab('A', 'H:0'), grab('A', 'H:1'), touch('A', 'H:0')];
+  const identities = new Map(order.flatMap((m) => (m.type === 'spawn' ? [[m.id, m] as const] : [])));
+  const t = newOwnershipTable();
+  const accepted = order.map((m) => fold(t, m, identities, undefined, level));
+  expect(accepted.slice(3)).toEqual([false, true, true]);
+  expect(t.rows.get('H:0')).toEqual({ owner: 'A', held: false });
+});

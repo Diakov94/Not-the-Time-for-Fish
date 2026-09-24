@@ -66,6 +66,8 @@ export type Sim = {
   refused: Refusal | null; // why the fold refused this client's own latest hello (card 68)
   stunUntil: number; // when this client's cat's stun ends, by its own clock
   wetUntil: number; // when this client's cat a water bomb splashed dries, by its own clock (card 129)
+  stunned: Map<NetId, number>; // until when the others' characters are stunned, by the ends this client folded
+  soaked: Map<NetId, number>; // until when the others' cats are wet, by the splashes this client folded
   used: number; // mines this client's dog planted since its last resupply
   planting: Work | null; // this client's dog's plant in progress
   defusing: (Work & { id: NetId }) | null; // this client's cat's defuse in progress, of mine `id`
@@ -142,6 +144,8 @@ export function createWorld(level: Level, me: ClientId, levels: Sim['levels'] = 
     refused: null,
     stunUntil: 0,
     wetUntil: 0,
+    stunned: new Map(),
+    soaked: new Map(),
     used: 0,
     planting: null,
     defusing: null,
