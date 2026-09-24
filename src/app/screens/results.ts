@@ -1,7 +1,7 @@
 import type { ClientId } from '../../sim/entities.ts';
 import { successor, type Decider, type Result, type Why } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { leaveButton, paint, score, tag, TEAM } from './parts.ts';
+import { leaveButton, paint, score, tag } from './parts.ts';
 
 // Why a round ended, as the fold's `Result.why` says it.
 const WHY: Record<Why, string> = {
@@ -26,11 +26,11 @@ function ended(x: Result, i: number): HTMLElement {
   const last = x.last === null ? '' : `, остання на ${clock(x.last)} пограбування`;
   return tag(
     'section',
-    { className: `panel team-${x.winner.toLowerCase()}` },
+    { className: `panel side-${x.winner}` },
     tag('p', { className: 'label', textContent: `Раунд ${i + 1}` }),
-    tag('h2', { textContent: `Перемогли ${x.winner === x.cats ? 'коти' : 'пси'} (${TEAM[x.winner]})` }),
+    tag('h2', { textContent: `Перемогли ${x.winner === 'cat' ? 'коти' : 'пси'}` }),
     tag('p', { textContent: `Чому: ${WHY[x.why]}.` }),
-    tag('p', { textContent: `Коти (${TEAM[x.cats]}) винесли риби: ${x.secured}${last}.` }),
+    tag('p', { textContent: `Коти винесли риби: ${x.secured}${last}.` }),
   );
 }
 
@@ -57,8 +57,8 @@ export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => v
         : [
             tag(
               'section',
-              { className: `panel match${r.match === 'draw' ? '' : ` team-${r.match.toLowerCase()}`}` },
-              tag('h2', { textContent: r.match === 'draw' ? 'Матч: нічия' : `Матч виграла ${TEAM[r.match]}` }),
+              { className: 'panel match' },
+              tag('h2', { textContent: r.match === 'draw' ? 'Матч: нічия' : `Матч виграв гравець ${r.match}` }),
               tag('p', { textContent: DECIDED[r.decided!] }),
               tag('p', { className: 'score', textContent: score(r) }),
             ),

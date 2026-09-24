@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OVERLAY } from '../art/palette.ts';
+import { settings } from '../settings/store.ts';
 import type { Sim } from '../sim/world.ts';
 
 // GAME.md, Game Feel (card 33): cartoon impact stars and camera shake on a loud impact, both read from
@@ -10,7 +11,7 @@ import type { Sim } from '../sim/world.ts';
 // mine's `blast` event, on every client at the fold, is a comic "boom" puff and a shockwave ring on the
 // floor (card 57), gone after PUFF_TIME; the ring is the look of a bang, not the blast's reach.
 const IMPACTS = new Set(['impact', 'blast']);
-export const SHAKE = 0.1; // m: the shake of the loudest noise at the target, the one amplitude a reduced-motion toggle will scale (Beta)
+export const SHAKE = 0.1; // m: the shake of the loudest noise at the target; none under reduced motion (card 117)
 const SHAKE_RANGE = 8; // m: an impact this far from the target shakes nothing
 const SHAKE_TIME = 0.25; // s
 const STARS = 6; // per burst
@@ -70,7 +71,8 @@ export function samples(): THREE.Object3D[] {
 }
 
 // Starts this frame's bursts and shakes, moves the live ones on, and returns the camera's offset for
-// `target`, the point it orbits.
+// `target`, the point it orbits: none while the viewer asks for reduced motion (ADR 0012), when the stars
+// and puffs still play, for they are not motion of the viewer.
 export function drawJuice(j: Juice, sim: Sim, scene: THREE.Scene, camera: THREE.Camera, target: THREE.Vector3 | null): THREE.Vector3 {
   for (const e of sim.events) {
     if (e.type === 'blast') {
@@ -120,7 +122,7 @@ export function drawJuice(j: Juice, sim: Sim, scene: THREE.Scene, camera: THREE.
     return true;
   });
   j.shakes = j.shakes.filter(({ born }) => sim.time - born < SHAKE_TIME);
-  const amp = j.shakes.reduce((a, { amp: s, born }) => a + s * (1 - (sim.time - born) / SHAKE_TIME), 0);
+  const amp = settings().reducedMotion ? 0 : j.shakes.reduce((a, { amp: s, born }) => a + s * (1 - (sim.time - born) / SHAKE_TIME), 0);
   const t = sim.time;
   return j.offset.set(Math.sin(97 * t), Math.sin(131 * t + 1), Math.sin(113 * t + 2)).multiplyScalar(Math.min(SHAKE, amp) / Math.sqrt(3));
 }

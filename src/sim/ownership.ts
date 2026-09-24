@@ -225,6 +225,8 @@ function apply(sim: Sim, m: Exclude<SimMessage, RoundMessage> | Left, host: Clie
   const e = sim.entities.get(m.id);
   // The carrier's clock of the wiggle-free starts when its hold on a cat is accepted.
   if (m.type === 'claim' && m.hold && m.from === sim.me && e?.kind === 'cat') sim.grabbedAt = sim.time;
+  // A hold on this client's own character names its holder: a capture's `by` (ADR 0014).
+  if (m.type === 'claim' && m.hold && e?.home === sim.me && isCharacter(e.kind)) sim.holder = m.from;
   if (m.type !== 'release' || !e) return;
   // The release carries the handoff state, so the new owner continues the throw or the drop without a gap:
   // a tossed character flies as a leap from the carrier's hands.

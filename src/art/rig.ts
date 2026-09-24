@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import * as THREE from 'three';
 import type { Character } from '../content/characters.ts';
-import { COAT, DEFAULT, INK, material } from './palette.ts';
+import { COAT, DEFAULT, INK, material, TEAM, type Vision } from './palette.ts';
 
 // ADR 0011's rig: one skeleton per side, named parts a character file dresses and the poses every
 // character shares. A character stands upright in its side's frame (a cat 0.5 x 0.9 m, a dog 0.8 x 1.4 m,
@@ -184,6 +184,25 @@ export function rigFor(c: Character, look: Look, radius: number, halfHeight: num
   rig.root.scale.set(w / f.w, (w + 2 * halfHeight) / f.h, w / f.w);
   rig.root.userData.rig = rig;
   return rig;
+}
+
+// GAME.md, Accessibility (card 117): every character wears a band at its collar anchor in its team's
+// colour of the palette's pair, in the variant the viewer chose (ADR 0012), so the teams are told apart
+// on the characters; the lobby's and the HUD's team words stay words. A character whose player has no
+// team yet wears none. Render calls it once a frame; it rebuilds only when the team or the variant changes.
+export type Team = keyof (typeof TEAM)[Vision];
+const RING = new THREE.TorusGeometry(1, 0.2, 5, 16).rotateX(Math.PI / 2);
+export function band(rig: Rig, team: Team | undefined, vision: Vision): void {
+  const collar = rig.anchors.collar;
+  const key = team && `${team}/${vision}`;
+  if (collar.userData.band === key) return;
+  collar.userData.band = key;
+  collar.remove(...collar.children.filter((o) => o.userData.band));
+  if (!team) return;
+  const ring = new THREE.Mesh(RING, material(TEAM[vision][team]));
+  ring.userData.band = true;
+  ring.scale.setScalar(collar.userData.r as number);
+  collar.add(ring);
 }
 
 // The emote a character without its own plays: a hop with a fore paw waved (cards 112-115 replace it).

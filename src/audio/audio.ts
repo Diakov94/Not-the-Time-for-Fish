@@ -1,21 +1,25 @@
 import type { Vec3 } from '../content/level.ts';
+import { settings } from '../settings/store.ts';
 import { volumeAt } from '../sim/build.ts';
 import { isCharacter, type ClientId, type Entity, type NetId } from '../sim/entities.ts';
 import type { SimEvent } from '../sim/events.ts';
+import type { NoiseCause } from '../sim/messages.ts';
 import { progress } from '../sim/mines.ts';
 import { SPEED } from '../sim/movement.ts';
 import { tension } from '../sim/tension.ts';
 import type { Sim } from '../sim/world.ts';
 import { ambience, surround, type Ambience } from './ambience.ts';
 import { music, sequence, wanted, type Music } from './music.ts';
-import { beeps, pant, SOUNDS, whiteNoise, type Beeps, type Kit, type Pant, type Sound } from './sfx.ts';
+import { beeps, EMOTES, pant, SOUNDS, whiteNoise, type Beeps, type Kit, type Pant, type Sound } from './sfx.ts';
 
-// Where the listener stands and faces: the camera's pose (render's camera is one).
+// Where the listener stands and faces: at the point the camera orbits (the player's character), turned
+// as the camera is, so distances are the character's and left and right are the screen's.
 export type Ear = { position: Vec3; quaternion: Vec3 & { w: number } };
 
 type Graph = {
   kit: Kit & { ctx: AudioContext };
   master: GainNode;
+  level: number; // the master's gain last asked for
   meters: AnalyserNode[];
   pants: Map<NetId, Pant & { at: PannerNode }>;
   defusing: (Beeps & { at: PannerNode }) | null;
@@ -26,10 +30,10 @@ type Graph = {
 // The game's sound, a view of the sim (ADR 0008): every frame it reads the event list, the entity,
 // ownership and round tables and the sim's volume and tension queries, and keeps no fact beyond the voices
 // it plays and the music's scheduler. The graph is made on the first click (the browser's autoplay rule);
-// M mutes it, a per-viewer setting. With `?audio` in the address a dev readout shows the master bus's
-// peak, the worst lag from an event's frame to its sound leaving the speakers, and what `hear` costs the
-// main thread per frame.
-export type Audio = { graph: Graph | null; muted: boolean; readout: HTMLElement | null; peak: number; lag: number; cost: { sum: number; max: number; frames: number } };
+// its level is the viewer's volume and mute, read from the settings store every frame (ADR 0012). With
+// `?audio` in the address a dev readout shows the master bus's peak, the worst lag from an event's frame
+// to its sound leaving the speakers, and what `hear` costs the main thread per frame.
+export type Audio = { graph: Graph | null; readout: HTMLElement | null; peak: number; lag: number; cost: { sum: number; max: number; frames: number } };
 
 const REF = 2; // m: a voice nearer than this is at full level; farther, it falls as REF / distance
 // The limiter squeezes the sum 20:1 above its threshold and adds a makeup gain the Web Audio spec sets at
@@ -37,16 +41,12 @@ const REF = 2; // m: a voice nearer than this is at full level; farther, it fall
 // the threshold passes at unity.
 const LIMITER = { threshold: -10, knee: 0, ratio: 20, attack: 0.002, release: 0.2 };
 const LEVEL = 10 ** (-5.7 / 20);
+const FADE = 0.003; // s: the master's time constant to a new level, a few milliseconds, short of a click
 const METER = new Float32Array(2048); // the analyser's window, longer than a frame at 60 FPS
 
 export function createAudio(): Audio {
-  const audio: Audio = { graph: null, muted: false, readout: null, peak: 0, lag: 0, cost: { sum: 0, max: 0, frames: 0 } };
-  addEventListener('pointerdown', () => (audio.graph = start(audio.muted)), { once: true });
-  addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyM' || e.repeat || e.target instanceof HTMLInputElement) return;
-    audio.muted = !audio.muted;
-    audio.graph?.master.gain.setTargetAtTime(audio.muted ? 0 : LEVEL, audio.graph.kit.ctx.currentTime, 0.02);
-  });
+  const audio: Audio = { graph: null, readout: null, peak: 0, lag: 0, cost: { sum: 0, max: 0, frames: 0 } };
+  addEventListener('pointerdown', () => (audio.graph = start()), { once: true });
   if (new URLSearchParams(location.search).has('audio')) {
     audio.readout = document.body.appendChild(document.createElement('pre'));
     audio.readout.style.cssText = 'position:fixed;right:8px;bottom:8px;margin:0;padding:4px 8px;background:#0008;font:12px monospace';
@@ -54,11 +54,11 @@ export function createAudio(): Audio {
   return audio;
 }
 
-// The master bus: everything meets in `master` (the mute), a limiter keeps the sum under full scale, and
+// The master bus: everything meets in `master` (the volume), a limiter keeps the sum under full scale, and
 // a meter per channel listens to what reaches the speakers (an analyser alone would hear their mix).
-function start(muted: boolean): Graph {
+function start(): Graph {
   const ctx = new AudioContext();
-  const master = new GainNode(ctx, { gain: muted ? 0 : LEVEL });
+  const master = new GainNode(ctx, { gain: level() });
   const limiter = master.connect(new DynamicsCompressorNode(ctx, LIMITER));
   limiter.connect(ctx.destination);
   const channels = limiter.connect(new ChannelSplitterNode(ctx, { numberOfOutputs: 2 }));
@@ -68,7 +68,7 @@ function start(muted: boolean): Graph {
     return meter;
   });
   const kit = { ctx, noise: whiteNoise(ctx) };
-  return { kit, master, meters, pants: new Map(), defusing: null, ambience: ambience(kit, master), music: music(kit, master) };
+  return { kit, master, level: master.gain.value, meters, pants: new Map(), defusing: null, ambience: ambience(kit, master), music: music(kit, master) };
 }
 
 // Once per frame, after the sim stepped and before the loop drains the event list.
@@ -76,6 +76,8 @@ export function hear(audio: Audio, sim: Sim, ear: Ear): void {
   const g = audio.graph;
   if (!g) return;
   const now = performance.now();
+  const want = level();
+  if (want !== g.level) g.master.gain.setTargetAtTime((g.level = want), g.kit.ctx.currentTime, FADE);
   listen(g.kit.ctx.listener, ear);
   for (const ev of sim.events) {
     const t = play(g, sim, ev);
@@ -93,7 +95,13 @@ export function hear(audio: Audio, sim: Sim, ear: Ear): void {
   if (audio.readout) show(audio, g);
 }
 
-// The listener's pose from the camera's: it faces the camera's -z with the camera's +y up.
+// The master's gain from the viewer's volume and mute.
+function level(): number {
+  const { volume, mute } = settings();
+  return mute ? 0 : LEVEL * volume;
+}
+
+// The listener's pose from the ear's: it faces the camera's -z with the camera's +y up.
 function listen(l: AudioListener, { position: p, quaternion: { x, y, z, w } }: Ear): void {
   l.setPosition(p.x, p.y, p.z);
   l.setOrientation(-2 * (x * z + w * y), 2 * (w * x - y * z), 2 * (x * x + y * y) - 1, 2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x));
@@ -107,7 +115,7 @@ function at(g: Graph, p: Vec3): PannerNode {
   return panner;
 }
 
-// A one-shot where it happened, or heard everywhere (a phase stinger) with no place.
+// A one-shot where it happened, or heard everywhere (a phase stinger, a round event) with no place.
 function sound(g: Graph, s: Sound, p: Vec3 | null, loud: number): number {
   const out = p ? at(g, p) : g.master;
   const t = g.kit.ctx.currentTime;
@@ -120,6 +128,9 @@ function sound(g: Graph, s: Sound, p: Vec3 | null, loud: number): number {
 const characterOf = (sim: Sim, client: ClientId): Entity | undefined =>
   [...sim.entities.values()].find((e) => e.home === client && isCharacter(e.kind));
 
+// A noise's sound by its cause; a step's is its character's own (below).
+const NOISES: Record<NoiseCause, Sound | null> = { step: null, impact: 'impact', door: 'creak', flush: 'yowl', carrier: 'pulse', blast: null, trap: null };
+
 // An event's sound, and when it starts on the context's clock. A blast's and a sprung trap's noise is
 // the dogs' ping of them: they are heard at their own events, which come first.
 function play(g: Graph, sim: Sim, ev: SimEvent): number | undefined {
@@ -127,14 +138,25 @@ function play(g: Graph, sim: Sim, ev: SimEvent): number | undefined {
     const c = characterOf(sim, ev.from);
     return c?.kind === 'dog' ? sound(g, 'dogStep', ev.p, ev.loud * dogBoost(sim, c)) : sound(g, 'catStep', ev.p, ev.loud);
   }
-  if (ev.type === 'noise') return ev.cause === 'blast' || ev.cause === 'trap' ? undefined : sound(g, 'impact', ev.p, ev.loud);
+  if (ev.type === 'noise') {
+    const s = NOISES[ev.cause];
+    return s ? sound(g, s, ev.p, ev.loud) : undefined;
+  }
   if (ev.type === 'grab' || ev.type === 'throw' || ev.type === 'drop') {
     const e = sim.entities.get(ev.id);
     return e && sound(g, ev.type === 'grab' && e.kind === 'fish' ? 'pickup' : ev.type, e.body.translation(), 1);
   }
+  if (ev.type === 'emote') {
+    const c = characterOf(sim, ev.from);
+    const s = c && EMOTES[c.kind === 'dog' ? 'dog' : 'cat'][ev.n];
+    return s && sound(g, s, c.body.translation(), 1);
+  }
   if (ev.type === 'planted') return sound(g, ev.kind === 'mine' ? 'arm' : 'trapSet', ev.p, 1);
-  if (ev.type === 'blast' || ev.type === 'defused' || ev.type === 'sprung') return sound(g, ev.type, ev.p, 1);
-  if (ev.type === 'secured' || ev.type === 'captured' || ev.type === 'rescue' || ev.type === 'dugOut') return sound(g, ev.type, ev.p, 1);
+  if (ev.type === 'blast') return sound(g, ev.variant === 'water' ? 'splash' : 'blast', ev.p, 1);
+  if (ev.type === 'sprung') return sound(g, ev.variant === 'slip' ? 'slip' : 'sprung', ev.p, 1);
+  if (ev.type === 'defused') return sound(g, ev.type, ev.p, 1);
+  // The round's own turns change every player's plan, so they are heard everywhere, as the stingers are.
+  if (ev.type === 'secured' || ev.type === 'captured' || ev.type === 'rescue' || ev.type === 'dugOut') return sound(g, ev.type, null, 1);
   if (ev.type === 'phase' && (ev.to === 'heist' || ev.to === 'overtime' || ev.to === 'over')) return sound(g, ev.to, null, 1);
   return undefined;
 }
