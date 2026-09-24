@@ -3,6 +3,7 @@ import { createAudio, hear } from '../audio/audio.ts';
 import { countryHouse } from '../content/country-house.ts';
 import { connect, frame, send } from '../net/client.ts';
 import { dump } from '../net/dump.ts';
+import { createHud, drawHud } from '../hud/hud.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw, type Target } from '../render/view.ts';
 import { isCharacter, type ClientId } from '../sim/entities.ts';
@@ -83,6 +84,7 @@ const input = listen(canvas, own, {
 });
 const view = createView(canvas, sim);
 const audio = createAudio();
+const hud = createHud();
 
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
 // between the last two of them.
@@ -96,6 +98,7 @@ requestAnimationFrame(function loop(now: number) {
   last = now;
   if (playing) draw(view, sim, input.look, target());
   hear(audio, sim, view.camera);
+  drawHud(hud, sim);
   hint.hidden = !playing;
   if (!playing && document.pointerLockElement) document.exitPointerLock();
   lobby(sim, session.host);
