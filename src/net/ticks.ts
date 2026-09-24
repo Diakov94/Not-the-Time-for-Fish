@@ -29,6 +29,10 @@ export function tick(sim: Sim, rested: Rested): Tick | null {
 }
 
 // The receiver's buffer: per entity, the snapshots around the pose it shows, stamped with arrival time.
+// It takes a snapshot only from the fold's owner as of its arrival in the relay's order, so the previous
+// owner's snapshots already in it carry the copy on across an ownership change until the new owner's take
+// over. A client's own tick never enters it: it empties the buffer of every entity it names, since
+// nothing buffered before is a target while this client simulates the entity.
 type Entry = { at: number; from: ClientId; s: Snapshot };
 export type Receiver = Map<NetId, Entry[]>;
 
@@ -40,12 +44,17 @@ export function receiveTick(sim: Sim, r: Receiver, t: Tick, at: number): void {
   for (const s of t.s) {
     const e = sim.entities.get(s.id);
     if (!e) continue;
+    if (t.from === sim.me) {
+      r.set(s.id, []);
+      continue;
+    }
+    if (sim.ownership.rows.get(s.id)?.owner !== t.from) continue;
     const entry = { at, from: t.from, s };
     const list = r.get(s.id);
     if (s.rest || !list) {
       if (s.rest) applySnapshot(sim, t.from, s);
       r.set(s.id, [entry]);
-    } else if (list.at(-1)!.at < at - 2 * TICK_MS) {
+    } else if (list.length === 0 || list.at(-1)!.at < at - 2 * TICK_MS) {
       r.set(s.id, [{ at: at - TICK_MS, from: t.from, s: readSnapshot(e) }, entry]);
     } else list.push(entry);
   }
@@ -66,13 +75,13 @@ function mix(a: Snapshot, b: Snapshot, k: number): Snapshot {
 }
 
 // Every frame: each copy goes to its owner's pose DELAY_MS ago, between the two snapshots around it.
-// The sim's snapshot rule still drops a pose from anyone but the fold's owner.
+// The sim's snapshot rule leaves alone a body this client simulates or carries.
 export function interpolate(sim: Sim, r: Receiver, now: number): void {
   const t = now - DELAY_MS;
   for (const list of r.values()) {
     while (list.length > 1 && list[1]!.at <= t) list.shift();
-    const [a, b] = list as [Entry, Entry?];
-    if (a.at > t) continue;
+    const [a, b] = list as [Entry?, Entry?];
+    if (!a || a.at > t) continue;
     applySnapshot(sim, (b ?? a).from, b ? mix(a.s, b.s, (t - a.at) / (b.at - a.at)) : a.s);
   }
 }
