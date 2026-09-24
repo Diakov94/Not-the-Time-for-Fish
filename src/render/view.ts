@@ -5,6 +5,7 @@ import { entityOf, isCharacter, type Entity, type NetId } from '../sim/entities.
 import { STEP, type Sim } from '../sim/world.ts';
 import { drawLevel } from './level.ts';
 import { buildLook, debrisLook, lookOf } from './looks.ts';
+import { createJuice, drawJuice, type Juice } from './juice.ts';
 import { createSenses, drawSenses, type Senses } from './senses.ts';
 
 // Where the camera orbits its target from: the app's mouse input sets it.
@@ -23,6 +24,7 @@ export type View = {
   doors: THREE.Object3D[]; // the level's door panels, index for index with the sim's door bodies
   debris: THREE.Object3D[]; // the level's debris, index for index with the sim's local debris bodies
   senses: Senses;
+  juice: Juice;
 };
 
 const DISTANCE = 6; // m from the camera to the point above the character it looks at
@@ -49,7 +51,7 @@ export function createView(canvas: HTMLCanvasElement, sim: Sim): View {
     scene.add(o);
     return o;
   });
-  return { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene) };
+  return { renderer, scene, camera, objects: new Map(), doors, debris, senses: createSenses(scene), juice: createJuice() };
 }
 
 const size = new THREE.Vector2();
@@ -84,7 +86,8 @@ export function draw(view: View, sim: Sim, look: Look, target: Target | undefine
   }
   const o = typeof target === 'string' ? objects.get(target) : undefined;
   const at = o ? eye.copy(o.position).setY(o.position.y + EYE) : typeof target === 'object' ? eye.set(target.x, target.y, target.z) : null;
-  if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined);
+  const shake = drawJuice(view.juice, sim, scene, camera, at);
+  if (at) follow(camera, sim, at, o ? EYE : 0, look, typeof target === 'string' ? sim.entities.get(target)?.body : undefined, shake);
   drawSenses(view.senses, sim, scene, camera);
   renderer.render(scene, camera);
 }
@@ -118,8 +121,17 @@ function place(o: THREE.Object3D, b: RigidBody, lag: number): void {
 // a wall or a prop is never between it and the point. That includes a blocker the followed body passes:
 // a cat route is drawn as a hole with the wall over it, and a camera through it would face that wall.
 // The closer it is pulled, the further it looks down from `at` toward the character `lift` below, which
-// a camera backed into a wall would otherwise have under its lens and out of view.
-function follow(camera: THREE.PerspectiveCamera, sim: Sim, at: THREE.Vector3, lift: number, look: Look, body: RigidBody | undefined): void {
+// a camera backed into a wall would otherwise have under its lens and out of view. `shake` is added last
+// (card 33).
+function follow(
+  camera: THREE.PerspectiveCamera,
+  sim: Sim,
+  at: THREE.Vector3,
+  lift: number,
+  look: Look,
+  body: RigidBody | undefined,
+  shake: THREE.Vector3,
+): void {
   ray.set(-Math.sin(look.yaw) * Math.cos(look.pitch), Math.sin(look.pitch), -Math.cos(look.yaw) * Math.cos(look.pitch));
   const notCharacter = (c: Collider) => {
     const e = entityOf(sim.entities, c);
@@ -130,4 +142,5 @@ function follow(camera: THREE.PerspectiveCamera, sim: Sim, at: THREE.Vector3, li
   const d = hit?.time_of_impact ?? DISTANCE;
   camera.position.copy(ray).multiplyScalar(d).add(at);
   camera.lookAt(at.x, at.y - lift * (1 - d / DISTANCE), at.z);
+  camera.position.add(shake);
 }
