@@ -159,7 +159,7 @@ function judge(r: Run): Verdict {
 const chaseKennelRescueRejoin: Scenario = {
   about: 'a fish out under chase; a grab, the kennel, a rejoin, a rescue; the host leaves',
   level: countryHouse,
-  player: (i) => ({ side: i === 1 ? 'dog' : 'cat', script }),
+  player: () => ({ script }),
   judge,
   round: true,
   seconds: 150,

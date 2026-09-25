@@ -62,7 +62,7 @@ function spots({ level, gate }: Plan) {
   };
 }
 
-// The round on `plan`'s map: card 63's judge, the sides by the auto-balance, the scripts below.
+// The round on `plan`'s map: card 63's judge, the sides by the rotation, the scripts below.
 export function roundOn(plan: Plan): Scenario {
   const S = spots(plan);
 
@@ -254,7 +254,7 @@ export function roundOn(plan: Plan): Scenario {
   return {
     about: `a round to the end on the ${plan.about}: mines at the exits, a defuse, fish out, a grab, the kennel, a rescue`,
     level: plan.level,
-    player: (i, level) => ({ side: aRound.player(i, level).side, script }),
+    player: () => ({ script }),
     judge: aRound.judge!,
     round: true,
     seconds: 420,

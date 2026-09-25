@@ -98,7 +98,8 @@ const s = (x: number) => x.toFixed(1);
 // Card 63's judge: every client folds the end at one message with one result, the winner as scripted (cats by
 // three fish; with a shortened heist, dogs by its timer), the round's length on the host's clock, and the QA
 // numbers: fish delivered, the first grab after the heist began, mines armed and defused, captures and
-// rescues.
+// rescues. The round's top scorer by name. Once a match is over (ADR 0014): every name a dog in it, the
+// dog counts at most one apart, and the match's name the same on every client.
 function judge(r: Run): Verdict {
   const here = r.ends.flatMap((e, i) => (e ? [i] : []));
   const turnTo = (i: number, to: Round['phase']) => r.wires[i]!.turns.find((t) => t.round.phase === to);
@@ -128,21 +129,30 @@ function judge(r: Run): Verdict {
     winner: result ? `${result.winner}s` : 'none',
     why: result?.why ?? 'none',
   };
+  const [top, points] = Object.entries(result?.points ?? {}).sort(([, a], [, b]) => b.n - a.n || a.last - b.last)[0] ?? ['none', { n: 0 }];
+  const end = r.ends[h]!;
+  const dogRounds = end.roster.map((q) => [q.name, end.results.filter((x) => x.dogs.includes(q.name)).length] as const);
+  const counts = dogRounds.map(([, n]) => n);
+  const fair = Math.min(...counts) >= 1 && Math.max(...counts) - Math.min(...counts) <= 1;
+  const matched = here.filter((i) => r.ends[i]!.match === end.match).length;
   const lines = [
-    `the end: ${result ? `${result.why}, ${result.secured} fish, winner ${result.winner}s` : 'none'} on ${here.length} clients at ${oneMessage ? `one message, seq ${overs[0]!.seq}` : 'DIFFERENT messages'}; as scripted: ${scripted ?? false}`,
+    `the end: ${result ? `${result.winner}s by ${result.why}, ${result.secured} fish; top ${top} with ${points.n} points` : 'none'} on ${here.length} clients at ${oneMessage ? `one message, seq ${overs[0]!.seq}` : 'DIFFERENT messages'}; as scripted: ${scripted ?? false}`,
     `round: ${row.round} of sim time from prep to the end (limit ${LIMIT(players)})${r.heist === undefined ? '' : `, heist ${r.heist} s`}`,
     `fish delivered ${row.fish}; first grab ${row.grab === 'none' ? 'none' : `${row.grab} into the heist`}; mines armed ${row.mines}, defused ${row.defused}, blasts ${row.blasts}; captured ${row.captured}, rescues ${row.rescues}`,
   ];
-  return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players), row };
+  if (end.match !== null) {
+    lines.push(`the match: ${end.results.length} of ${end.rounds} results; dog rounds ${dogRounds.map(([name, n]) => `${name} ${n}`).join(', ')}; winner ${end.match} on ${matched} of ${here.length} clients`);
+  }
+  const match = end.match === null || (fair && matched === here.length);
+  return { lines, ok: oneMessage && scripted === true && took <= LIMIT(players) && match, row };
 }
 
 // Card 63: a round to the end at any roster size, the same scripts. The fold sides the players at prep
-// (ADR 0014) and the scripts read their side there: `side` is only the runner's label for a seat with no
-// character, the first seat being a dog at every roster size of two or more.
+// (ADR 0014) and the scripts read their side there.
 const aRound: Scenario = {
   about: 'a round to the end: mines at the exits, a defuse, fish out, a grab, the kennel, a rescue',
   level: countryHouse,
-  player: (i) => ({ side: i === 0 ? 'dog' : 'cat', script }),
+  player: () => ({ script }),
   judge,
   round: true,
   seconds: 420,
