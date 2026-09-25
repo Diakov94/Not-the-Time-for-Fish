@@ -119,3 +119,5 @@
 - HEADLESS2: 165 (the rotation's sides, --rounds to the match's end), bug-headless-moving-judge-fails-on-the-runners-own-stalls, 135 (the high-rise round); 141 closed without code (the yacht round landed in #61). 2026-09-25.
 - HEADLESS2: 135 high-rise round; 165 seats by the rotation, the match to its end; the moving judge tells the runner's own stalls and the grabbed cat's own-client handoff from desync; 141 closed (the yacht round was delivered by MAP-SCENARIOS). 2026-09-25.
 - KNOBS: 148 balance by player count (the sweep kept GAME.md's row at every count 3-8); bug-divergence-exceeds-moving-limit-at-6plus-clients; the spawn takes its point's facing. 2026-09-25.
+- bug-headless-scenarios-after-rotation: mines-and-traps at 4 (a lone dog plants both mines), chase-kennel-rescue-rejoin at 4 and 6 (seats by the rotation; no read of a rejoining seat), session length named (418 s at 6). Every MVP QA scenario passes. 2026-09-25.
+- bug-divergence-exceeds-moving-limit-at-6plus-clients: closed by the Producer's final verification: the round at 6 and 8 clients passed every run (moving 0.092-0.139 m, limit 0.25), with KNOBS' fix B and HEADLESS2's judge. 2026-09-25.

@@ -34,7 +34,9 @@ function judge(r: Run): Verdict {
 }
 
 // Card 131: a session of two matches back to back, card 63's round and its bots, the fold picking the dogs
-// at every prep; the run ends when the second match's last round is over on every client.
+// at every prep; the run ends when the second match's last round is over on every client. It plays in real
+// time, so its length is its rounds': at 6 clients 6 rounds, 417.5 s of wall time (a 45 s prep and a heist
+// to three fish each, 70-90 s a round); at 4 clients 8 rounds, 713.3 s. `seconds` is only the ceiling: 8 rounds of 420 s.
 const session: Scenario = {
   ...aRound,
   about: 'two matches back to back: the rounds of card 63, the dogs rotating at every prep',
