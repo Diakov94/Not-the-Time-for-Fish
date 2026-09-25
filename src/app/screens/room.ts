@@ -66,7 +66,7 @@ export function roomScreen<T extends { session: Session }>(enter: (code: string,
   screen.className = 'room';
   screen.innerHTML = `
     <div class="card">
-      <h1>Не час для рибки</h1>
+      <h1>${document.title}</h1>
       <div class="band"></div>
       <label class="field">Ваше ім’я <input name="player" maxlength="20" autocomplete="off" /></label>
       <div class="ways">
@@ -81,6 +81,7 @@ export function roomScreen<T extends { session: Session }>(enter: (code: string,
       <p class="voice">${VOICE}</p>
     </div>`;
   screen.querySelector('.card')!.append(settingsButton());
+  document.querySelector('.loading')?.remove(); // index.html's first paint
   document.body.append(screen);
   const status = screen.querySelector('.status')!;
   if (lost) status.textContent = LOST;
