@@ -57,26 +57,29 @@ function onPoint(pt: Point, kind: Kind): Pick<Body, 'p' | 'q'> {
 }
 
 // What the host spawns for a level: its synced props, a fish at every `fish` point, a trap, no one's
-// yet, at every `trapPickup` point, noise makers and slip traps by turns in the level's order (card 130),
-// and a mystery bag at every `bag` point.
-export function levelBodies(level: Level): Body[] {
+// yet, at each of the first `traps` `trapPickup` points (a round's prep passes its knob row's), noise
+// makers and slip traps by turns in the level's order (card 130), and a mystery bag at every `bag` point.
+export function levelBodies(level: Level, traps = Infinity): Body[] {
   return [
     ...level.props.flatMap((prop, i) => (prop.synced ? [{ kind: 'prop' as const, p: prop.p, prop: i }] : [])),
     ...level.points.filter((pt) => pt.role === 'fish').map((pt) => ({ kind: 'fish' as const, ...onPoint(pt, 'fish') })),
-    ...level.points.filter((pt) => pt.role === 'trapPickup').map((pt, i) => ({ kind: 'trap' as const, ...onPoint(pt, 'trap'), variant: i % 2 === 0 ? ('noise' as const) : ('slip' as const) })),
+    ...level.points
+      .filter((pt) => pt.role === 'trapPickup')
+      .slice(0, traps)
+      .map((pt, i) => ({ kind: 'trap' as const, ...onPoint(pt, 'trap'), variant: i % 2 === 0 ? ('noise' as const) : ('slip' as const) })),
     ...level.points.filter((pt) => pt.role === 'bag').map((pt) => ({ kind: 'bag' as const, ...onPoint(pt, 'bag') })),
   ];
 }
 
-// Where a body of `kind` stands on the `n`-th point of `role`, round the list.
-export function pointFor(level: Level, role: Point['role'], kind: Kind, n = 0): Vector | undefined {
+// Where a body of `kind` stands on the `n`-th point of `role`, round the list, and which way it faces.
+export function pointFor(level: Level, role: Point['role'], kind: Kind, n = 0): Pick<Body, 'p' | 'q'> | undefined {
   const points = level.points.filter((pt) => pt.role === role);
   const pt = points[n % points.length];
-  return pt && onPoint(pt, kind).p;
+  return pt && onPoint(pt, kind);
 }
 
-// The `n`-th spawn point of a side: where that side's character stands at the start.
-export function spawnPoint(level: Level, side: Side, n: number): Vector | undefined {
+// The `n`-th spawn point of a side: where that side's character stands at the start, facing the point's yaw.
+export function spawnPoint(level: Level, side: Side, n: number): Pick<Body, 'p' | 'q'> | undefined {
   return pointFor(level, side === 'cat' ? 'catSpawn' : 'dogSpawn', side, n);
 }
 

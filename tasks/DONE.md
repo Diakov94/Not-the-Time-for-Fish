@@ -118,3 +118,4 @@
 - APP-REVIEW: the seven app review findings (audio on the first click, camera faces the spawn, a mistyped code, quick rejoin, the build through one tunnel, a newcomer mid-round, no storage). 2026-09-25.
 - HEADLESS2: 165 (the rotation's sides, --rounds to the match's end), bug-headless-moving-judge-fails-on-the-runners-own-stalls, 135 (the high-rise round); 141 closed without code (the yacht round landed in #61). 2026-09-25.
 - HEADLESS2: 135 high-rise round; 165 seats by the rotation, the match to its end; the moving judge tells the runner's own stalls and the grabbed cat's own-client handoff from desync; 141 closed (the yacht round was delivered by MAP-SCENARIOS). 2026-09-25.
+- KNOBS: 148 balance by player count (the sweep kept GAME.md's row at every count 3-8); bug-divergence-exceeds-moving-limit-at-6plus-clients; the spawn takes its point's facing. 2026-09-25.
