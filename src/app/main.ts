@@ -46,6 +46,8 @@ const relay = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hos
 // The room screen's join is the session: the page's first, and a rejoin once the room is gone (`lost`).
 const enter = (lost?: { room: string; name: string }) =>
   roomScreen(async (room, name) => ({ session: await connect(`${relay}/${room}`, maps['country-house']!, name, maps), room, name }), lost);
+// The audio's gesture listener goes on before the room screen, so its create or join click starts the graph.
+const audio = createAudio();
 let joined = await enter();
 let { session } = joined;
 let { sim } = session;
@@ -100,7 +102,6 @@ const input = listen(canvas, own, {
   },
 });
 const view = createView(canvas, sim);
-const audio = createAudio();
 const hud = createHud();
 
 // Real time goes to the sim, whose accumulator cuts it into fixed 60 Hz steps (`step`); render draws
