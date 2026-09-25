@@ -2,17 +2,17 @@ import { beforeAll, expect, test } from 'vitest';
 import { countryHouse } from '../content/maps/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
 import { forward, join, leave, newRoom, type Out } from '../relay/room.ts';
-import { halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';
+import { characterOf, halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';
 import type { Left, MapPick, SimMessage } from './messages.ts';
 import { drainEvents } from './events.ts';
-import { IDLE, type Intent } from './movement.ts';
+import { IDLE, yawOf, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
 import { interact } from './heist.ts';
 import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { newOwnershipTable, receive } from './ownership.ts';
-import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, settle, successor, type RoundMessage } from './round.ts';
+import { advance, duration, foldRound, KNOBS, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, settle, successor, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -148,6 +148,23 @@ test('the rotation at every seated count 3-8: GAME.md dog counts, 3 4 3 3 4 3 ro
   for (const m of at) expect(m.spread[0]).toBeGreaterThanOrEqual(1);
   for (const m of at) expect(m.spread[1]! - m.spread[0]!).toBeLessThanOrEqual(1);
   expect(at[5]!.dogs).toEqual([['p0', 'p1', 'p2'], ['p3', 'p4', 'p5'], ['p0', 'p6', 'p7']]);
+});
+
+// Card 148's knobs: the round at n seated reads its own row, the heist lasting the row's timer; a name
+// joining mid-heist moves no knob.
+test('the knobs: a row per seated count 3-8, the heist lasts its row; a join mid-heist keeps the row', () => {
+  for (const n of [3, 4, 5, 6, 7, 8]) {
+    const [r, t] = [newRound(), newOwnershipTable()];
+    const fold = (m: RoundMessage) => foldRound(r, m, 'c0', t, new Map());
+    for (let i = 0; i < n; i++) fold({ type: 'hello', from: `c${i}`, name: `p${i}` });
+    fold({ type: 'phase', from: 'c0', ...successor(r) }); // prep
+    fold({ type: 'phase', from: 'c0', ...successor(r) }); // heist
+    const row = knobs(r);
+    fold({ type: 'hello', from: 'c9', name: 'late' });
+    console.log(`${n} seated: ${JSON.stringify(row)}; after a join mid-heist ${JSON.stringify(knobs(r))}`);
+    expect(KNOBS[n]).toBeDefined();
+    expect([row === KNOBS[n], duration(r), knobs(r) === KNOBS[n]]).toEqual([true, KNOBS[n]!.heist, true]);
+  }
 });
 
 // ADR 0014's score over scripted matches at 5 players (dogs p0+p1, p2+p3, p0+p4), folded in the relay's
@@ -449,6 +466,23 @@ test("round 2 starts with every client's character of the side the rotation give
   expect(first).toBe('dog,cat,cat');
   expect(kinds()).toBe('cat,dog,cat');
   expect(agree(r)).toBe(true);
+});
+
+test("at prep every character enters facing its spawn point's yaw: a dog on the country house looks toward the house (pi), not the fence", () => {
+  const r = relay(countryHouse);
+  r.players(3);
+  const h = hostOf(r);
+  r.send(h, advance(h, h.me)!);
+  r.run(1);
+  const faced = r.sims().map((s) => {
+    const c = characterOf(s.entities, s.me)!;
+    const p = c.body.translation();
+    const pt = countryHouse.points.filter((q) => q.role === `${c.kind}Spawn`).sort((a, b) => Math.hypot(a.p.x - p.x, a.p.z - p.z) - Math.hypot(b.p.x - p.x, b.p.z - p.z))[0]!;
+    return { kind: c.kind, yaw: yawOf(c.body.rotation()), point: pt.yaw };
+  });
+  console.log(`first-frame yaw by own character: ${faced.map((f) => `${f.kind} ${f.yaw.toFixed(3)} (point ${f.point.toFixed(3)})`).join(', ')}`);
+  expect(faced.map((f) => f.kind).sort()).toEqual(['cat', 'cat', 'dog']);
+  for (const f of faced) expect(f.yaw).toBeCloseTo(f.point);
 });
 
 test("the next prep puts every piece of debris knocked in round 1 back at its content pose, at rest 3 s later, on every client", () => {

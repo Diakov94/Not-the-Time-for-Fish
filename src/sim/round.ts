@@ -48,14 +48,22 @@ const OVERTIME = 60; // s at most
 const GATE_OPEN = 5; // s the kennel's gate stays open after a rescue, for the freed cats to walk out
 const AWAY = 60; // s a gone player's character stays, frozen, before the host removes it (GAME.md, Disconnects)
 
-// The balance knobs by player count (GAME.md, Multiplayer): the heist timer, mines per dog, the dig-out
-// time, one row per 3-4, 5-6 and 7-8 players (names in the roster).
-const KNOBS = [
-  { players: 4, heist: 480, mines: 4, digOut: 60 },
-  { players: 6, heist: 600, mines: 3, digOut: 60 },
-  { players: 8, heist: 720, mines: 2, digOut: 75 },
-];
-export const knobs = (r: Round) => KNOBS.find((k) => r.roster.length <= k.players) ?? KNOBS.at(-1)!;
+// The balance knobs by player count (GAME.md, Multiplayer; card 148), one row per count 3-8: the heist
+// timer, s; firecrackers and water bombs per dog (card 129); the dig-out time, s; the trap pickups the level
+// spawns at prep, its first so many `trapPickup` points. A number the sweep (card 132) gave no reason to
+// move is GAME.md's.
+export type Knobs = { heist: number; mines: number; water: number; digOut: number; traps: number };
+export const KNOBS: Readonly<Record<number, Knobs>> = {
+  3: { heist: 600, mines: 3, water: 1, digOut: 60, traps: 3 },
+  4: { heist: 600, mines: 3, water: 1, digOut: 60, traps: 3 },
+  5: { heist: 600, mines: 3, water: 1, digOut: 60, traps: 3 },
+  6: { heist: 600, mines: 3, water: 1, digOut: 60, traps: 3 },
+  7: { heist: 600, mines: 3, water: 1, digOut: 60, traps: 3 },
+  8: { heist: 600, mines: 3, water: 1, digOut: 60, traps: 3 },
+};
+// The round's row: its count is the players the prep sided, so a join or a leave mid-round moves no knob;
+// before the first prep, and outside 3-8, the nearest row.
+export const knobs = (r: Round): Knobs => KNOBS[Math.min(8, Math.max(3, r.roster.filter((p) => p.side !== null).length))]!;
 
 export function newRound(): Round {
   return { roster: [], phase: 'lobby', round: 0, rounds: 0, secured: [], caught: [], opened: [], doors: [], results: [], match: null, decided: null, score: {}, map: null };
@@ -299,7 +307,7 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
   if (m.type === 'dugOut' && m.from === sim.me) {
     const me = characterOf(sim.entities, sim.me);
     const exit = pointFor(sim.level, 'tunnelExit', 'cat');
-    if (me && exit) me.body.setTranslation(exit, true);
+    if (me && exit) me.body.setTranslation(exit.p, true);
     sim.leap = null;
   }
   if (m.type === 'hello' && m.from === sim.me && inPlay(sim.round)) enter(sim);
@@ -329,22 +337,22 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     body.setAngvel({ x: 0, y: 0, z: 0 }, true);
   }
-  if (host === sim.me) for (const b of levelBodies(sim.level)) sim.outbox.push(spawnOf(sim, b));
+  if (host === sim.me) for (const b of levelBodies(sim.level, knobs(r).traps)) sim.outbox.push(spawnOf(sim, b));
   enter(sim);
 }
 
 // This client's character enters the round, of the side the roster gives it: at its side's spawn point,
-// or on the kennel's floor if the roster holds it captured (a rejoin), digging out on a timer of its own
-// from now. A name with no side yet waits for the next prep.
+// facing its yaw, or on the kennel's floor if the roster holds it captured (a rejoin), digging out on a
+// timer of its own from now. A name with no side yet waits for the next prep.
 function enter(sim: Sim): void {
   const r = sim.round;
   const p = playerOf(r, sim.me);
   const side = playsAs(r, sim.me);
   if (!p || !side) return;
   const kennel = sim.level.volumes.find((v) => v.role === 'kennel');
-  const floor = kennel && { x: kennel.p.x, y: kennel.p.y - kennel.half.y + halfHeight(side), z: kennel.p.z };
+  const floor = kennel && { p: { x: kennel.p.x, y: kennel.p.y - kennel.half.y + halfHeight(side), z: kennel.p.z } };
   const at = p.captured !== null ? floor : spawnPoint(sim.level, side, positionOf(r, p));
-  if (at) sim.outbox.push(spawnOf(sim, { kind: side, p: at }));
+  if (at) sim.outbox.push(spawnOf(sim, { kind: side, ...at }));
   if (p.captured !== null) sim.digOut = sim.time + knobs(r).digOut;
 }
 

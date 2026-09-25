@@ -63,8 +63,10 @@ export function receiveTick(sim: Sim, r: Receiver, t: Tick, at: number): void {
     } else {
       list.push(entry);
       // One owner ticks every TICK_MS; its ticks that came closer were held on the way (all of a stalled
-      // receiver's at once), so each takes its place a tick before the one after it.
-      for (let i = list.length - 2; i >= 0 && list[i]!.from === t.from && list[i]!.at > list[i + 1]!.at - TICK_MS; i--) list[i]!.at = list[i + 1]!.at - TICK_MS;
+      // receiver's at once), so each takes its place a tick before the one after it. The first of an
+      // owner's run keeps its place, set by a handoff (see interpolate) or a restart above: a tick earlier
+      // still, a carrier's first pose with a catch-up tick close behind showed ~20 ms after it was simulated.
+      for (let i = list.length - 2; i > 0 && list[i - 1]!.from === t.from && list[i]!.from === t.from && list[i]!.at > list[i + 1]!.at - TICK_MS; i--) list[i]!.at = list[i + 1]!.at - TICK_MS;
     }
   }
 }
