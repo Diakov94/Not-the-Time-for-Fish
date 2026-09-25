@@ -420,7 +420,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       if (start === Infinity && now - joined > 5000) throw new Error(scenario.round ? "the clients never all sided every seat as the rotation's round 1" : 'the clients never all held every entity');
       // The host's button, once per phase: a round game starts once every name is in, and its next round when one is over.
       const h = present().find((l) => l.session.host === l.session.sim.me)?.session;
-      const m = scenario.round && seats.every((c) => named(c.session)) && h && !over() ? advance(h.sim, h.sim.me) : null;
+      const m = scenario.round && (start < Infinity || seats.every((c) => named(c.session))) && h && !over() ? advance(h.sim, h.sim.me) : null;
       const key = h && `${h.sim.round.phase}:${h.sim.round.round}`;
       if (h && m && key !== pressed && (h.sim.round.phase === 'over' || h.sim.round.round === 0)) {
         pressed = key!;
