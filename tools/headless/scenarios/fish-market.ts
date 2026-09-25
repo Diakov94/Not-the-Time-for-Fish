@@ -28,6 +28,7 @@ export type Plan = {
   level: Level;
   about: string;
   gate: Volume; // the cats' way out of the hideout, the one exit the hideout faces
+  lane?: number; // m east of its middle the cats go out, west they come back: 0.4 unless the gate is one cat wide
   table: Trip; // the runners'
   pantry: Trip; // the kitchen cats'
   // The rescuer's ways, each from the gate's yard side unless named otherwise, to beside the latch; from the
@@ -47,18 +48,22 @@ const RUN = { sprint: true };
 const back = (r: P[]) => [...r].reverse();
 const isP = (s: Step): s is P => 'x' in s;
 
-// What the plan's level owns, read from it, and the gate's lanes: out at x + 0.4, back at - 0.4.
-function spots({ level, gate }: Plan) {
+// What the plan's level owns, read from it, and the gate's lanes: out at x + lane, back at - lane.
+function spots({ level, gate, lane = 0.4 }: Plan) {
   const hideout = level.volumes.find((v) => v.role === 'hideout')!;
   const kennel = level.volumes.find((v) => v.role === 'kennel')!;
   const latch = level.points.find((q) => q.role === 'latch')!.p;
   return {
     mine: p(gate.p.x, gate.p.z + 0.7),
     wait: (n: number) => p(gate.p.x - 1.5 + 0.75 * (n % 5), gate.p.z - 3),
-    out: [p(gate.p.x + 0.4, gate.p.z - 2.5), p(gate.p.x + 0.4, gate.p.z + 2)],
-    in: [p(gate.p.x - 0.4, gate.p.z + 2), p(gate.p.x - 0.4, gate.p.z - 2.5), p(gate.p.x - 0.4, hideout.p.z + hideout.half.z - 1)],
+    out: [p(gate.p.x + lane, gate.p.z - 2.5), p(gate.p.x + lane, gate.p.z + 2)],
+    in: [p(gate.p.x - lane, gate.p.z + 2), p(gate.p.x - lane, gate.p.z - 2.5), p(gate.p.x - lane, hideout.p.z + hideout.half.z - 1)],
     rescue: p(latch.x, latch.z - 0.6),
     outOfCage: p(kennel.p.x - 0.5, kennel.p.z - kennel.half.z - 0.7),
+    // A gate one cat wide: its throat, its hideout side, and its yard side where cats coming home wait.
+    throat: { x0: gate.p.x - 0.7, x1: gate.p.x + 0.7, z0: gate.p.z - 1.2, z1: gate.p.z + 1.2 },
+    inside: { x0: gate.p.x - 2, x1: gate.p.x + 2, z0: gate.p.z - 5.5, z1: gate.p.z - 1.2 },
+    outside: { x0: gate.p.x - 1.8, x1: gate.p.x + 1.8, z0: gate.p.z + 1.2, z1: gate.p.z + 3.2 },
   };
 }
 
@@ -84,6 +89,15 @@ export function roundOn(plan: Plan): Scenario {
   }
   function* leave(c: HeadlessClient, room: Room): Generator<Press, void> {
     yield* until(c, () => !catIn(c, room.passage));
+  }
+  // Along `route` and in through the gate. A gate one cat wide (lane 0) is taken in turn: at the route's end
+  // a cat waits while another is in the gate or on its hideout side, or waits by it earlier on the team.
+  function* homeBy(c: HeadlessClient, route: P[], pace = {}): Generator<Press, boolean> {
+    if (plan.lane !== 0) return yield* go(c, [...route, ...S.in], pace);
+    if (!(yield* go(c, route, pace))) return false;
+    const { n } = place(c);
+    yield* until(c, () => !catIn(c, S.throat) && !catIn(c, S.inside) && !catIn(c, S.outside, n));
+    return yield* go(c, S.in, pace);
   }
 
   // The cats' way through the gate once the round is on: the team's first cat sneaks up to a mine there and
@@ -139,7 +153,7 @@ export function roundOn(plan: Plan): Scenario {
     const took = yield* take(c);
     if (!(yield* go(c, [...back(t.steps.filter(isP)).slice(1), t.gap[1]]))) return 'carried';
     yield* leave(c, t.room);
-    return !(yield* go(c, [t.gap[0], ...t.home, ...S.in])) ? 'carried' : took ? 'home' : 'empty';
+    return !(yield* homeBy(c, [t.gap[0], ...t.home])) ? 'carried' : took ? 'home' : 'empty';
   }
 
   // `s` until it ends, or 'carried' as soon as a dog carries the cat, wherever it is in it.
@@ -159,7 +173,7 @@ export function roundOn(plan: Plan): Scenario {
     yield* go(c, [...route, S.rescue], RUN);
     yield* rescue(c);
     yield* hold(c, 3); // the freed cat out of the cage and on its way first
-    yield* go(c, [...plan.rescue.home, ...S.in], RUN);
+    yield* homeBy(c, plan.rescue.home, RUN);
   }
 
   // A runner: through the gate, the table's fish out one at a time, then parked; the rescuer opens the kennel
