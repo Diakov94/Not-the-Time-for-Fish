@@ -9,13 +9,13 @@ import { record } from '../meta/progress.ts';
 import { RELAY_PATH } from '../relay/address.ts';
 import { createView, draw, type Target } from '../render/view.ts';
 import { emote } from '../sim/emotes.ts';
-import { isCharacter, type ClientId } from '../sim/entities.ts';
+import { isCharacter, type ClientId, type NetId } from '../sim/entities.ts';
 import { drainEvents, markAt } from '../sim/events.ts';
 import { grab, throwCarried } from '../sim/grab.ts';
 import { interact } from '../sim/heist.ts';
 import type { Phase, SimMessage } from '../sim/messages.ts';
 import { plant } from '../sim/mines.ts';
-import { IDLE, type Intent } from '../sim/movement.ts';
+import { IDLE, yawOf, type Intent } from '../sim/movement.ts';
 import { carried } from '../sim/ownership.ts';
 import { usePerk } from '../sim/perks.ts';
 import { advance, playerOf } from '../sim/round.ts';
@@ -73,6 +73,14 @@ function target(): Target | undefined {
   const free = sim.round.roster.filter((p) => p.side === me.side && p.client !== sim.me && p.captured === null).flatMap((p) => characterOf(p.client) ?? []);
   return free.length > 0 ? free[tabs % free.length] : sim.level.volumes.find((v) => v.role === 'kennel')?.p;
 }
+// Each new own character (a round's, a rejoin's) turns the look's yaw to its body's facing, where the sim
+// spawned it, so the camera starts behind it; the pitch stays the viewer's.
+let faced: NetId | undefined;
+function face(): void {
+  const id = own();
+  if (id !== undefined && id !== faced) input.look.yaw = yawOf(sim.entities.get(id)!.body.rotation());
+  faced = id;
+}
 // Play: the canvas is the screen and the own character is not a spectator; only then the keys count.
 const acting = () => PLAY.includes(sim.round.phase) && !spectating();
 
@@ -128,6 +136,7 @@ setInterval(() => {
 // results' buttons.
 requestAnimationFrame(function loop(now: number) {
   const playing = PLAY.includes(sim.round.phase);
+  face();
   advanceTo(now, acting() ? intent(input, own()) : IDLE);
   if (playing) draw(view, sim, input.look, target());
   hear(audio, sim, { position: view.orbit, quaternion: view.camera.quaternion });
