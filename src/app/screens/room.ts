@@ -1,5 +1,5 @@
 import { keyOf } from '../../input/bindings.ts';
-import type { Late, Refused } from '../../net/client.ts';
+import type { Late, Refused, Session } from '../../net/client.ts';
 import { inPlay, type Refusal } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
 import { paint, settingsButton, tag, VOICE } from './parts.ts';
@@ -12,6 +12,9 @@ const REFUSAL: Record<Refusal, string> = {
 // A join net gave up on with no answer (`late`), and the room gone under a player who was in it (`lost`).
 const LATE = 'Кімната не відповідає. Спробуйте ще раз.';
 const LOST = 'З’єднання втрачено. Приєднайтеся знову.';
+// A join that found nobody in the room, and a create whose second code was in use too.
+const NO_ROOM = (room: string) => `Кімнати ${room} немає. Перевірте код.`;
+const IN_USE = 'Код кімнати вже зайнятий. Спробуйте створити ще раз.';
 
 // What the room screen keeps in localStorage (card 50), the only save GAME.md allows: the player's
 // name and the last room it entered, so a reload rejoins in one click.
@@ -42,9 +45,12 @@ const store = (key: string, value: string) => {
 // can be changed. The name lives in its input and localStorage only; once in, the round's roster is the
 // fact. Once in, the screen leaves the hint bar in its place; a rejoin's bar replaces the last one. After a
 // lost connection it opens saying so, with the room and the name the player was in (`lost`, this tab's
-// own, not the storage's another tab may have written), so one click rejoins. The app's player-facing
-// text lives in its screens.
-export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: string, name: string) => Promise<T>, lost?: { room: string; name: string }): Promise<T> {
+// own, not the storage's another tab may have written), so one click rejoins. The relay makes a room for
+// any code (ADR 0005), so whether the player pressed create or join, this screen's fact, is checked against
+// the roster the join brought: a join where no other name is there and this client is the host found no
+// room, and a create where another name is there landed in a stranger's; either session is closed, and a
+// create tries a second code once. The app's player-facing text lives in its screens.
+export function roomScreen<T extends { session: Session }>(enter: (code: string, name: string) => Promise<T>, lost?: { room: string; name: string }): Promise<T> {
   paint();
   const screen = document.createElement('form');
   screen.className = 'room';
@@ -73,7 +79,8 @@ export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: st
   player.value = lost?.name ?? stored(NAME);
   code.value = lost?.room ?? stored(ROOM);
   return new Promise((resolve) => {
-    const tryRoom = async (room: string) => {
+    // `create`: the codes a create has tried, this one included; 0 for a join.
+    const tryRoom = async (room: string, create = 0): Promise<void> => {
       const name = player.value.trim();
       if (!name) {
         status.textContent = 'Введіть своє ім’я.';
@@ -83,6 +90,16 @@ export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: st
       screen.inert = true;
       try {
         const value = await enter(room, name);
+        const { sim, host, ws } = value.session;
+        const others = sim.round.roster.some((p) => p.name !== name);
+        if (create ? others : !others && host === sim.me) {
+          ws.close();
+          sim.world.free();
+          if (create === 1) return tryRoom(newCode(), 2);
+          status.textContent = create ? IN_USE : NO_ROOM(room);
+          screen.inert = false;
+          return;
+        }
         store(NAME, name);
         store(ROOM, room);
         document.querySelector('.hint')?.remove();
@@ -95,7 +112,8 @@ export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: st
       }
     };
     // Digits only, so a code reads the same in any keyboard layout.
-    screen.querySelector<HTMLButtonElement>('[name=create]')!.onclick = () => tryRoom(String(1000 + Math.floor(Math.random() * 9000)));
+    const newCode = () => String(1000 + Math.floor(Math.random() * 9000));
+    screen.querySelector<HTMLButtonElement>('[name=create]')!.onclick = () => tryRoom(newCode(), 1);
     screen.onsubmit = (e) => {
       e.preventDefault();
       const room = code.value.trim();
