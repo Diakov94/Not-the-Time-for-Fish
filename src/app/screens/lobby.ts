@@ -1,20 +1,28 @@
 import * as THREE from 'three';
+import { COSMETICS } from '../../art/cosmetics.ts';
 import { INK, OVERLAY } from '../../art/palette.ts';
 import { FRAME, lookFor, rigFor } from '../../art/rig.ts';
 import { CHARACTERS, ofSide } from '../../content/characters.ts';
+import { progress } from '../../meta/progress.ts';
+import { ruled, unlocked } from '../../meta/unlocks.ts';
 import type { ClientId } from '../../sim/entities.ts';
-import type { Look, Side } from '../../sim/messages.ts';
-import { lookOf, playerOf, rotation, type Player } from '../../sim/round.ts';
+import type { Look, MapPick, Side, Worn } from '../../sim/messages.ts';
+import { lookOf, playerOf, rotation, roundsOf, type Player } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { leaveButton, paint, score, settingsButton, tag, VOICE } from './parts.ts';
+import { cosmeticName, leaveButton, paint, settingsButton, tag, VOICE } from './parts.ts';
 
-const SIDE: Record<Side, string> = { cat: 'Коти', dog: 'Пси' };
 // The maps as players name them, by the map's file name (ADR 0011); a map not named here shows that.
 const MAPS: Record<string, string> = { 'country-house': 'Дача', 'high-rise': 'Багатоповерхівка', 'fish-market': 'Рибний ринок', farm: 'Ферма', yacht: 'Яхта' };
 
 // The map the next match is played on: the host's pick in the round table, or the level the world was
 // built from, among the maps the app found (card 101).
 const mapOf = (sim: Sim) => sim.round.map ?? Object.keys(sim.levels).find((name) => sim.levels[name] === sim.level) ?? '';
+
+// Hat or accessory, the catalogue's word per id (ADR 0013).
+const KIND = new Map(COSMETICS.map((c) => [c.id, c.kind]));
+// With nothing unlocked, the nearest rule is meta's first (unlocks.ts lists the one-event rules first);
+// its words are this screen's, for that id only: another first rule shows no hint rather than a wrong one.
+const HINT: Record<string, string> = { 'paper-crown': 'відкривається за перший матч, зіграний до кінця' };
 
 // Every character's portrait, its look in art (ADR 0011) at rest, three-quarter front, drawn once into
 // an image on the lobby's first draw by one renderer that is then let go. A character art has no file
@@ -59,14 +67,16 @@ const portrait = (id: string) => {
 };
 
 // The lobby (card 47), the room's screen between matches, shown while the round table says lobby. It
-// draws the table's roster as two columns, the cats and the dogs of the next round as the fold's
-// rotation will pick them (ADR 0014), each name with its character for that side, and under each column
-// the side's six characters, the roster's (content), one row to pick from, each with its portrait and
-// name, the picked one's signature detail beneath, and a way out of the room. It turns clicks into the
-// sim's messages: the player's own look per side, and for the host the start. It keeps no roster and
-// decides no side; it is redrawn when what it shows changes. Which look a player has is the round
-// table's (`lookOf`).
-export function lobbyScreen(room: string, send: (m: Look) => void, start: () => void): (sim: Sim, host: ClientId) => void {
+// draws the table's roster as one list in join order, each name with the side the fold's rotation will
+// give it at the next prep (ADR 0014: `rotation` is the preview, the fold's write at prep the fact), its
+// character for that side and its session wins; the rounds the match will have for the players seated
+// now (`roundsOf`); the player's own pickers, a character per side, each tile with its portrait and name,
+// the picked one's signature detail beneath; and a way out of the room. It turns clicks into the sim's
+// messages: the player's own look and what it wears per side, from what this browser has unlocked (card
+// 145, ADR 0013), and for the host the map among the maps the app found and the start. It keeps no roster
+// and decides no side or map; it is redrawn when what it shows changes. Which look a player has and wears
+// and the map are the round table's (`lookOf`, `worn`, `map`).
+export function lobbyScreen(room: string, send: (m: Look | MapPick) => void, start: () => void): (sim: Sim, host: ClientId) => void {
   const screen = tag('div', { className: 'screen lobby' });
   document.body.append(screen);
   let drawn = '';
@@ -75,56 +85,76 @@ export function lobbyScreen(room: string, send: (m: Look) => void, start: () => 
     screen.hidden = r.phase !== 'lobby';
     if (screen.hidden) return;
     paint();
-    const key = JSON.stringify([r.roster, r.results, host, r.score, r.map]);
+    const mine = unlocked(progress());
+    const key = JSON.stringify([r.roster, r.results, host, r.score, r.map, mine]);
     if (key === drawn) return;
     drawn = key;
     const hosting = host === sim.me;
     const me = playerOf(r, sim.me);
-    const row = (p: Player, side: Side) => {
-      const notes = [p === me && 'ви', p.client === host && 'хост', p.client === null && 'поза кімнатою'].filter(Boolean);
+    const dogs = rotation(r);
+    const row = (p: Player) => {
+      const side: Side = dogs.includes(p.name) ? 'dog' : 'cat';
+      const wins = Object.hasOwn(r.score, p.name) ? r.score[p.name]! : 0;
+      const notes = [side === 'dog' && 'пес наступного раунду', p === me && 'ви', p.client === host && 'хост', p.client === null && 'поза кімнатою', wins > 0 && `перемог у сесії: ${wins}`].filter(Boolean);
       const character = ofSide(side)[lookOf(r, p, side)]!;
       const e = tag('p', { className: 'player' });
       e.append(...portrait(character.id), tag('b', { textContent: p.name }), tag('span', { textContent: character.name }));
       if (notes.length) e.append(tag('small', { textContent: notes.join(', ') }));
       return e;
     };
-    const picker = (side: Side) => {
-      const mine = me === undefined ? undefined : lookOf(r, me, side);
+    const picker = (me: Player, side: Side) => {
+      const own = lookOf(r, me, side);
+      const worn = me.worn[side] ?? {};
       const tiles = ofSide(side).map((c, look) =>
         tag(
           'button',
-          { type: 'button', className: 'character', title: c.signature, ariaPressed: String(mine === look), onclick: () => send({ type: 'look', from: sim.me, side, look, worn: me?.worn[side] ?? {} }) },
+          { type: 'button', className: 'character', title: c.signature, ariaPressed: String(own === look), onclick: () => send({ type: 'look', from: sim.me, side, look, worn }) },
           ...portrait(c.id),
           tag('span', { textContent: c.name }),
         ),
       );
-      const picked = mine === undefined ? undefined : ofSide(side)[mine];
+      // A tile puts an unlocked hat or accessory on, or takes it off when it is on.
+      const wear = mine.flatMap((id) => {
+        const kind = KIND.get(id);
+        if (!kind) return [];
+        const on = worn[kind] === id;
+        const next: Worn = { ...worn };
+        if (on) delete next[kind];
+        else next[kind] = id;
+        const title = kind === 'hat' ? 'шапка' : 'аксесуар';
+        return [tag('button', { type: 'button', className: 'character', title, ariaPressed: String(on), onclick: () => send({ type: 'look', from: sim.me, side, look: own, worn: next }) }, tag('span', { textContent: cosmeticName(id) }))];
+      });
+      const picked = ofSide(side)[own];
       return tag(
         'div',
         { className: 'pick' },
         tag('h3', { textContent: side === 'cat' ? 'Ваш кіт' : 'Ваш пес' }),
         tag('div', { className: 'row' }, ...tiles),
         tag('p', { className: 'signature', textContent: picked ? `${picked.name}: ${picked.signature}` : '' }),
+        ...(wear.length ? [tag('h3', { textContent: 'Шапка й аксесуар' }), tag('div', { className: 'row' }, ...wear)] : []),
       );
     };
-    const dogs = rotation(r);
-    const column = (side: Side) =>
-      tag(
-        'section',
-        { className: `side side-${side}` },
-        tag('h2', { textContent: SIDE[side] }),
-        tag('div', { className: 'players' }, ...r.roster.filter((p) => dogs.includes(p.name) === (side === 'dog')).map((p) => row(p, side))),
-        ...(me ? [picker(side)] : []),
-      );
+    const first = ruled()[0];
+    const none = `Нічого ще не відкрито.${first && Object.hasOwn(HINT, first) ? ` ${cosmeticName(first)} ${HINT[first]}.` : ''}`;
+    // The match's rounds for the names seated now, the ones the rotation picks from (ADR 0014).
+    const rounds = roundsOf(r.roster.filter((p) => p.client !== null).length);
     const map = `Мапа: ${MAPS[mapOf(sim)] ?? mapOf(sim)}`;
     screen.replaceChildren(
-      tag('header', {}, tag('h1', { textContent: `Кімната ${room}` }), ...(r.match === null ? [] : [tag('p', { className: 'score', textContent: score(r) })]), settingsButton(), leaveButton()),
-      tag('div', { className: 'sides' }, column('cat'), column('dog')),
+      tag('header', {}, tag('h1', { textContent: `Кімната ${room}` }), tag('p', { textContent: `Матч на ${rounds} ${rounds === 1 ? 'раунд' : rounds < 5 ? 'раунди' : 'раундів'}` }), settingsButton(), leaveButton()),
+      tag(
+        'div',
+        { className: 'sides' },
+        tag('section', { className: 'side' }, tag('h2', { textContent: 'Гравці' }), tag('div', { className: 'players' }, ...r.roster.map(row))),
+        tag('section', { className: 'side' }, tag('h2', { textContent: 'Ваш вибір' }), ...(me ? [picker(me, 'cat'), picker(me, 'dog')] : []), ...(mine.length ? [] : [tag('p', { className: 'signature', textContent: none })])),
+      ),
       hosting
         ? tag(
             'footer',
             {},
             tag('p', { className: 'tip', textContent: map }),
+            ...Object.keys(sim.levels).map((name) =>
+              tag('button', { type: 'button', className: name === mapOf(sim) ? '' : 'quiet', textContent: MAPS[name] ?? name, ariaPressed: String(name === mapOf(sim)), onclick: () => send({ type: 'map', from: sim.me, name }) }),
+            ),
             tag('button', { type: 'button', className: 'start', textContent: 'Почати матч', onclick: start }),
           )
         : tag('footer', {}, tag('p', { textContent: `${map}. Чекаємо, поки хост почне матч.` })),
