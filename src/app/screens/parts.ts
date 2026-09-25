@@ -10,6 +10,24 @@ export function tag<K extends keyof HTMLElementTagNameMap>(name: K, props: Parti
   return e;
 }
 
+// The cosmetics as players name them, by catalogue id (ADR 0013: art owns the ids, the screens the
+// words), for the lobby's picker and the results' unlocks; an id not named here shows as itself.
+const COSMETIC: Record<string, string> = {
+  ushanka: 'Вушанка',
+  wreath: 'Вінок',
+  'flat-cap': 'Кепка',
+  'sailor-cap': 'Безкозирка',
+  'straw-hat': 'Бриль',
+  'paper-crown': 'Паперова корона',
+  sunflower: 'Соняшник',
+  briefcase: 'Портфель',
+  'fish-skeleton': 'Риб’ячий скелет',
+  medal: 'Медаль',
+  scarf: 'Шарф',
+  loaf: 'Паляниця',
+};
+export const cosmeticName = (id: string) => (Object.hasOwn(COSMETIC, id) ? COSMETIC[id]! : id);
+
 // GAME.md, Menus: the voice-channel reminder, on the menu and in the lobby; a side is per round (ADR 0014).
 export const VOICE = 'Два голосові канали: коти в одному, пси в іншому. Змінили бік — змініть канал.';
 

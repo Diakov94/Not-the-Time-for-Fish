@@ -1,7 +1,9 @@
+import { progress, type Progress } from '../../meta/progress.ts';
+import { newlyUnlocked } from '../../meta/unlocks.ts';
 import type { ClientId } from '../../sim/entities.ts';
 import { scoreOf, successor, type Decider, type Result, type Round, type Why } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { leaveButton, paint, tag } from './parts.ts';
+import { cosmeticName, leaveButton, paint, tag } from './parts.ts';
 
 // Why a round ended, as the fold's `Result.why` says it.
 const WHY: Record<Why, string> = {
@@ -59,17 +61,23 @@ function players(r: Round, x: Result): HTMLElement {
 // player's points and, once the table holds the match's, the match's winner by name and the rule that
 // decided it, in the menu's style, and a way out of the room. The winner, the points, the reasons and the
 // deciding rule are the table's; the screen shows the counts and times it was decided on beside the rule.
-// The host's button sends `next`, the table's successor phase.
+// At a match's end it names what the match unlocked in this browser (card 145): meta's difference between
+// this browser's progress as the match began, read once then, and now (ADR 0013). The host's button sends
+// `next`, the table's successor phase.
 export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => void {
   const screen = tag('div', { className: 'screen results' });
   document.body.append(screen);
   let drawn = '';
+  let began: Progress | null = null;
   return (sim, host) => {
     const r = sim.round;
+    if (r.phase === 'lobby') began = null;
+    else began ??= structuredClone(progress());
     screen.hidden = r.phase !== 'over';
     if (screen.hidden) return;
     paint();
-    const key = JSON.stringify([r.round, r.roster, r.results, r.match, r.decided, r.score, host]);
+    const earned = began && r.match !== null ? newlyUnlocked(began, progress()) : [];
+    const key = JSON.stringify([r.round, r.roster, r.results, r.match, r.decided, r.score, host, earned]);
     if (key === drawn) return;
     drawn = key;
     const match =
@@ -81,6 +89,7 @@ export function resultsScreen(next: () => void): (sim: Sim, host: ClientId) => v
               { className: 'panel match' },
               tag('h2', { textContent: r.match === 'draw' ? 'Матч: нічия' : `Матч виграв гравець ${r.match}` }),
               tag('p', { textContent: DECIDED[r.decided!] }),
+              ...(earned.length ? [tag('p', { className: 'unlocked', textContent: `Відкрито: ${earned.map(cosmeticName).join(', ')}` })] : []),
             ),
           ];
     const button = successor(r).to === 'lobby' ? 'До лобі' : 'Наступний раунд';
