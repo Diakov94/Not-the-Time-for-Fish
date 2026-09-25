@@ -11,7 +11,7 @@ import type { Claim } from '../../src/sim/messages.ts';
 import { whisker } from '../../src/sim/mines.ts';
 import { IDLE, type Intent } from '../../src/sim/movement.ts';
 import { fold, sideOf, type Identities } from '../../src/sim/ownership.ts';
-import { advance, duration, knobs, type Round } from '../../src/sim/round.ts';
+import { advance, dogCount, duration, knobs, type Round } from '../../src/sim/round.ts';
 import { init } from '../../src/sim/world.ts';
 import { joinHeadless, playHeadless, type HeadlessClient, type Player, type Thing } from './client.ts';
 
@@ -30,8 +30,10 @@ const STALL_EVERY = 2000; // ms between the stalls `stall` injects
 // A scenario, one file each: the level, what its host spawns beside the level's crates, and each
 // client's player by join order (the first joins as the host) on the level the game runs. Its judge adds its own checks to the
 // shared ones and prints its own numbers. A round scenario starts in the lobby: once every client holds
-// every name the host starts the round, the fold sides every player at prep (ADR 0014's rotation, not the
-// scenario's `side`), the characters enter then, and the run ends once `rounds` rounds are over on every client, or after the run's seconds.
+// every name the host starts the round, the fold sides every player at prep (ADR 0014's rotation: seat i
+// of N is a dog in round 1 if i < dogCount(N)), the game starts once every client's fold agrees with that,
+// the characters enter then, and the run ends at the `over` of its `rounds`-th round on every client, at
+// the match's `over` when no further match fits in `rounds`, or after the run's seconds.
 // `seconds`, `heist` and `rounds`: the run's length, the heist's and the rounds' (by the seated count) when
 // the command names none.
 export type Scenario = {
@@ -50,8 +52,8 @@ export type Verdict = { lines: string[]; ok: boolean; row?: Record<string, strin
 // The runner's knobs, none of them a norm of the game: the tick sender's rate and the interpolation delay
 // as fractions of TICK_MS's rate and DELAY_MS (card 66's negatives; `ticks: 0` sends none, card 11's), the
 // heist's length for a round scenario (card 63: every client's phase start is moved back at its heist's
-// fold, so the host's clock ends it sooner), how many rounds a round scenario plays, match after match,
-// and `stall`: every STALL_EVERY one client in turn stalls this many ms, as a busy tab does: no frames, its messages held
+// fold, so the host's clock ends it sooner), how many rounds a round scenario plays (a match is `r.rounds`
+// of them; the next one starts only if all of it fits), and `stall`: every STALL_EVERY one client in turn stalls this many ms, as a busy tab does: no frames, its messages held
 // until it resumes, then the whole gap in one frame. It paints nothing meanwhile, so its copies are not
 // judged; its own bodies stand still, the truth the others' copies are held against. A stall starts
 // after a frame the client ticked in, or while it sends none: what an owner moves between its last tick
@@ -92,12 +94,13 @@ export type Divergence = { id: string; kind: string; moving: number; resting: nu
 export type Traffic = { id: ClientId; side?: Kind; ticks: number; minTicks: number; rate: number; up: number; down: number; events: number };
 export type Result = {
   divergence: Divergence[];
-  stalls: { n: number; longest: number }; // the runner's own stalls, and the longest, ms
+  stalls: { n: number; longest: number; at: number }; // the runner's own stalls, the longest, ms, and when it began, s into the game
   injected: number; // the client stalls `stall` injected
   visible: { id: NetId; kind: Kind; n: number }[]; // visible desyncs by entity
   desyncs: number[]; // and by round, in the order the rounds began
   clients: Traffic[];
-  sidesAgree: boolean; // every client sees every client's side as the scenario gave it
+  sides: { name: string; side?: Kind }[]; // each seat's side when the game started: a round's by the fold at round 1's prep
+  sidesAgree: boolean; // every client sees every client's side as the scenario (a lobby's) or the fold (a round's) gave it
   tablesAgree: boolean; // every client's fold table deep-equal to the host's at the end
   roundsAgree: boolean; // and its round table
   claims: number;
@@ -184,13 +187,16 @@ function offPath(p: V, frames: Frame[], id: NetId, t0: number, t1: number): numb
 // Through a stall of the runner's own process (`stall`) every client froze at once and its owners jumped
 // a stall's motion in one frame, so no copy's timing is the game's: until a moving judge's window has
 // cleared the stall, a copy is held against its owner's whole path since the stall began (`stalled`).
+// Across a handoff the previous owner's copy holds its own last pose until the new owner's first tick
+// (src/net/ticks.ts), so a client's copy is also held against the path up to when it last owned the entity.
 function judges(ids: ClientId[], births: Map<NetId, V>) {
   const seen = new Map<NetId, Pick<DumpRow, 'kind' | 'home'> & { from: number; to: number }>();
   const frames: Frame[] = [];
   const div = new Map<NetId, Divergence>();
   const stalls: { from: number; to: number }[] = []; // those whose frames are still judged separately
-  const stalled = { n: 0, longest: 0 };
+  const stalled = { n: 0, longest: 0, at: NaN };
   const restSince: Map<NetId, number>[] = []; // per connection: since when its body of each entity has slept
+  const ownedAt: Map<NetId, number>[] = []; // per connection: when it last owned each entity in its own view
   const offSince = new Map<NetId, { at: number; counted: boolean }>();
   const visible = new Map<NetId, { id: NetId; kind: Kind; n: number }>();
   const counted: number[] = []; // when each visible desync was counted
@@ -224,6 +230,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
         div.set(row.id, d);
         const o = own.get(row.id) ?? -1;
         const now = rows[o]?.get(row.id);
+        if (row.owner === ids[k]) (ownedAt[k] ??= new Map()).set(row.id, t);
         if (!now || row.owner === ids[k]) continue; // this client owns it in its own view, or nobody in the game simulates it
         if (paused[k]) continue; // a stalled client paints nothing
         const since = restSince[o]!.get(row.id);
@@ -238,7 +245,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
             far = offPath(row.p, frames, row.id, through.from - DELAY_MS - TICK_MS, t)!;
             d.stalled = Math.max(d.stalled, far);
           } else {
-            far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, t - DELAY_MS + TICK_MS)!;
+            far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, Math.max(t - DELAY_MS + TICK_MS, ownedAt[k]?.get(row.id) ?? -Infinity))!;
             d.moving = Math.max(d.moving, far);
             d.exact = Math.max(d.exact, dist(row.p, then));
           }
@@ -262,7 +269,8 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
   const identities = (at: number): Identities => new Map([...seen].filter(([, e]) => e.from - 2 * FRAME_MS <= at && at <= e.to + 2 * FRAME_MS));
   const stall = (from: number, to: number) => {
     stalls.push({ from, to });
-    [stalled.n, stalled.longest] = [stalled.n + 1, Math.max(stalled.longest, to - from)];
+    if (to - from > stalled.longest) [stalled.longest, stalled.at] = [to - from, from];
+    stalled.n++;
   };
   return { see, stall, stalls: () => stalled, divergence: () => byId(div), visible: () => byId(visible), counted: () => counted, identities };
 }
@@ -370,13 +378,21 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const shows = ({ sim, receiver }: Session, ref: Session, now: number) =>
       entityIds(ref.sim) === entityIds(sim) &&
       [...sim.entities.keys()].every((id) => sim.ownership.rows.get(id)?.owner === sim.me || (receiver.get(id)?.[0]?.at ?? Infinity) <= now - DELAY_MS - 2 * FRAME_MS);
-    // A lobby game starts once every client shows the host's world with every character in it; a round
-    // game once every client's roster names every player (the fold sides them at prep).
+    // A lobby game starts once every client shows the host's world with every character in it. A round
+    // game's host starts the round once every client's roster names every player, and the game starts once
+    // every client's fold has sided every seat as the rotation does in round 1 (ADR 0014).
     const named = (s: Session) => seats.every((c) => s.sim.round.roster.some((p) => p.name === c.name));
+    const sideIn = (s: Session, name: string) => s.sim.round.roster.find((p) => p.name === name)?.side ?? undefined;
+    const sided = (s: Session) => s.sim.round.round === 1 && seats.every((c, i) => sideIn(s, c.name) === (i < dogCount(clients) ? 'dog' : 'cat'));
     const ready = (now: number) =>
-      scenario.round ? seats.every((c) => named(c.session)) : seats.every((c) => shows(c.session, seats[0]!.session, now) && ids.every((id) => sideOf(c.session.sim.entities, id)));
+      scenario.round ? seats.every((c) => sided(c.session)) : seats.every((c) => shows(c.session, seats[0]!.session, now) && ids.every((id) => sideOf(c.session.sim.entities, id)));
     const present = () => links.filter((l) => l.state === 'in');
-    const over = () => present().every((l) => l.session.sim.round.phase === 'over') && Math.max(...links.map((l) => entered(l.wire, 'over').length)) >= rounds;
+    // Every client at an `over`: the `rounds`-th, or a match's last with no whole match left in `rounds`.
+    const over = () => {
+      const r = present()[0]?.session.sim.round;
+      const n = Math.max(...links.map((l) => entered(l.wire, 'over').length));
+      return present().every((l) => l.session.sim.round.phase === 'over') && (n >= rounds || (r?.match != null && n + r.rounds > rounds));
+    };
     const joined = performance.now();
     let start = Infinity;
     let prev = joined;
@@ -386,6 +402,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     type Stalled = { c: HeadlessClient; from: number; until: number; resume: () => void };
     let stalled: Stalled | null = null;
     let injected = 0;
+    const sides: Result['sides'] = [];
     const now0 = performance.now.bind(performance);
     while (prev - start < seconds * 1000 && !(scenario.round && start < Infinity && over())) {
       next += FRAME_MS;
@@ -394,15 +411,16 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
       if (now - next > 100) next = now; // behind by more than a few frames: no burst to catch up
       if (start === Infinity && ready(now)) {
         start = now;
+        sides.push(...seats.map((c) => ({ name: c.name, side: scenario.round ? sideIn(c.session, c.name) : c.player.side })));
         cpu = process.cpuUsage();
         for (const l of links) Object.assign(l.wire, { up: 0, down: 0, in: 0, sent: [] });
         for (const l of links) l.from = now;
         if (ticks === 0) for (const l of links) l.session.lastTick = Infinity; // the tick sender never fires again
       }
-      if (start === Infinity && now - joined > 5000) throw new Error('the clients never all held every entity');
-      // The host's button, once per phase: a round game starts at once, and its next round when one is over.
+      if (start === Infinity && now - joined > 5000) throw new Error(scenario.round ? "the clients never all sided every seat as the rotation's round 1" : 'the clients never all held every entity');
+      // The host's button, once per phase: a round game starts once every name is in, and its next round when one is over.
       const h = present().find((l) => l.session.host === l.session.sim.me)?.session;
-      const m = scenario.round && start < Infinity && h && !over() ? advance(h.sim, h.sim.me) : null;
+      const m = scenario.round && seats.every((c) => named(c.session)) && h && !over() ? advance(h.sim, h.sim.me) : null;
       const key = h && `${h.sim.round.phase}:${h.sim.round.round}`;
       if (h && m && key !== pressed && (h.sim.round.phase === 'over' || h.sim.round.round === 0)) {
         pressed = key!;
@@ -472,7 +490,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const used = process.cpuUsage(cpu);
     await new Promise((r) => setTimeout(r, 100)); // what is still in flight is folded everywhere
     const here = present();
-    const sides = (s: Session) => seats.map((c) => s.sim.round.roster.find((p) => p.name === c.name)?.side);
+    const sidesOf = (s: Session) => seats.map((c) => sideIn(s, c.name));
     const traffic = links.map((l, i) => {
       const [from, to] = [Math.max(l.from, start), Math.min(l.to, prev)];
       const span = Math.max(to - from, 1) / 1000;
@@ -510,12 +528,13 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const verdict = scenario.judge?.(run) ?? { lines: [], ok: true };
     const r = {
       divergence: div,
-      stalls: judge.stalls(),
+      stalls: { ...judge.stalls(), at: (judge.stalls().at - start) / 1000 },
       injected,
       visible,
       desyncs,
       clients: traffic,
-      sidesAgree: scenario.round ? here.every((l) => JSON.stringify(sides(l.session)) === JSON.stringify(sides(here[0]!.session))) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
+      sides,
+      sidesAgree: scenario.round ? here.every((l) => isDeepStrictEqual(sidesOf(l.session), sidesOf(here[0]!.session))) : here.every((l) => ids.every((id, i) => sideOf(l.session.sim.entities, id) === scenario.player(i, scenario.level).side)),
       tablesAgree: ends.every((t) => isDeepStrictEqual(t, ends[0])),
       roundsAgree: tables.every((t) => isDeepStrictEqual(t, tables[0])),
       claims: claims.length,

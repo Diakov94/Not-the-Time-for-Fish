@@ -25,6 +25,33 @@ test("through a 250 ms stall of either client, its frames and messages held, eve
   expect(r.code).toBe(0);
 });
 
+// Card bug-headless-moving-judge-fails-on-the-runners-own-stalls: one frame of the runner's own loop runs
+// 400 ms (a busy loop, as a long GC or the round's end at six clients), every client and the relay frozen
+// with it; no client showed another a desync, so no judge fails, and the run names the gap and its moment.
+test("a 400 ms stall of the runner's own loop is no divergence, and the run names it", { timeout: 20000 }, async () => {
+  const later = globalThis.setTimeout;
+  const from = performance.now() + 3000;
+  let busy = true;
+  globalThis.setTimeout = ((f: () => void, ms?: number) => {
+    if (busy && performance.now() > from) {
+      busy = false;
+      for (const end = performance.now() + 400; performance.now() < end; );
+    }
+    return later(f, ms);
+  }) as typeof setTimeout;
+  try {
+    const r = await run(defaultGame, 2, 6);
+    const worst = Math.max(...r.divergence.map((d) => Math.max(d.moving, d.stalled)));
+    console.log(`the runner's longest stall ${r.stalls.longest.toFixed(0)} ms at ${r.stalls.at.toFixed(1)} s: worst divergence ${worst.toFixed(3)} m, exit code ${r.code}`);
+    expect(r.stalls.longest).toBeGreaterThanOrEqual(400);
+    expect(r.stalls.at).toBeGreaterThan(0);
+    expect(worst).toBeLessThanOrEqual(MOVING_MAX);
+    expect(r.code).toBe(0);
+  } finally {
+    globalThis.setTimeout = later;
+  }
+});
+
 test('a scenario the runner does not know exits 2 with the list of names', () => {
   const r = spawnSync(process.execPath, ['tools/headless/main.ts', '--scenario', 'no-such'], { encoding: 'utf8' });
   console.log(r.stdout.trim());

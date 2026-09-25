@@ -115,7 +115,7 @@ function judge(r: Run): Verdict {
 const minesAndTraps: Scenario = {
   about: 'a mine defused after the whisker cue, one stepped on; a trap cleared, one sprung',
   level: countryHouse,
-  player: (i) => ({ side: i < 2 ? 'dog' : 'cat', script }), // the runner's label: the rotation seats the first names as dogs
+  player: () => ({ script }),
   judge,
   round: true,
   seconds: 80,

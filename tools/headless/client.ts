@@ -21,9 +21,9 @@ export type Script = Generator<Press, void, void>;
 // A bot reads its own client's sim, as its player reads the screen, and is started anew at every prep
 // for the side the roster gives it that round.
 export type Bot = (me: HeadlessClient) => Script;
-// A player: its side, where its character enters (a lobby scenario spawns it there; a round scenario's
-// sim spawns it at its side's point at prep), its script.
-export type Player = { side: Side; at?: Vector; script: Step[] | Bot };
+// A player: a lobby scenario's side and where its character enters; its script. A round scenario's sim
+// sides it and spawns it at its side's point at prep (ADR 0014).
+export type Player = { side?: Side; at?: Vector; script: Step[] | Bot };
 // What a scenario's host spawns beside the level's crates.
 export type Thing = { kind: Kind; p: Vector };
 
@@ -49,7 +49,7 @@ export type HeadlessClient = {
 export async function joinHeadless(url: string, level: Level, name: string, player: Player, things: Thing[] = [], lobby = true): Promise<HeadlessClient> {
   const session = await connect(url, level, name);
   for (const t of lobby ? things : []) spawn(session, t.kind, t.p);
-  if (lobby) spawn(session, player.side, player.at!);
+  if (lobby) spawn(session, player.side!, player.at!);
   return { session, name, player, next: 0, bot: null, t: 0, round: 0, left: false, intent: IDLE };
 }
 
