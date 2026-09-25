@@ -1,6 +1,7 @@
 import { countryHouse } from '../../../src/content/maps/country-house.ts';
 import type { Entity } from '../../../src/sim/entities.ts';
 import { IDLE } from '../../../src/sim/movement.ts';
+import { dogCount } from '../../../src/sim/round.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Turn, Verdict } from '../run.ts';
 import { captive, capturedMe, flat, go, heldNow, hold, phase, place, pounce, rescue, simOf, toss, until, type P } from './bots.ts';
@@ -13,16 +14,13 @@ const inCage = (q: P) => q.x >= IN_CAGE.x0 && q.x <= IN_CAGE.x1 && q.z >= IN_CAG
 const LURK = p(8.8, 3);
 const inHouse = (q: P) => Math.abs(q.x) < 8.1 && Math.abs(q.z) < 6.1;
 
-// The host's cat: a fish from the table, held there until its teammate is in the kennel and the dog waits
-// by the house's east wall, then out to the hideout with the dog after it; once the kennel is open again
-// its tab dies.
+// The first cat: a fish from the table, held there until its teammate is in the kennel and the dog waits
+// by the house's east wall, then out to the hideout with the dog after it.
 function* carrier(c: HeadlessClient): Script {
   const lurking = () => [...simOf(c).entities.values()].some((e) => e.kind === 'dog' && flat(e.body.translation(), LURK) < 1);
   yield* until(c, () => phase(c) === 'heist');
   yield* tableTrip(c, ROUTE.east, 0, undefined, () => !captive(c) || !lurking());
-  yield* until(c, () => !captive(c));
-  yield* hold(c, 1);
-  yield { intent: IDLE, action: 'leave' };
+  yield* until(c, () => false);
 }
 
 // The kitchen cat: up the west lane, where the dog carries it to the kennel; once in, its tab dies and it
@@ -56,8 +54,9 @@ function* rescuer(c: HeadlessClient): Script {
   yield* rescue(c);
 }
 
-// The dog: to its watch on the west lane in prep; the first cat there carried to the kennel and tossed in;
-// round the kennel to the house's east wall, and after the cat carrying a fish once it is out in the yard.
+// The dog, the host (the rotation's first dog is the first seat): to its watch on the west lane in prep;
+// the first cat there carried to the kennel and tossed in; round the kennel to the house's east wall, and
+// after the cat carrying a fish once it is out in the yard; once the kennel is open again its tab dies.
 function* dog(c: HeadlessClient): Script {
   yield* go(c, [p(-2.2, 12.5), p(-9.6, 12.5), p(-9.6, 6.5)], { sprint: true });
   yield* until(c, () => phase(c) === 'heist', { ...IDLE, sniff: true });
@@ -68,24 +67,27 @@ function* dog(c: HeadlessClient): Script {
   const withFish = (e: Entity) => [...sim.ownership.rows].some(([id, row]) => row.held && row.owner === e.home && sim.entities.get(id)?.kind === 'fish');
   const out = (e: Entity) => withFish(e) && !inHouse(e.body.translation());
   yield* pounce(c, 40, 30, out);
-  yield* until(c, () => false, { ...IDLE, sniff: true });
+  yield* until(c, () => !captive(c), { ...IDLE, sniff: true });
+  yield* hold(c, 1);
+  yield { intent: IDLE, action: 'leave' };
 }
 
+// Every further dog sniffs at its spawn.
 const script = (c: HeadlessClient): Script => {
   const { side, n } = place(c);
-  return side === 'dog' ? dog(c) : ([carrier, captive2, rescuer][n] ?? standby)(c);
+  return side === 'dog' ? (n === 0 ? dog(c) : until(c, () => false, { ...IDLE, sniff: true })) : ([carrier, captive2, rescuer][n] ?? standby)(c);
 };
 
-// Card 65's judge. The chase: the fish secured on every client at one message, or the carrier held on every
-// client within HELD ms of the dog's claim. The rejoin: on every client the cat back in the kennel, captured,
+// Card 65's judge. The chase: the fish secured on every client at one message, or the carrier (the first
+// cat seat, by the rotation's round 1) held on every client within HELD ms of the dog's claim. The rejoin: on every client the cat back in the kennel, captured,
 // within LANDED ms of its new tab's connect. The rescue: one message frees it on every client. The host's
 // leaving: the next phase on every client within LATE s of when its clock said.
 const HELD = 150;
 const LANDED = 500;
 const LATE = 0.25;
 function judge(r: Run): Verdict {
-  const host = r.ids[0]!;
-  const carrierCat = r.samples.flatMap((x) => x.dumps[0]?.entities ?? []).find((e) => e.kind === 'cat' && e.home === host)?.id;
+  const lead = r.seats.indexOf(dogCount(new Set(r.seats).size));
+  const carrierCat = r.samples.flatMap((x) => x.dumps[lead]?.entities ?? []).find((e) => e.kind === 'cat' && e.home === r.ids[lead])?.id;
   const [rejoin] = r.seats.flatMap((seat, i) => (i >= r.seats.indexOf(seat) + 1 ? [i] : []));
   const name = rejoin === undefined ? undefined : `p${r.seats[rejoin]}`;
   const turns = (i: number, by: string) => r.wires[i]!.turns.filter((t) => t.by === by);
@@ -153,9 +155,9 @@ function judge(r: Run): Verdict {
   return { lines, ok };
 }
 
-// Card 65 at four clients (one dog, three cats by the auto-balance; at more, every further cat stands by): a fish carried out under chase; a grab,
-// the kennel, a closed tab and a rejoin by name; a rescue; the host's tab closed and the clock with the
-// next host. The heist is shortened so the round ends by its timer.
+// Card 65 at four clients (one dog, three cats by the rotation; at more, every further dog sniffs at its
+// spawn and every further cat stands by): a fish carried out under chase; a grab, the kennel, a closed tab
+// and a rejoin by name; a rescue; the host's (the dog's) tab closed and the clock with the next host. The heist is shortened so the round ends by its timer.
 const chaseKennelRescueRejoin: Scenario = {
   about: 'a fish out under chase; a grab, the kennel, a rejoin, a rescue; the host leaves',
   level: countryHouse,
