@@ -71,15 +71,15 @@ export function levelBodies(level: Level, traps = Infinity): Body[] {
   ];
 }
 
-// Where a body of `kind` stands on the `n`-th point of `role`, round the list.
-export function pointFor(level: Level, role: Point['role'], kind: Kind, n = 0): Vector | undefined {
+// Where a body of `kind` stands on the `n`-th point of `role`, round the list, and which way it faces.
+export function pointFor(level: Level, role: Point['role'], kind: Kind, n = 0): Pick<Body, 'p' | 'q'> | undefined {
   const points = level.points.filter((pt) => pt.role === role);
   const pt = points[n % points.length];
-  return pt && onPoint(pt, kind).p;
+  return pt && onPoint(pt, kind);
 }
 
-// The `n`-th spawn point of a side: where that side's character stands at the start.
-export function spawnPoint(level: Level, side: Side, n: number): Vector | undefined {
+// The `n`-th spawn point of a side: where that side's character stands at the start, facing the point's yaw.
+export function spawnPoint(level: Level, side: Side, n: number): Pick<Body, 'p' | 'q'> | undefined {
   return pointFor(level, side === 'cat' ? 'catSpawn' : 'dogSpawn', side, n);
 }
 

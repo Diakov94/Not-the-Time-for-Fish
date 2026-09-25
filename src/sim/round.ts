@@ -307,7 +307,7 @@ export function receiveRound(sim: Sim, m: RoundMessage | Left, host: ClientId): 
   if (m.type === 'dugOut' && m.from === sim.me) {
     const me = characterOf(sim.entities, sim.me);
     const exit = pointFor(sim.level, 'tunnelExit', 'cat');
-    if (me && exit) me.body.setTranslation(exit, true);
+    if (me && exit) me.body.setTranslation(exit.p, true);
     sim.leap = null;
   }
   if (m.type === 'hello' && m.from === sim.me && inPlay(sim.round)) enter(sim);
@@ -342,17 +342,17 @@ export function turned(sim: Sim, host: ClientId, from: ClientId): void {
 }
 
 // This client's character enters the round, of the side the roster gives it: at its side's spawn point,
-// or on the kennel's floor if the roster holds it captured (a rejoin), digging out on a timer of its own
-// from now. A name with no side yet waits for the next prep.
+// facing its yaw, or on the kennel's floor if the roster holds it captured (a rejoin), digging out on a
+// timer of its own from now. A name with no side yet waits for the next prep.
 function enter(sim: Sim): void {
   const r = sim.round;
   const p = playerOf(r, sim.me);
   const side = playsAs(r, sim.me);
   if (!p || !side) return;
   const kennel = sim.level.volumes.find((v) => v.role === 'kennel');
-  const floor = kennel && { x: kennel.p.x, y: kennel.p.y - kennel.half.y + halfHeight(side), z: kennel.p.z };
+  const floor = kennel && { p: { x: kennel.p.x, y: kennel.p.y - kennel.half.y + halfHeight(side), z: kennel.p.z } };
   const at = p.captured !== null ? floor : spawnPoint(sim.level, side, positionOf(r, p));
-  if (at) sim.outbox.push(spawnOf(sim, { kind: side, p: at }));
+  if (at) sim.outbox.push(spawnOf(sim, { kind: side, ...at }));
   if (p.captured !== null) sim.digOut = sim.time + knobs(r).digOut;
 }
 

@@ -2,10 +2,10 @@ import { beforeAll, expect, test } from 'vitest';
 import { countryHouse } from '../content/maps/country-house.ts';
 import { prototypeRoom } from '../content/prototype-room.ts';
 import { forward, join, leave, newRoom, type Out } from '../relay/room.ts';
-import { halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';
+import { characterOf, halfHeight, spawnOf, type ClientId, type Entity, type NetId } from './entities.ts';
 import type { Left, MapPick, SimMessage } from './messages.ts';
 import { drainEvents } from './events.ts';
-import { IDLE, type Intent } from './movement.ts';
+import { IDLE, yawOf, type Intent } from './movement.ts';
 import { grab, throwCarried } from './grab.ts';
 import { interact } from './heist.ts';
 import { hidden } from './hiding.ts';
@@ -466,6 +466,23 @@ test("round 2 starts with every client's character of the side the rotation give
   expect(first).toBe('dog,cat,cat');
   expect(kinds()).toBe('cat,dog,cat');
   expect(agree(r)).toBe(true);
+});
+
+test("at prep every character enters facing its spawn point's yaw: a dog on the country house looks toward the house (pi), not the fence", () => {
+  const r = relay(countryHouse);
+  r.players(3);
+  const h = hostOf(r);
+  r.send(h, advance(h, h.me)!);
+  r.run(1);
+  const faced = r.sims().map((s) => {
+    const c = characterOf(s.entities, s.me)!;
+    const p = c.body.translation();
+    const pt = countryHouse.points.filter((q) => q.role === `${c.kind}Spawn`).sort((a, b) => Math.hypot(a.p.x - p.x, a.p.z - p.z) - Math.hypot(b.p.x - p.x, b.p.z - p.z))[0]!;
+    return { kind: c.kind, yaw: yawOf(c.body.rotation()), point: pt.yaw };
+  });
+  console.log(`first-frame yaw by own character: ${faced.map((f) => `${f.kind} ${f.yaw.toFixed(3)} (point ${f.point.toFixed(3)})`).join(', ')}`);
+  expect(faced.map((f) => f.kind).sort()).toEqual(['cat', 'cat', 'dog']);
+  for (const f of faced) expect(f.yaw).toBeCloseTo(f.point);
 });
 
 test("the next prep puts every piece of debris knocked in round 1 back at its content pose, at rest 3 s later, on every client", () => {

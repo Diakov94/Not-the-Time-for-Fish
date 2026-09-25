@@ -33,7 +33,7 @@ const defaultGame: Scenario = {
   level: countryHouse,
   player: (i, level) => {
     const n = Array.from({ length: i }, (_, j) => side(j)).filter((s) => s === side(i)).length;
-    return { side: side(i), at: spawnPoint(level, side(i), n)!, script: side(i) === 'dog' ? DOG : CAT };
+    return { side: side(i), at: spawnPoint(level, side(i), n)!.p, script: side(i) === 'dog' ? DOG : CAT };
   },
 };
 export default defaultGame;
