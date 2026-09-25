@@ -4,11 +4,10 @@ import { FRAME, lookFor, rigFor } from '../../art/rig.ts';
 import { CHARACTERS, ofSide } from '../../content/characters.ts';
 import type { ClientId } from '../../sim/entities.ts';
 import type { Look, Side } from '../../sim/messages.ts';
-import { lookOf, playerOf, rotation, type Player } from '../../sim/round.ts';
+import { lookOf, playerOf, rotation, roundsOf, type Player } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
-import { leaveButton, paint, score, settingsButton, tag, VOICE } from './parts.ts';
+import { leaveButton, paint, settingsButton, tag, VOICE } from './parts.ts';
 
-const SIDE: Record<Side, string> = { cat: 'Коти', dog: 'Пси' };
 // The maps as players name them, by the map's file name (ADR 0011); a map not named here shows that.
 const MAPS: Record<string, string> = { 'country-house': 'Дача', 'high-rise': 'Багатоповерхівка', 'fish-market': 'Рибний ринок', farm: 'Ферма', yacht: 'Яхта' };
 
@@ -59,13 +58,13 @@ const portrait = (id: string) => {
 };
 
 // The lobby (card 47), the room's screen between matches, shown while the round table says lobby. It
-// draws the table's roster as two columns, the cats and the dogs of the next round as the fold's
-// rotation will pick them (ADR 0014), each name with its character for that side, and under each column
-// the side's six characters, the roster's (content), one row to pick from, each with its portrait and
-// name, the picked one's signature detail beneath, and a way out of the room. It turns clicks into the
-// sim's messages: the player's own look per side, and for the host the start. It keeps no roster and
-// decides no side; it is redrawn when what it shows changes. Which look a player has is the round
-// table's (`lookOf`).
+// draws the table's roster as one list in join order, each name with the side the fold's rotation will
+// give it at the next prep (ADR 0014: `rotation` is the preview, the fold's write at prep the fact), its
+// character for that side and its session wins; the rounds the match will have for the players seated
+// now (`roundsOf`); the player's own pickers, a character per side, each tile with its portrait and name,
+// the picked one's signature detail beneath; and a way out of the room. It turns clicks into the sim's
+// messages: the player's own look per side, and for the host the start. It keeps no roster and decides no
+// side; it is redrawn when what it shows changes. Which look a player has is the round table's (`lookOf`).
 export function lobbyScreen(room: string, send: (m: Look) => void, start: () => void): (sim: Sim, host: ClientId) => void {
   const screen = tag('div', { className: 'screen lobby' });
   document.body.append(screen);
@@ -80,8 +79,11 @@ export function lobbyScreen(room: string, send: (m: Look) => void, start: () => 
     drawn = key;
     const hosting = host === sim.me;
     const me = playerOf(r, sim.me);
-    const row = (p: Player, side: Side) => {
-      const notes = [p === me && 'ви', p.client === host && 'хост', p.client === null && 'поза кімнатою'].filter(Boolean);
+    const dogs = rotation(r);
+    const row = (p: Player) => {
+      const side: Side = dogs.includes(p.name) ? 'dog' : 'cat';
+      const wins = Object.hasOwn(r.score, p.name) ? r.score[p.name]! : 0;
+      const notes = [side === 'dog' && 'пес наступного раунду', p === me && 'ви', p.client === host && 'хост', p.client === null && 'поза кімнатою', wins > 0 && `перемог у сесії: ${wins}`].filter(Boolean);
       const character = ofSide(side)[lookOf(r, p, side)]!;
       const e = tag('p', { className: 'player' });
       e.append(...portrait(character.id), tag('b', { textContent: p.name }), tag('span', { textContent: character.name }));
@@ -107,19 +109,17 @@ export function lobbyScreen(room: string, send: (m: Look) => void, start: () => 
         tag('p', { className: 'signature', textContent: picked ? `${picked.name}: ${picked.signature}` : '' }),
       );
     };
-    const dogs = rotation(r);
-    const column = (side: Side) =>
-      tag(
-        'section',
-        { className: `side side-${side}` },
-        tag('h2', { textContent: SIDE[side] }),
-        tag('div', { className: 'players' }, ...r.roster.filter((p) => dogs.includes(p.name) === (side === 'dog')).map((p) => row(p, side))),
-        ...(me ? [picker(side)] : []),
-      );
+    // The match's rounds for the names seated now, the ones the rotation picks from (ADR 0014).
+    const rounds = roundsOf(r.roster.filter((p) => p.client !== null).length);
     const map = `Мапа: ${MAPS[mapOf(sim)] ?? mapOf(sim)}`;
     screen.replaceChildren(
-      tag('header', {}, tag('h1', { textContent: `Кімната ${room}` }), ...(r.match === null ? [] : [tag('p', { className: 'score', textContent: score(r) })]), settingsButton(), leaveButton()),
-      tag('div', { className: 'sides' }, column('cat'), column('dog')),
+      tag('header', {}, tag('h1', { textContent: `Кімната ${room}` }), tag('p', { textContent: `Матч на ${rounds} ${rounds === 1 ? 'раунд' : rounds < 5 ? 'раунди' : 'раундів'}` }), settingsButton(), leaveButton()),
+      tag(
+        'div',
+        { className: 'sides' },
+        tag('section', { className: 'side' }, tag('h2', { textContent: 'Гравці' }), tag('div', { className: 'players' }, ...r.roster.map(row))),
+        tag('section', { className: 'side' }, tag('h2', { textContent: 'Ваш вибір' }), ...(me ? [picker('cat'), picker('dog')] : [])),
+      ),
       hosting
         ? tag(
             'footer',

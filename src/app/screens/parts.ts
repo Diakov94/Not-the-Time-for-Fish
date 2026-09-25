@@ -1,7 +1,6 @@
 import { hex } from '../../art/decals.ts';
 import { CLOTH, GOLD, INK, PAINT, TEAM as PAIR, WOOD } from '../../art/palette.ts';
 import { settings } from '../../settings/store.ts';
-import type { Round } from '../../sim/round.ts';
 
 // A DOM element with its properties and children. The screens build what they show with it, never as
 // HTML, so a player's name is only ever text.
@@ -10,9 +9,6 @@ export function tag<K extends keyof HTMLElementTagNameMap>(name: K, props: Parti
   e.append(...children);
   return e;
 }
-
-// The session's matches won per name, the round table's count.
-export const score = (r: Round) => `Рахунок сесії: ${Object.entries(r.score).map(([name, n]) => `${name} ${n}`).join(', ') || 'перемог ще немає'}`;
 
 // GAME.md, Menus: the voice-channel reminder, on the menu and in the lobby; a side is per round (ADR 0014).
 export const VOICE = 'Два голосові канали: коти в одному, пси в іншому. Змінили бік — змініть канал.';
