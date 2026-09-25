@@ -115,3 +115,4 @@
 - wet-remote: its cards closed (see the batch report). 2026-09-24.
 - 162 the lobby shows the rotation, the results the players; 145 the lobby map pick and cosmetics. APP-LOBBY, 2026-09-25.
 - APP-REVIEW: review-app-room-screen-crashes-without-storage, review-app-audio-starts-on-the-second-click, review-app-join-of-a-mistyped-code-makes-an-empty-room, review-app-rejoin-within-20-s-is-refused-as-taken, review-app-camera-looks-along-plus-z-at-spawn (the app's half only: the sim spawns every body at yaw 0, a src/sim change not filed yet), review-app-a-newcomer-mid-round-floats-over-the-map, review-app-serve-the-build-through-the-tunnel. 2026-09-25.
+- APP-REVIEW: the seven app review findings (audio on the first click, camera faces the spawn, a mistyped code, quick rejoin, the build through one tunnel, a newcomer mid-round, no storage). 2026-09-25.
