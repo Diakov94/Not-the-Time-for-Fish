@@ -113,3 +113,4 @@
 - SIM-FIX: bug-sim-grab-reaches-through-props, bug-sim-cat-carries-any-mass, bug-sim-claim-on-a-held-entity, bug-sim-round-ends-on-a-cats-disconnect, review-sim-debris-stays-fallen-across-rounds, review-sim-stun-and-slip-seen-by-every-client (with wetness), review-sim-one-query-for-a-clients-character, review-sim-securing-never-forgets-a-refused-fish, review-content-fish-market-anatomy-unchecked. 2026-09-24.
 - 167 the drip on every client: render reads `soakedUntil` for every cat; a soaked cat drips 20.02 s on the other tab, 19.99 s on its own (before: 0 s on the other). The tail of THEMES-A's 144, 2026-09-24.
 - wet-remote: its cards closed (see the batch report). 2026-09-24.
+- HEADLESS2: 165 (the rotation's sides, --rounds to the match's end), bug-headless-moving-judge-fails-on-the-runners-own-stalls, 135 (the high-rise round); 141 closed without code (the yacht round landed in #61). 2026-09-25.
