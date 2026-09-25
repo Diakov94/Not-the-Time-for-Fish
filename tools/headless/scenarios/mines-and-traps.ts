@@ -1,6 +1,7 @@
 import { countryHouse } from '../../../src/content/maps/country-house.ts';
 import type { SimEvent } from '../../../src/sim/events.ts';
 import { IDLE, SPEED } from '../../../src/sim/movement.ts';
+import { dogCount } from '../../../src/sim/round.ts';
 import { sniffed } from '../../../src/sim/scent.ts';
 import type { HeadlessClient, Press } from '../client.ts';
 import type { Run, Scenario, Verdict } from '../run.ts';
@@ -37,11 +38,15 @@ function* trapper(c: HeadlessClient): Script {
   yield* tap('plant');
 }
 
-// The first dog: its mine at the gate, then at its post sniffing until a planted trap is in the air, to it,
-// and cleared.
+// The first dog: its mine at the gate, and the front door's too when it is the only dog (the rotation's
+// one at 3 and 4 players), then at its post sniffing until a planted trap is in the air, to it, and cleared.
 function* sniffer(c: HeadlessClient): Script {
   yield* go(c, ROUTE.dogToGate, { sprint: true });
   yield* plantHere(c);
+  if (simOf(c).round.roster.filter((q) => q.side === 'dog').length === 1) {
+    yield* go(c, [p(0, -14), DOORWAY], { sprint: true });
+    yield* plantHere(c);
+  }
   yield* go(c, [POSTS[0]!]);
   let trap: string | undefined;
   const planted = () => (trap = sniffed(simOf(c)).traps.find((id) => simOf(c).entities.get(id)?.home !== null));
@@ -74,7 +79,7 @@ const script = (c: HeadlessClient): Script => {
 // Card 64's judge, every number from the samples: each client's count of blasts, defuses, sprung and cleared
 // traps; how long the stunned cat's intent did not move it (from the blast to the first frame its body
 // goes the way its player pushes at half a walk or more); when its whisker cue came against its defuse; the
-// ping count on every client.
+// ping count on every client, the same on each, the dogs' clients among them.
 function judge(r: Run): Verdict {
   const here = r.ends.flatMap((e, i) => (e ? [i] : []));
   const count = (i: number, type: string) => r.samples.reduce((n, x) => n + x.events[i]!.filter((e) => e.type === type).length, 0);
@@ -106,12 +111,13 @@ function judge(r: Run): Verdict {
     `the stunned cat's intent ignored for ${stun.toFixed(3)} s (3.0 +- 0.1); its whisker cue ${cue.toFixed(2)} s before its defuse`,
     `pings per client: ${pings.join(', ')}; on the dogs' clients ${dogs.map((i) => pings[i]).join(' and ')}`,
   ];
-  const ok = once && Math.abs(stun - 3) <= 0.1 && cue > 0 && dogs.length === 2 && pings[dogs[0]!] === pings[dogs[1]!];
+  const ok = once && Math.abs(stun - 3) <= 0.1 && cue > 0 && dogs.length === dogCount(new Set(r.seats).size) && pings.every((n) => n === pings[0]);
   return { lines, ok };
 }
 
-// Card 64 with two dogs, as the rotation seats them at 6 and 7 players (every further cat stands by): mines armed, felt, defused and set off; a trap
-// planted, sniffed out and cleared; a second one sprung across the yard.
+// Card 64 with the rotation's dogs: one at 3 and 4 players plants both mines, two at 5 to 7 one each
+// (every further cat stands by): mines armed, felt, defused and set off; a trap planted, sniffed out and
+// cleared; a second one sprung across the yard.
 const minesAndTraps: Scenario = {
   about: 'a mine defused after the whisker cue, one stepped on; a trap cleared, one sprung',
   level: countryHouse,
