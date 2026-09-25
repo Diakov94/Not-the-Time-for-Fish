@@ -12,7 +12,7 @@ import { hidden } from './hiding.ts';
 import { perkOf } from './perks.ts';
 import { plant, stunned } from './mines.ts';
 import { newOwnershipTable, receive } from './ownership.ts';
-import { advance, foldRound, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, settle, successor, type RoundMessage } from './round.ts';
+import { advance, duration, foldRound, KNOBS, knobs, mapRefusal, newRound, playerOf, playsAs, scoreOf, settle, successor, type RoundMessage } from './round.ts';
 import { applySnapshot, readSnapshot } from './snapshot.ts';
 import { createWorld, init, step, STEP, type Sim } from './world.ts';
 
@@ -148,6 +148,23 @@ test('the rotation at every seated count 3-8: GAME.md dog counts, 3 4 3 3 4 3 ro
   for (const m of at) expect(m.spread[0]).toBeGreaterThanOrEqual(1);
   for (const m of at) expect(m.spread[1]! - m.spread[0]!).toBeLessThanOrEqual(1);
   expect(at[5]!.dogs).toEqual([['p0', 'p1', 'p2'], ['p3', 'p4', 'p5'], ['p0', 'p6', 'p7']]);
+});
+
+// Card 148's knobs: the round at n seated reads its own row, the heist lasting the row's timer; a name
+// joining mid-heist moves no knob.
+test('the knobs: a row per seated count 3-8, the heist lasts its row; a join mid-heist keeps the row', () => {
+  for (const n of [3, 4, 5, 6, 7, 8]) {
+    const [r, t] = [newRound(), newOwnershipTable()];
+    const fold = (m: RoundMessage) => foldRound(r, m, 'c0', t, new Map());
+    for (let i = 0; i < n; i++) fold({ type: 'hello', from: `c${i}`, name: `p${i}` });
+    fold({ type: 'phase', from: 'c0', ...successor(r) }); // prep
+    fold({ type: 'phase', from: 'c0', ...successor(r) }); // heist
+    const row = knobs(r);
+    fold({ type: 'hello', from: 'c9', name: 'late' });
+    console.log(`${n} seated: ${JSON.stringify(row)}; after a join mid-heist ${JSON.stringify(knobs(r))}`);
+    expect(KNOBS[n]).toBeDefined();
+    expect([row === KNOBS[n], duration(r), knobs(r) === KNOBS[n]]).toEqual([true, KNOBS[n]!.heist, true]);
+  }
 });
 
 // ADR 0014's score over scripted matches at 5 players (dogs p0+p1, p2+p3, p0+p4), folded in the relay's

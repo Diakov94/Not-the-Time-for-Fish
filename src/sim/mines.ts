@@ -23,10 +23,9 @@ const UP = 5;
 const STUN = 3; // s a cat in the blast is stunned
 const LOUD = 1; // a blast is as loud as a noise gets (card 23's scale)
 const RESUPPLY = 30; // s a dog stays in the doghouse to get its used mines back
-// The water bomb (card 129, the Architect's assumption for a playtest to refute): a dog's hand holds WATER
-// of them after its first two firecrackers (card 148 makes the count a knob row); its splash is SPLASH loud
-// and leaves a cat wet for WET s.
-const WATER = 1;
+// The water bomb (card 129, the Architect's assumption for a playtest to refute): a dog's hand holds its
+// knob row's `water` of them after its first two firecrackers; its splash is SPLASH loud and leaves a cat
+// wet for WET s.
 const SPLASH = 0.6;
 const WET = 20;
 
@@ -58,16 +57,17 @@ export function noteUntil(sim: Sim, ends: Map<NetId, number>, id: NetId, until: 
   ends.set(id, until);
 }
 
-// The mines this client's dog has in hand, its own count: the knob's firecrackers (card 27), the water
-// bombs, and Sapper's while it lasts, less those used since its last resupply. `plant` and the HUD read it.
+// The mines this client's dog has in hand, its own count: its knob row's firecrackers and water bombs, and
+// Sapper's while it lasts, less those used since its last resupply. `plant` and the HUD read it.
 export function minesLeft(sim: Sim): number {
-  return Math.max(0, knobs(sim.round).mines + WATER + (perkOf(sim) === 'sapper' ? SAPPER : 0) - sim.used);
+  const { mines, water } = knobs(sim.round);
+  return Math.max(0, mines + water + (perkOf(sim) === 'sapper' ? SAPPER : 0) - sim.used);
 }
 
 // The variant of the next mine in this client's dog's hand: firecracker, firecracker, water, then the rest
 // of its firecrackers. The plant and the HUD's next-mine word (card 146) read it.
 export function nextMine(sim: Sim): Variant {
-  return sim.used >= 2 && sim.used < 2 + WATER ? 'water' : 'firecracker';
+  return sim.used >= 2 && sim.used < 2 + knobs(sim.round).water ? 'water' : 'firecracker';
 }
 
 // Q (card 49), for a cat its trap's. For a dog: a dog with a mine in hand that carries nothing starts
