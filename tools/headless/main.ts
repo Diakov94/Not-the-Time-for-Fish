@@ -99,7 +99,7 @@ console.log('entity    kind       moving m  stalls m  resting m  exact -100 ms m
 for (const d of r.divergence) console.log(`${d.id.padEnd(9)} ${d.kind.padEnd(9)} ${m(d.moving)}  ${m(d.stalled)}  ${m(d.resting)}  ${m(d.exact)}`);
 console.log(`max: moving ${worst(r, 'moving').toFixed(3)} m (limit ${MOVING_MAX}), resting ${worst(r, 'resting').toFixed(3)} m (limit ${RESTING_MAX})`);
 console.log(
-  `the runner's own stalls (frames over ${STALL_MS} ms apart): ${r.stalls.n}, the longest ${r.stalls.longest.toFixed(0)} ms; through them, a copy against its owner's path since the stall began: ${worst(r, 'stalled').toFixed(3)} m (limit ${MOVING_MAX})`,
+  `the runner's own stalls (frames over ${STALL_MS} ms apart): ${r.stalls.n}, the longest ${r.stalls.longest.toFixed(0)} ms${r.stalls.n ? ` at ${r.stalls.at.toFixed(1)} s` : ''}; through them, a copy against its owner's path since the stall began: ${worst(r, 'stalled').toFixed(3)} m (limit ${MOVING_MAX})`,
 );
 const visible = r.visible.reduce((n, v) => n + v.n, 0);
 if (knobs.stall > 0) console.log(`injected stalls: ${r.injected}, one client at a time for ${knobs.stall} ms (no frames, its messages held)`);

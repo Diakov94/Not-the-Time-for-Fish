@@ -94,7 +94,7 @@ export type Divergence = { id: string; kind: string; moving: number; resting: nu
 export type Traffic = { id: ClientId; side?: Kind; ticks: number; minTicks: number; rate: number; up: number; down: number; events: number };
 export type Result = {
   divergence: Divergence[];
-  stalls: { n: number; longest: number }; // the runner's own stalls, and the longest, ms
+  stalls: { n: number; longest: number; at: number }; // the runner's own stalls, the longest, ms, and when it began, s into the game
   injected: number; // the client stalls `stall` injected
   visible: { id: NetId; kind: Kind; n: number }[]; // visible desyncs by entity
   desyncs: number[]; // and by round, in the order the rounds began
@@ -192,7 +192,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
   const frames: Frame[] = [];
   const div = new Map<NetId, Divergence>();
   const stalls: { from: number; to: number }[] = []; // those whose frames are still judged separately
-  const stalled = { n: 0, longest: 0 };
+  const stalled = { n: 0, longest: 0, at: NaN };
   const restSince: Map<NetId, number>[] = []; // per connection: since when its body of each entity has slept
   const offSince = new Map<NetId, { at: number; counted: boolean }>();
   const visible = new Map<NetId, { id: NetId; kind: Kind; n: number }>();
@@ -265,7 +265,8 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
   const identities = (at: number): Identities => new Map([...seen].filter(([, e]) => e.from - 2 * FRAME_MS <= at && at <= e.to + 2 * FRAME_MS));
   const stall = (from: number, to: number) => {
     stalls.push({ from, to });
-    [stalled.n, stalled.longest] = [stalled.n + 1, Math.max(stalled.longest, to - from)];
+    if (to - from > stalled.longest) [stalled.longest, stalled.at] = [to - from, from];
+    stalled.n++;
   };
   return { see, stall, stalls: () => stalled, divergence: () => byId(div), visible: () => byId(visible), counted: () => counted, identities };
 }
@@ -523,7 +524,7 @@ export async function run(scenario: Scenario, clients: number, seconds: number, 
     const verdict = scenario.judge?.(run) ?? { lines: [], ok: true };
     const r = {
       divergence: div,
-      stalls: judge.stalls(),
+      stalls: { ...judge.stalls(), at: (judge.stalls().at - start) / 1000 },
       injected,
       visible,
       desyncs,
