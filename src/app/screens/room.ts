@@ -1,6 +1,6 @@
 import { keyOf } from '../../input/bindings.ts';
 import type { Late, Refused, Session } from '../../net/client.ts';
-import { inPlay, type Refusal } from '../../sim/round.ts';
+import { inPlay, playerOf, type Refusal } from '../../sim/round.ts';
 import type { Sim } from '../../sim/world.ts';
 import { paint, settingsButton, tag, VOICE } from './parts.ts';
 
@@ -25,6 +25,11 @@ const RETRIES = 8;
 // name and the last room it entered, so a reload rejoins in one click.
 const NAME = 'name';
 const ROOM = 'room';
+// A name in play with no character of its own: the fold seats a name at prep (ADR 0014), so one that
+// joined mid-round waits for the next; read off the round table every frame, never kept. The app parks the
+// camera on it, and the hint bar says it.
+export const waiting = (sim: Sim) => inPlay(sim.round) && !playerOf(sim.round, sim.me)?.side;
+const NEXT_ROUND = 'Раунд уже йде. Ви зайдете з наступного раунду.';
 // And that this browser has had the hint bar through a whole round (card 120), a convenience of this
 // screen like the name (ADR 0012), not a setting.
 const SEEN = 'hints';
@@ -154,20 +159,23 @@ export function roomScreen<T extends { session: Session }>(enter: (code: string,
 // The hint bar, which the app shows in play: the room's code, so the other players can join it, and the
 // controls, each key as the input zone names it this frame, so a remapped key shows its new name. When a
 // round this browser saw in play ends, the bar has been seen: it hides from then on, in this room and
-// the next. A rejoin's bar replaces it, and the replaced one stops.
+// the next. A rejoin's bar replaces it, and the replaced one stops. While the player waits for the next
+// round the bar says so instead, seen or not, and that round does not count as seen in play.
 function hint(room: string, sim: Sim): HTMLElement {
   const p = tag('p', { className: 'hint' });
   let seen = stored(SEEN) !== '';
   let played = false;
   requestAnimationFrame(function draw() {
     if (!p.isConnected) return;
-    if (inPlay(sim.round)) played = true;
+    const late = waiting(sim);
+    if (inPlay(sim.round) && !late) played = true;
     else if (played && !seen && sim.round.phase === 'over') {
       store(SEEN, '1');
       seen = true;
     }
-    p.classList.toggle('seen', seen);
-    if (!seen && p.textContent !== controls(room)) p.textContent = controls(room);
+    p.classList.toggle('seen', seen && !late);
+    const text = late ? NEXT_ROUND : controls(room);
+    if ((late || !seen) && p.textContent !== text) p.textContent = text;
     requestAnimationFrame(draw);
   });
   return p;

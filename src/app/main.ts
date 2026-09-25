@@ -7,7 +7,7 @@ import { dump } from '../net/dump.ts';
 import { createHud, drawHud } from '../hud/hud.ts';
 import { record } from '../meta/progress.ts';
 import { RELAY_PATH } from '../relay/address.ts';
-import { createView, draw, type Target } from '../render/view.ts';
+import { createView, draw, type Look, type Target } from '../render/view.ts';
 import { emote } from '../sim/emotes.ts';
 import { isCharacter, type ClientId, type NetId } from '../sim/entities.ts';
 import { drainEvents, markAt } from '../sim/events.ts';
@@ -23,7 +23,7 @@ import { init } from '../sim/world.ts';
 import { intent, listen } from '../input/keyboard.ts';
 import { lobbyScreen } from './screens/lobby.ts';
 import { resultsScreen } from './screens/results.ts';
-import { roomScreen } from './screens/room.ts';
+import { roomScreen, waiting } from './screens/room.ts';
 
 const MAX_GAP = 60; // s: the longest gap stepped at once, 3600 steps, 45 ms on the dev Mac; a longer one (a sleep) is cut to it
 // The maps by name (ADR 0011): a map is src/content/maps/<name>.ts exporting its Level as <name> in
@@ -37,6 +37,10 @@ const maps = Object.fromEntries(
 );
 // The phases the canvas is the screen for; the lobby and the results take the rest (card 48).
 const PLAY: Phase[] = ['prep', 'heist', 'overtime'];
+// Where the camera parks for a name waiting for the next round: this far above the hideout's first cat
+// spawn point, looking down this much.
+const PARK_EYE = 1; // m
+const PARK_PITCH = 0.35; // rad
 
 // The Vite entry: it wires the zones and holds no game fact. The sim owns every pose, the entity table
 // and the fold; net carries them; render draws them; this file only moves input in and frames along.
@@ -72,6 +76,14 @@ function target(): Target | undefined {
   if (!me || me.captured === null) return own();
   const free = sim.round.roster.filter((p) => p.side === me.side && p.client !== sim.me && p.captured === null).flatMap((p) => characterOf(p.client) ?? []);
   return free.length > 0 ? free[tabs % free.length] : sim.level.volumes.find((v) => v.role === 'kennel')?.p;
+}
+// Waiting for the next round (room.ts's `waiting`): no character, and no view of the property, which the
+// fence and the hiding spots exist to deny. The camera parks at the hideout's spawn point, whatever the
+// mouse does, looking the opposite way from the point, away from the fence: toward it, the gate content
+// draws open shows the yard and the house.
+function parked(): { look: Look; at: Target } | undefined {
+  const pt = waiting(sim) ? sim.level.points.find((p) => p.role === 'catSpawn') : undefined;
+  return pt && { look: { yaw: pt.yaw + Math.PI, pitch: PARK_PITCH }, at: { x: pt.p.x, y: pt.p.y + PARK_EYE, z: pt.p.z } };
 }
 // Each new own character (a round's, a rejoin's) turns the look's yaw to its body's facing, where the sim
 // spawned it, so the camera starts behind it; the pitch stays the viewer's.
@@ -138,7 +150,8 @@ requestAnimationFrame(function loop(now: number) {
   const playing = PLAY.includes(sim.round.phase);
   face();
   advanceTo(now, acting() ? intent(input, own()) : IDLE);
-  if (playing) draw(view, sim, input.look, target());
+  const park = parked();
+  if (playing) draw(view, sim, park?.look ?? input.look, park?.at ?? target());
   hear(audio, sim, { position: view.orbit, quaternion: view.camera.quaternion });
   drawHud(hud, sim, view, target());
   hint.hidden = !playing;
