@@ -15,6 +15,11 @@ const LOST = 'З’єднання втрачено. Приєднайтеся з�
 // A join that found nobody in the room, and a create whose second code was in use too.
 const NO_ROOM = (room: string) => `Кімнати ${room} немає. Перевірте код.`;
 const IN_USE = 'Код кімнати вже зайнятий. Спробуйте створити ще раз.';
+// A `taken` for the name and room this screen remembers is its own last connection, which the relay ends
+// only 15-20 s after it went silent (card 46): the same join again every RETRY_MS, at most RETRIES times.
+const CLOSING = 'Ваше попереднє з’єднання ще закривається. Спробуємо ще раз…';
+const RETRY_MS = 3000;
+const RETRIES = 8;
 
 // What the room screen keeps in localStorage (card 50), the only save GAME.md allows: the player's
 // name and the last room it entered, so a reload rejoins in one click.
@@ -78,9 +83,20 @@ export function roomScreen<T extends { session: Session }>(enter: (code: string,
   const code = screen.querySelector<HTMLInputElement>('[name=code]')!;
   player.value = lost?.name ?? stored(NAME);
   code.value = lost?.room ?? stored(ROOM);
+  const remembered = { name: player.value, room: code.value };
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let retries = 0;
+  // An edit stops the retry: the player chose another name or room.
+  screen.oninput = () => {
+    if (retry === undefined) return;
+    clearTimeout(retry);
+    retry = undefined;
+    status.textContent = '';
+  };
   return new Promise((resolve) => {
     // `create`: the codes a create has tried, this one included; 0 for a join.
     const tryRoom = async (room: string, create = 0): Promise<void> => {
+      retry = undefined;
       const name = player.value.trim();
       if (!name) {
         status.textContent = 'Введіть своє ім’я.';
@@ -107,17 +123,29 @@ export function roomScreen<T extends { session: Session }>(enter: (code: string,
         resolve(value);
       } catch (e) {
         const reason = (e as Partial<Refused>).reason;
-        status.textContent = reason ? REFUSAL[reason] : (e as Partial<Late>).code === 'late' ? LATE : 'Немає зв’язку з сервером кімнат. Спробуйте ще раз.';
         screen.inert = false;
+        if (reason === 'taken' && name === remembered.name && room === remembered.room && retries < RETRIES) {
+          retries++;
+          status.textContent = CLOSING;
+          retry = setTimeout(() => tryRoom(room, create), RETRY_MS);
+          return;
+        }
+        status.textContent = reason ? REFUSAL[reason] : (e as Partial<Late>).code === 'late' ? LATE : 'Немає зв’язку з сервером кімнат. Спробуйте ще раз.';
       }
+    };
+    // The player's own press starts over: no retry pending, the full count again.
+    const press = (room: string, create = 0) => {
+      clearTimeout(retry);
+      retries = 0;
+      tryRoom(room, create);
     };
     // Digits only, so a code reads the same in any keyboard layout.
     const newCode = () => String(1000 + Math.floor(Math.random() * 9000));
-    screen.querySelector<HTMLButtonElement>('[name=create]')!.onclick = () => tryRoom(newCode(), 1);
+    screen.querySelector<HTMLButtonElement>('[name=create]')!.onclick = () => press(newCode(), 1);
     screen.onsubmit = (e) => {
       e.preventDefault();
       const room = code.value.trim();
-      if (/^\d{4}$/.test(room)) tryRoom(room);
+      if (/^\d{4}$/.test(room)) press(room);
       else status.textContent = 'Код кімнати — чотири цифри.';
     };
   });
