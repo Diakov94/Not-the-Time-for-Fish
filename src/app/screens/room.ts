@@ -20,6 +20,21 @@ const ROOM = 'room';
 // And that this browser has had the hint bar through a whole round (card 120), a convenience of this
 // screen like the name (ADR 0012), not a setting.
 const SEEN = 'hints';
+// Storage may be off (a private window, blocked site data, ADR 0012): a read gives '', a write does nothing.
+const stored = (key: string) => {
+  try {
+    return localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+};
+const store = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // nothing kept: the next page asks again
+  }
+};
 
 // The room screen: a name, then create a room or join one by its code, the settings button and the
 // voice-channel reminder. `enter` connects to the room with the name; while it fails the screen stays and
@@ -55,8 +70,8 @@ export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: st
   if (lost) status.textContent = LOST;
   const player = screen.querySelector<HTMLInputElement>('[name=player]')!;
   const code = screen.querySelector<HTMLInputElement>('[name=code]')!;
-  player.value = lost?.name ?? localStorage.getItem(NAME) ?? '';
-  code.value = lost?.room ?? localStorage.getItem(ROOM) ?? '';
+  player.value = lost?.name ?? stored(NAME);
+  code.value = lost?.room ?? stored(ROOM);
   return new Promise((resolve) => {
     const tryRoom = async (room: string) => {
       const name = player.value.trim();
@@ -68,8 +83,8 @@ export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: st
       screen.inert = true;
       try {
         const value = await enter(room, name);
-        localStorage.setItem(NAME, name);
-        localStorage.setItem(ROOM, room);
+        store(NAME, name);
+        store(ROOM, room);
         document.querySelector('.hint')?.remove();
         screen.replaceWith(hint(room, value.session.sim));
         resolve(value);
@@ -96,13 +111,13 @@ export function roomScreen<T extends { session: { sim: Sim } }>(enter: (code: st
 // the next. A rejoin's bar replaces it, and the replaced one stops.
 function hint(room: string, sim: Sim): HTMLElement {
   const p = tag('p', { className: 'hint' });
-  let seen = localStorage.getItem(SEEN) !== null;
+  let seen = stored(SEEN) !== '';
   let played = false;
   requestAnimationFrame(function draw() {
     if (!p.isConnected) return;
     if (inPlay(sim.round)) played = true;
     else if (played && !seen && sim.round.phase === 'over') {
-      localStorage.setItem(SEEN, '1');
+      store(SEEN, '1');
       seen = true;
     }
     p.classList.toggle('seen', seen);
