@@ -1,7 +1,6 @@
 import { hex } from '../../art/decals.ts';
 import { CLOTH, GOLD, INK, PAINT, TEAM as PAIR, WOOD } from '../../art/palette.ts';
 import { settings } from '../../settings/store.ts';
-import type { Round } from '../../sim/round.ts';
 
 // A DOM element with its properties and children. The screens build what they show with it, never as
 // HTML, so a player's name is only ever text.
@@ -11,8 +10,23 @@ export function tag<K extends keyof HTMLElementTagNameMap>(name: K, props: Parti
   return e;
 }
 
-// The session's matches won per name, the round table's count.
-export const score = (r: Round) => `Рахунок сесії: ${Object.entries(r.score).map(([name, n]) => `${name} ${n}`).join(', ') || 'перемог ще немає'}`;
+// The cosmetics as players name them, by catalogue id (ADR 0013: art owns the ids, the screens the
+// words), for the lobby's picker and the results' unlocks; an id not named here shows as itself.
+const COSMETIC: Record<string, string> = {
+  ushanka: 'Вушанка',
+  wreath: 'Вінок',
+  'flat-cap': 'Кепка',
+  'sailor-cap': 'Безкозирка',
+  'straw-hat': 'Бриль',
+  'paper-crown': 'Паперова корона',
+  sunflower: 'Соняшник',
+  briefcase: 'Портфель',
+  'fish-skeleton': 'Риб’ячий скелет',
+  medal: 'Медаль',
+  scarf: 'Шарф',
+  loaf: 'Паляниця',
+};
+export const cosmeticName = (id: string) => (Object.hasOwn(COSMETIC, id) ? COSMETIC[id]! : id);
 
 // GAME.md, Menus: the voice-channel reminder, on the menu and in the lobby; a side is per round (ADR 0014).
 export const VOICE = 'Два голосові канали: коти в одному, пси в іншому. Змінили бік — змініть канал.';
