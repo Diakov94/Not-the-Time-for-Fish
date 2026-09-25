@@ -187,6 +187,8 @@ function offPath(p: V, frames: Frame[], id: NetId, t0: number, t1: number): numb
 // Through a stall of the runner's own process (`stall`) every client froze at once and its owners jumped
 // a stall's motion in one frame, so no copy's timing is the game's: until a moving judge's window has
 // cleared the stall, a copy is held against its owner's whole path since the stall began (`stalled`).
+// Across a handoff the previous owner's copy holds its own last pose until the new owner's first tick
+// (src/net/ticks.ts), so a client's copy is also held against the path up to when it last owned the entity.
 function judges(ids: ClientId[], births: Map<NetId, V>) {
   const seen = new Map<NetId, Pick<DumpRow, 'kind' | 'home'> & { from: number; to: number }>();
   const frames: Frame[] = [];
@@ -194,6 +196,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
   const stalls: { from: number; to: number }[] = []; // those whose frames are still judged separately
   const stalled = { n: 0, longest: 0, at: NaN };
   const restSince: Map<NetId, number>[] = []; // per connection: since when its body of each entity has slept
+  const ownedAt: Map<NetId, number>[] = []; // per connection: when it last owned each entity in its own view
   const offSince = new Map<NetId, { at: number; counted: boolean }>();
   const visible = new Map<NetId, { id: NetId; kind: Kind; n: number }>();
   const counted: number[] = []; // when each visible desync was counted
@@ -227,6 +230,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
         div.set(row.id, d);
         const o = own.get(row.id) ?? -1;
         const now = rows[o]?.get(row.id);
+        if (row.owner === ids[k]) (ownedAt[k] ??= new Map()).set(row.id, t);
         if (!now || row.owner === ids[k]) continue; // this client owns it in its own view, or nobody in the game simulates it
         if (paused[k]) continue; // a stalled client paints nothing
         const since = restSince[o]!.get(row.id);
@@ -241,7 +245,7 @@ function judges(ids: ClientId[], births: Map<NetId, V>) {
             far = offPath(row.p, frames, row.id, through.from - DELAY_MS - TICK_MS, t)!;
             d.stalled = Math.max(d.stalled, far);
           } else {
-            far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, t - DELAY_MS + TICK_MS)!;
+            far = offPath(row.p, frames, row.id, t - DELAY_MS - TICK_MS, Math.max(t - DELAY_MS + TICK_MS, ownedAt[k]?.get(row.id) ?? -Infinity))!;
             d.moving = Math.max(d.moving, far);
             d.exact = Math.max(d.exact, dist(row.p, then));
           }
